@@ -481,7 +481,7 @@ jobs:
         ${{ if in(parameters.testGroup, 'clrinterpreter') }}:
           scenarios:
           - clrinterpreter
-        ${{ if in(parameters.coreclrTestGroup, 'gc-largepages') }}:
+        ${{ if in(parameters.testGroup, 'gc-largepages') }}:
           scenarios:
           - gclargepages
 
