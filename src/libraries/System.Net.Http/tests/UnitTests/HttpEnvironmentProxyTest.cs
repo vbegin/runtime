@@ -10,7 +10,6 @@ using Xunit.Abstractions;
 
 namespace System.Net.Http.Tests
 {
-    [ActiveIssue("https://github.com/dotnet/runtime/issues/49568", typeof(PlatformDetection), nameof(PlatformDetection.IsMacOsAppleSilicon))]
     public class HttpEnvironmentProxyTest
     {
         private readonly ITestOutputHelper _output;
@@ -207,6 +206,27 @@ namespace System.Net.Http.Tests
                 // This should not match Proxy Uri
                 Assert.Null(p.Credentials.GetCredential(fooHttp, "Basic"));
                 Assert.Null(p.Credentials.GetCredential(null, null));
+            }).Dispose();
+        }
+
+
+        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        public void HttpProxy_CredentialParsing_DefaultCredentials()
+        {
+            RemoteExecutor.Invoke(() =>
+            {
+                IWebProxy p;
+
+                Environment.SetEnvironmentVariable("all_proxy", "http://:@1.1.1.1:3000");
+                Assert.True(HttpEnvironmentProxy.TryCreate(out p));
+                Assert.NotNull(p);
+                Assert.Equal(CredentialCache.DefaultCredentials, p.Credentials.GetCredential(p.GetProxy(fooHttp), ""));
+                Assert.Equal(CredentialCache.DefaultCredentials, p.Credentials.GetCredential(p.GetProxy(fooHttps), ""));
+
+                Environment.SetEnvironmentVariable("http_proxy", "http://:@[::1]:80");
+                Assert.True(HttpEnvironmentProxy.TryCreate(out p));
+                Assert.NotNull(p);
+                Assert.Equal(CredentialCache.DefaultCredentials, p.Credentials.GetCredential(p.GetProxy(fooHttp), ""));
             }).Dispose();
         }
 

@@ -32,7 +32,7 @@ The handle stack is designed so it's efficient to pop a large amount of entries 
 The stack is made out of a series of fixed size segments.
 
 To do bulk operations you use a stack mark.
-	
+
 */
 
 /*
@@ -124,9 +124,9 @@ typedef void (*GcScanFunc) (gpointer*, gpointer);
 #endif
 
 #ifndef MONO_HANDLE_TRACK_OWNER
-MonoRawHandle mono_handle_new (MonoObject *object, MonoThreadInfo *info);
+MONO_COMPONENT_API MonoRawHandle mono_handle_new (MonoObject *object, MonoThreadInfo *info);
 #else
-MonoRawHandle mono_handle_new (MonoObject *object, MonoThreadInfo *info, const char* owner);
+MONO_COMPONENT_API MonoRawHandle mono_handle_new (MonoObject *object, MonoThreadInfo *info, const char* owner);
 #endif
 
 void mono_handle_stack_scan (HandleStack *stack, GcScanFunc func, gpointer gc_data, gboolean precise, gboolean check);
@@ -134,7 +134,7 @@ gboolean mono_handle_stack_is_empty (HandleStack *stack);
 HandleStack* mono_handle_stack_alloc (void);
 void mono_handle_stack_free (HandleStack *handlestack);
 MonoRawHandle mono_stack_mark_pop_value (MonoThreadInfo *info, HandleStackMark *stackmark, MonoRawHandle value);
-MonoThreadInfo* mono_stack_mark_record_size (MonoThreadInfo *info, HandleStackMark *stackmark, const char *func_name);
+MONO_COMPONENT_API MonoThreadInfo* mono_stack_mark_record_size (MonoThreadInfo *info, HandleStackMark *stackmark, const char *func_name);
 void mono_handle_stack_free_domain (HandleStack *stack, MonoDomain *domain);
 
 #ifdef MONO_HANDLE_TRACK_SP
@@ -427,16 +427,18 @@ This is why we evaluate index and value before any call to MONO_HANDLE_RAW or ot
 // This would be easier to write with the gcc extension typeof,
 // but it is not widely enough implemented (i.e. Microsoft C).
 // The value copy is needed in cases computing value causes a GC
-#define MONO_HANDLE_SETVAL(HANDLE, FIELD, TYPE, VALUE) do {	\
-		TYPE __val = (VALUE);	\
+#define MONO_HANDLE_SETVAL(HANDLE, FIELD, TYPE, VALUE) do { \
+		MONO_DISABLE_WARNING(4189) \
+		TYPE __val = (VALUE); \
 		if (0) { TYPE * typecheck G_GNUC_UNUSED = &MONO_HANDLE_SUPPRESS (MONO_HANDLE_RAW (HANDLE)->FIELD); } \
 		MONO_HANDLE_SUPPRESS (MONO_HANDLE_RAW (MONO_HANDLE_UNSUPPRESS (HANDLE))->FIELD = __val); \
+		MONO_RESTORE_WARNING \
 	 } while (0)
 
 // handle [idx] = value (for managed pointers)
 #define MONO_HANDLE_ARRAY_SETREF(HANDLE, IDX, VALUE) do {	\
 		uintptr_t __idx = (IDX);	\
-   		MonoObjectHandle __val = MONO_HANDLE_CAST (MonoObject, VALUE);		\
+		MonoObjectHandle __val = MONO_HANDLE_CAST (MonoObject, VALUE);		\
 		{	/* FIXME scope needed by Centrinel */		\
 			/* FIXME mono_array_setref_fast is not an expression. */ \
 			MONO_HANDLE_SUPPRESS_SCOPE(1);			\
@@ -605,8 +607,17 @@ mono_handle_assign_raw (MonoObjectHandleOut dest, void *src)
 static inline gpointer
 mono_handle_unsafe_field_addr (MonoObjectHandle h, MonoClassField *field)
 {
+	/* TODO: metadata-update: fix all callers */
+	g_assert (!m_field_is_from_update (field));
 	return MONO_HANDLE_SUPPRESS (((gchar *)MONO_HANDLE_RAW (h)) + field->offset);
 }
+
+/* Matches ObjectHandleOnStack in managed code */
+typedef MonoObject **MonoObjectHandleOnStack;
+
+#define HANDLE_ON_STACK_SET(handle, obj) do { \
+	*(handle) = (MonoObject*)obj; \
+	} while (0)
 
 //FIXME this should go somewhere else
 MonoStringHandle mono_string_new_handle (const char *data, MonoError *error);

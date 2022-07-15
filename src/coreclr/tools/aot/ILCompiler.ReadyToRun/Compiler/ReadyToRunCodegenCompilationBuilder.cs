@@ -23,17 +23,14 @@ namespace ILCompiler
 
         private readonly IEnumerable<string> _inputFiles;
         private readonly string _compositeRootPath;
-        private bool _ibcTuning;
-        private bool _resilient;
         private bool _generateMapFile;
         private bool _generateMapCsvFile;
         private bool _generatePdbFile;
         private string _pdbPath;
         private bool _generatePerfMapFile;
         private string _perfMapPath;
-        private Guid? _perfMapMvid;
+        private int _perfMapFormatVersion;
         private bool _generateProfileFile;
-        private int _parallelism;
         Func<MethodDesc, string> _printReproInstructions;
         private InstructionSetSupport _instructionSetSupport;
         private ProfileDataManager _profileData;
@@ -42,6 +39,8 @@ namespace ILCompiler
         private int _customPESectionAlignment;
         private bool _verifyTypeAndFieldLayout;
         private CompositeImageSettings _compositeImageSettings;
+        private ulong _imageBase;
+        private NodeFactoryOptimizationFlags _nodeFactoryOptimizationFlags = new NodeFactoryOptimizationFlags();
 
         private string _jitPath;
         private string _outputFile;
@@ -49,15 +48,16 @@ namespace ILCompiler
         // These need to provide reasonable defaults so that the user can optionally skip
         // calling the Use/Configure methods and still get something reasonable back.
         private KeyValuePair<string, string>[] _ryujitOptions = Array.Empty<KeyValuePair<string, string>>();
-        private ILProvider _ilProvider = new ReadyToRunILProvider();
+        private ILProvider _ilProvider;
 
         public ReadyToRunCodegenCompilationBuilder(
             CompilerTypeSystemContext context,
             ReadyToRunCompilationModuleGroupBase group,
             IEnumerable<string> inputFiles,
             string compositeRootPath)
-            : base(context, group, new CoreRTNameMangler())
+            : base(context, group, new NativeAotNameMangler())
         {
+            _ilProvider = new ReadyToRunILProvider(group);
             _inputFiles = inputFiles;
             _compositeRootPath = compositeRootPath;
 
@@ -85,7 +85,7 @@ namespace ILCompiler
                 builder.Add(new KeyValuePair<string, string>(name, value));
             }
 
-            if (_context.Target.Abi == TargetAbi.CoreRTArmel)
+            if (_context.Target.Abi == TargetAbi.NativeAotArmel)
             {
                 builder.Add(new KeyValuePair<string, string>("JitSoftFP", "1"));
             }
@@ -109,18 +109,6 @@ namespace ILCompiler
         public ReadyToRunCodegenCompilationBuilder UseJitPath(string jitPath)
         {
             _jitPath = jitPath;
-            return this;
-        }
-
-        public ReadyToRunCodegenCompilationBuilder UseIbcTuning(bool ibcTuning)
-        {
-            _ibcTuning = ibcTuning;
-            return this;
-        }
-
-        public ReadyToRunCodegenCompilationBuilder UseResilience(bool resilient)
-        {
-            _resilient = resilient;
             return this;
         }
 
@@ -156,23 +144,17 @@ namespace ILCompiler
             return this;
         }
 
-        public ReadyToRunCodegenCompilationBuilder UsePerfMapFile(bool generatePerfMapFile, string perfMapPath, Guid? inputModuleMvid)
+        public ReadyToRunCodegenCompilationBuilder UsePerfMapFile(bool generatePerfMapFile, string perfMapPath, int perfMapFormatVersion)
         {
             _generatePerfMapFile = generatePerfMapFile;
             _perfMapPath = perfMapPath;
-            _perfMapMvid = inputModuleMvid;
+            _perfMapFormatVersion = perfMapFormatVersion;
             return this;
         }
 
         public ReadyToRunCodegenCompilationBuilder UseProfileFile(bool generateProfileFile)
         {
             _generateProfileFile = generateProfileFile;
-            return this;
-        }
-
-        public ReadyToRunCodegenCompilationBuilder UseParallelism(int parallelism)
-        {
-            _parallelism = parallelism;
             return this;
         }
 
@@ -212,6 +194,18 @@ namespace ILCompiler
             return this;
         }
 
+        public ReadyToRunCodegenCompilationBuilder UseImageBase(ulong imageBase)
+        {
+            _imageBase = imageBase;
+            return this;
+        }
+
+        public ReadyToRunCodegenCompilationBuilder UseNodeFactoryOptimizationFlags(NodeFactoryOptimizationFlags flags)
+        {
+            _nodeFactoryOptimizationFlags = flags;
+            return this;
+        }
+
         public override ICompilation ToCompilation()
         {
             // TODO: only copy COR headers for single-assembly build and for composite build with embedded MSIL
@@ -219,7 +213,7 @@ namespace ILCompiler
             EcmaModule singleModule = _compilationGroup.IsCompositeBuildMode ? null : inputModules.First();
             CopiedCorHeaderNode corHeaderNode = new CopiedCorHeaderNode(singleModule);
             // TODO: proper support for multiple input files
-            DebugDirectoryNode debugDirectoryNode = new DebugDirectoryNode(singleModule, _outputFile);
+            DebugDirectoryNode debugDirectoryNode = new DebugDirectoryNode(singleModule, _outputFile, _generatePdbFile, _generatePerfMapFile);
 
             // Produce a ResourceData where the IBC PROFILE_DATA entry has been filtered out
             // TODO: proper support for multiple input files
@@ -248,17 +242,20 @@ namespace ILCompiler
 
             NodeFactory factory = new NodeFactory(
                 _context,
-                _compilationGroup,
+                (ReadyToRunCompilationModuleGroupBase)_compilationGroup,
                 _profileData,
                 _nameMangler,
                 corHeaderNode,
                 debugDirectoryNode,
                 win32Resources,
-                flags);
+                flags,
+                _nodeFactoryOptimizationFlags,
+                _imageBase
+                );
 
             factory.CompositeImageSettings = _compositeImageSettings;
 
-            IComparer<DependencyNodeCore<NodeFactory>> comparer = new SortableDependencyNode.ObjectNodeComparer(new CompilerComparer());
+            IComparer<DependencyNodeCore<NodeFactory>> comparer = new SortableDependencyNode.ObjectNodeComparer(CompilerComparer.Instance);
             DependencyAnalyzerBase<NodeFactory> graph = CreateDependencyGraph(factory, comparer);
 
             List<CorJitFlag> corJitFlags = new List<CorJitFlag> { CorJitFlag.CORJIT_FLAG_DEBUG_INFO };
@@ -285,9 +282,6 @@ namespace ILCompiler
                     break;
             }
 
-            if (_ibcTuning)
-                corJitFlags.Add(CorJitFlag.CORJIT_FLAG_BBINSTR);
-
             if (!_isJitInitialized)
             {
                 JitConfigProvider.Initialize(_context.Target, corJitFlags, _ryujitOptions, _jitPath);
@@ -312,7 +306,7 @@ namespace ILCompiler
                 pdbPath: _pdbPath,
                 generatePerfMapFile: _generatePerfMapFile,
                 perfMapPath: _perfMapPath,
-                perfMapMvid: _perfMapMvid,
+                perfMapFormatVersion: _perfMapFormatVersion,
                 generateProfileFile: _generateProfileFile,
                 _parallelism,
                 _profileData,

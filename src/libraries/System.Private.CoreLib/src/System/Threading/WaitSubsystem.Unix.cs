@@ -80,7 +80,7 @@ namespace System.Threading
     ///       cases, it is probably not worth optimizing for the single-wait case. It is possible with a small design change to
     ///       bypass the lock and use interlocked operations for uncontended cases, but at the cost of making multi-waits more
     ///       complicated and slower.
-    ///     - The wait state of a thread (<see cref="ThreadWaitInfo._waitSignalState"/>), among other things, is synchornized
+    ///     - The wait state of a thread (<see cref="ThreadWaitInfo._waitSignalState"/>), among other things, is synchronized
     ///       using the thread's <see cref="ThreadWaitInfo._waitMonitor"/>, so signalers and interrupters acquire the monitor's
     ///       lock before checking the wait state of a thread and signaling the thread to wake up.
     ///
@@ -113,16 +113,51 @@ namespace System.Threading
     ///   - Since <see cref="s_lock"/> provides mutual exclusion for the states of all <see cref="WaitableObject"/>s in the
     ///     process, any operation that does not involve waiting or releasing a wait can occur with minimal p/invokes
     ///
-#if CORERT
+#if NATIVEAOT
     [EagerStaticClassConstruction] // the wait subsystem is used during lazy class construction
 #endif
     internal static partial class WaitSubsystem
     {
         private static readonly LowLevelLock s_lock = new LowLevelLock();
 
+        // Exception handling may use the WaitSubsystem. It means that we need to release the WaitSubsystem
+        // lock before throwing any exceptions to avoid deadlocks. LockHolder allows us to pass the lock state
+        // around and keep track of whether the lock still needs to be released.
+        public struct LockHolder
+        {
+            private LowLevelLock? _lock;
+
+            public LockHolder(LowLevelLock l)
+            {
+                l.Acquire();
+                _lock = l;
+            }
+
+            public void Dispose()
+            {
+                if (_lock != null)
+                {
+                    _lock.Release();
+                    _lock = null;
+                }
+            }
+        }
+
         private static SafeWaitHandle NewHandle(WaitableObject waitableObject)
         {
-            IntPtr handle = HandleManager.NewHandle(waitableObject);
+            IntPtr handle = IntPtr.Zero;
+            try
+            {
+                handle = HandleManager.NewHandle(waitableObject);
+            }
+            finally
+            {
+                if (handle == IntPtr.Zero)
+                {
+                    waitableObject.OnDeleteHandle();
+                }
+            }
+
             SafeWaitHandle? safeWaitHandle = null;
             try
             {
@@ -166,6 +201,47 @@ namespace System.Threading
             return safeWaitHandle;
         }
 
+        public static SafeWaitHandle? CreateNamedMutex(bool initiallyOwned, string name, out bool createdNew)
+        {
+            // For initially owned, newly created named mutexes, there is a potential race
+            // between adding the mutex to the named object table and initially acquiring it.
+            // To avoid the possibility of another thread retrieving the mutex via its name
+            // before we managed to acquire it, we perform both steps while holding s_lock.
+            LockHolder lockHolder = new LockHolder(s_lock);
+            try
+            {
+                WaitableObject? waitableObject = WaitableObject.CreateNamedMutex_Locked(name, out createdNew);
+                if (waitableObject == null)
+                {
+                    return null;
+                }
+                SafeWaitHandle safeWaitHandle = NewHandle(waitableObject);
+                if (!initiallyOwned || !createdNew)
+                {
+                    return safeWaitHandle;
+                }
+
+                // Acquire the mutex. A thread's <see cref="ThreadWaitInfo"/> has a reference to all <see cref="Mutex"/>es locked
+                // by the thread. See <see cref="ThreadWaitInfo.LockedMutexesHead"/>. So, acquire the lock only after all
+                // possibilities for exceptions have been exhausted.
+                ThreadWaitInfo waitInfo = Thread.CurrentThread.WaitInfo;
+                int status = waitableObject.Wait_Locked(waitInfo, timeoutMilliseconds: 0, interruptible: false, prioritize: false, ref lockHolder);
+                Debug.Assert(status == 0);
+                return safeWaitHandle;
+            }
+            finally
+            {
+                lockHolder.Dispose();
+            }
+        }
+
+        public static OpenExistingResult OpenNamedMutex(string name, out SafeWaitHandle? result)
+        {
+            OpenExistingResult status = WaitableObject.OpenNamedMutex(name, out WaitableObject? mutex);
+            result = status == OpenExistingResult.Success ? NewHandle(mutex!) : null;
+            return status;
+        }
+
         public static void DeleteHandle(IntPtr handle)
         {
             HandleManager.DeleteHandle(handle);
@@ -180,14 +256,14 @@ namespace System.Threading
         {
             Debug.Assert(waitableObject != null);
 
-            s_lock.Acquire();
+            LockHolder lockHolder = new LockHolder(s_lock);
             try
             {
-                waitableObject.SignalEvent();
+                waitableObject.SignalEvent(ref lockHolder);
             }
             finally
             {
-                s_lock.Release();
+                lockHolder.Dispose();
             }
         }
 
@@ -200,14 +276,14 @@ namespace System.Threading
         {
             Debug.Assert(waitableObject != null);
 
-            s_lock.Acquire();
+            LockHolder lockHolder = new LockHolder(s_lock);
             try
             {
-                waitableObject.UnsignalEvent();
+                waitableObject.UnsignalEvent(ref lockHolder);
             }
             finally
             {
-                s_lock.Release();
+                lockHolder.Dispose();
             }
         }
 
@@ -222,14 +298,14 @@ namespace System.Threading
             Debug.Assert(waitableObject != null);
             Debug.Assert(count > 0);
 
-            s_lock.Acquire();
+            LockHolder lockHolder = new LockHolder(s_lock);
             try
             {
-                return waitableObject.SignalSemaphore(count);
+                return waitableObject.SignalSemaphore(count, ref lockHolder);
             }
             finally
             {
-                s_lock.Release();
+                lockHolder.Dispose();
             }
         }
 
@@ -242,14 +318,14 @@ namespace System.Threading
         {
             Debug.Assert(waitableObject != null);
 
-            s_lock.Acquire();
+            LockHolder lockHolder = new LockHolder(s_lock);
             try
             {
-                waitableObject.SignalMutex();
+                waitableObject.SignalMutex(ref lockHolder);
             }
             finally
             {
-                s_lock.Release();
+                lockHolder.Dispose();
             }
         }
 
@@ -365,38 +441,30 @@ namespace System.Threading
             Debug.Assert(timeoutMilliseconds >= -1);
 
             ThreadWaitInfo waitInfo = Thread.CurrentThread.WaitInfo;
-            bool waitCalled = false;
-            s_lock.Acquire();
+            LockHolder lockHolder = new LockHolder(s_lock);
             try
             {
                 // A pending interrupt does not signal the specified handle
                 if (interruptible && waitInfo.CheckAndResetPendingInterrupt)
                 {
+                    lockHolder.Dispose();
                     throw new ThreadInterruptedException();
                 }
 
                 try
                 {
-                    waitableObjectToSignal.Signal(1);
+                    waitableObjectToSignal.Signal(1, ref lockHolder);
                 }
                 catch (SemaphoreFullException ex)
                 {
+                    s_lock.VerifyIsNotLocked();
                     throw new InvalidOperationException(SR.Threading_WaitHandleTooManyPosts, ex);
                 }
-                waitCalled = true;
-                return waitableObjectToWaitOn.Wait_Locked(waitInfo, timeoutMilliseconds, interruptible, prioritize);
+                return waitableObjectToWaitOn.Wait_Locked(waitInfo, timeoutMilliseconds, interruptible, prioritize, ref lockHolder);
             }
             finally
             {
-                // Once the wait function is called, it will release the lock
-                if (waitCalled)
-                {
-                    s_lock.VerifyIsNotLocked();
-                }
-                else
-                {
-                    s_lock.Release();
-                }
+                lockHolder.Dispose();
             }
         }
 

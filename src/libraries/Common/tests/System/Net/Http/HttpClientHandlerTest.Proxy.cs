@@ -57,7 +57,7 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [ActiveIssue("https://github.com/dotnet/runtime/issues/1507")]
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsNotWindowsNanoServer))]
         [InlineData(AuthenticationSchemes.Ntlm, true, false)]
         [InlineData(AuthenticationSchemes.Negotiate, true, false)]
@@ -89,9 +89,10 @@ namespace System.Net.Http.Functional.Tests
             Uri serverUri = secureServer ? Configuration.Http.SecureRemoteEchoServer : Configuration.Http.RemoteEchoServer;
 
             var options = new LoopbackProxyServer.Options
-                { AuthenticationSchemes = proxyAuthScheme,
-                  ConnectionCloseAfter407 = proxyClosesConnectionAfterFirst407Response
-                };
+            {
+                AuthenticationSchemes = proxyAuthScheme,
+                ConnectionCloseAfter407 = proxyClosesConnectionAfterFirst407Response
+            };
             using (LoopbackProxyServer proxyServer = LoopbackProxyServer.Create(options))
             {
                 using (HttpClientHandler handler = CreateHttpClientHandler())
@@ -114,7 +115,7 @@ namespace System.Net.Http.Functional.Tests
 
         public static bool IsSocketsHttpHandlerAndRemoteExecutorSupported => !HttpClientHandlerTestBase.IsWinHttpHandler && RemoteExecutor.IsSupported;
 
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [ConditionalFact(nameof(IsSocketsHttpHandlerAndRemoteExecutorSupported))]
         public void Proxy_UseEnvironmentVariableToSetSystemProxy_RequestGoesThruProxy()
         {
@@ -171,7 +172,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [Theory]
         [MemberData(nameof(CredentialsForProxy))]
         public async Task AuthenticatedProxiedRequest_GetAsyncWithCreds_Success(NetworkCredential cred, bool wrapCredsInCache, bool connectionCloseAfter407)
@@ -202,7 +203,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [Theory]
         [MemberData(nameof(CredentialsForProxy))]
         public async Task AuthenticatedProxyTunnelRequest_PostAsyncWithCreds_Success(NetworkCredential cred, bool wrapCredsInCache, bool connectionCloseAfter407)
@@ -241,7 +242,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [Theory]
         [MemberData(nameof(BypassedProxies))]
         public async Task Proxy_BypassTrue_GetRequestDoesntGoesThroughCustomProxy(IWebProxy proxy)
@@ -259,7 +260,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [Fact]
         public async Task AuthenticatedProxiedRequest_GetAsyncWithNoCreds_ProxyAuthenticationRequiredStatusCode()
         {
@@ -306,7 +307,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotWindowsSubsystemForLinux))] // [ActiveIssue("https://github.com/dotnet/runtime/issues/18258")]
+        [Fact]
         public async Task Proxy_SslProxyUnsupported_Throws()
         {
             using (HttpClientHandler handler = CreateHttpClientHandler())
@@ -321,6 +322,7 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/69870", TestPlatforms.Android)]
         public async Task ProxyTunnelRequest_GetAsync_Success()
         {
             if (IsWinHttpHandler)
@@ -341,7 +343,7 @@ namespace System.Net.Http.Functional.Tests
                     await LoopbackServer.CreateServerAsync(async (server, uri) =>
                     {
                         Assert.Equal(proxyServer.Uri, handler.Proxy.GetProxy(uri));
-                        
+
                         Task<HttpResponseMessage> clientTask = client.GetAsync(uri);
                         await server.AcceptConnectionSendResponseAndCloseAsync(content: Content);
                         using (var response = await clientTask)
@@ -357,6 +359,7 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/69870", TestPlatforms.Android)]
         public async Task ProxyTunnelRequest_MaxConnectionsSetButDoesNotApplyToProxyConnect_Success()
         {
             if (IsWinHttpHandler)
@@ -414,6 +417,7 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/69870", TestPlatforms.Android)]
         public async Task ProxyTunnelRequest_OriginServerSendsProxyAuthChallenge_NoProxyAuthPerformed()
         {
             if (IsWinHttpHandler)
@@ -434,12 +438,12 @@ namespace System.Net.Http.Functional.Tests
                         Assert.Equal(proxyServer.Uri, handler.Proxy.GetProxy(uri));
 
                         Task<HttpResponseMessage> clientTask = client.GetAsync(uri);
-                        await server.AcceptConnectionSendResponseAndCloseAsync(statusCode: HttpStatusCode.ProxyAuthenticationRequired, additionalHeaders: "Proxy-Authenticate: Basic");
-                        using (var response = await clientTask)
+                        await server.AcceptConnectionSendResponseAndCloseAsync(statusCode: HttpStatusCode.ProxyAuthenticationRequired, additionalHeaders: "Proxy-Authenticate: Basic").WaitAsync(TestHelper.PassingTestTimeout);
+                        using (var response = await clientTask.WaitAsync(TestHelper.PassingTestTimeout))
                         {
                             Assert.Equal(HttpStatusCode.ProxyAuthenticationRequired, response.StatusCode);
                         }
-                    }, options);
+                    }, options).WaitAsync(TestHelper.PassingTestTimeout);
                 }
 
                 Assert.Contains("CONNECT", proxyServer.Requests[0].RequestLine);
@@ -578,7 +582,14 @@ namespace System.Net.Http.Functional.Tests
                 using (HttpClient client = CreateHttpClient(handler))
                 {
                     handler.Proxy = new WebProxy(proxyUri);
-                    try { await client.GetAsync(uri); } catch { }
+                    try
+                    {
+                        await client.GetAsync(uri);
+                    }
+                    catch (Exception ex)
+                    {
+                        _output.WriteLine($"Ignored exception:{Environment.NewLine}{ex}");
+                    }
                 }
             }, server => server.AcceptConnectionAsync(async connection =>
             {
@@ -611,7 +622,14 @@ namespace System.Net.Http.Functional.Tests
                 using (HttpClient client = CreateHttpClient(handler))
                 {
                     handler.Proxy = new WebProxy(proxyUri);
-                    try { await client.GetAsync(addressUri); } catch { }
+                    try
+                    {
+                        await client.GetAsync(addressUri);
+                    }
+                    catch (Exception ex)
+                    {
+                        _output.WriteLine($"Ignored exception:{Environment.NewLine}{ex}");
+                    }
                 }
             }, server => server.AcceptConnectionAsync(async connection =>
             {
@@ -639,7 +657,14 @@ namespace System.Net.Http.Functional.Tests
                 {
                     handler.Proxy = new WebProxy(proxyUri);
                     handler.ServerCertificateCustomValidationCallback = TestHelper.AllowAllCertificates;
-                    try { await client.GetAsync(addressUri); } catch { }
+                    try
+                    {
+                        await client.GetAsync(addressUri);
+                    }
+                    catch (Exception ex)
+                    {
+                        _output.WriteLine($"Ignored exception:{Environment.NewLine}{ex}");
+                    }
                 }
             }, server => server.AcceptConnectionAsync(async connection =>
             {

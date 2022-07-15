@@ -34,6 +34,7 @@ internal static partial class Interop
         internal const string User32 = "user32.dll";
         internal const string Version = "version.dll";
         internal const string WebSocket = "websocket.dll";
+        internal const string Wevtapi = "wevtapi.dll";
         internal const string WinHttp = "winhttp.dll";
         internal const string WinMM = "winmm.dll";
         internal const string Wkscli = "wkscli.dll";
@@ -44,5 +45,6 @@ internal static partial class Interop
         internal const string GlobalizationNative = "System.Globalization.Native";
         internal const string MsQuic = "msquic.dll";
         internal const string HostPolicy = "hostpolicy.dll";
+        internal const string Ucrtbase = "ucrtbase.dll";
     }
 }

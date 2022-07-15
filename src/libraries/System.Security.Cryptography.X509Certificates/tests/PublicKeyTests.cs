@@ -347,7 +347,7 @@ namespace System.Security.Cryptography.X509Certificates.Tests
                 0x11, 0xE0, 0x6E, 0xD2, 0x22, 0x75, 0xE7, 0x7C,
             };
 
-            byte[] helloBytes = Encoding.ASCII.GetBytes("Hello");
+            byte[] helloBytes = "Hello"u8.ToArray();
 
             using (var cert = new X509Certificate2(TestData.Rsa384CertificatePemBytes))
             using (RSA rsa = cert.GetRSAPublicKey())
@@ -360,7 +360,7 @@ namespace System.Security.Cryptography.X509Certificates.Tests
         public static void TestKey_ECDsabrainpool_PublicKey(byte[] curveData, byte[] notUsed)
         {
             _ = notUsed;
-            byte[] helloBytes = Encoding.ASCII.GetBytes("Hello");
+            byte[] helloBytes = "Hello"u8.ToArray();
 
             try
             {
@@ -386,7 +386,7 @@ namespace System.Security.Cryptography.X509Certificates.Tests
         [Fact]
         public static void TestECDsaPublicKey()
         {
-            byte[] helloBytes = Encoding.ASCII.GetBytes("Hello");
+            byte[] helloBytes = "Hello"u8.ToArray();
 
             using (var cert = new X509Certificate2(TestData.ECDsa384Certificate))
             using (ECDsa publicKey = cert.GetECDsaPublicKey())
@@ -439,7 +439,7 @@ namespace System.Security.Cryptography.X509Certificates.Tests
                 0x08, 0xC5, 0xAA, 0xA6, 0xE5, 0xFD, 0xD0, 0x96,
             };
 
-            byte[] helloBytes = Encoding.ASCII.GetBytes("Hello");
+            byte[] helloBytes = "Hello"u8.ToArray();
 
             using (var cert = new X509Certificate2(TestData.ECDsa384Certificate))
             using (ECDsa publicKey = cert.GetECDsaPublicKey())
@@ -476,7 +476,7 @@ namespace System.Security.Cryptography.X509Certificates.Tests
         [Theory, MemberData(nameof(BrainpoolCurves))]
         public static void TestECDsaPublicKey_BrainpoolP160r1_ValidatesSignature(byte[] curveData, byte[] existingSignature)
         {
-            byte[] helloBytes = Encoding.ASCII.GetBytes("Hello");
+            byte[] helloBytes = "Hello"u8.ToArray();
 
             try
             {
@@ -490,7 +490,7 @@ namespace System.Security.Cryptography.X509Certificates.Tests
                         Assert.Equal("1.2.840.10045.2.1", cert.PublicKey.Oid.Value);
 
                         bool isSignatureValid = publicKey.VerifyData(helloBytes, existingSignature, HashAlgorithmName.SHA256);
-                        
+
                         if (!isSignatureValid)
                         {
                             Assert.True(PlatformDetection.IsAndroid, "signature invalid on Android only");
@@ -821,6 +821,113 @@ namespace System.Security.Cryptography.X509Certificates.Tests
             Assert.Equal("1.2.643.2.2.19", key.Oid.Value);
             Assert.Equal(spki, key.ExportSubjectPublicKeyInfo());
             Assert.Equal(spki.Length, read);
+        }
+
+        [Fact]
+        public static void GetPublicKey_NullForDifferentAlgorithm()
+        {
+            byte[] spki = TestData.GostR3410SubjectPublicKeyInfo;
+            PublicKey key = PublicKey.CreateFromSubjectPublicKeyInfo(spki, out _);
+
+            Assert.Null(key.GetRSAPublicKey());
+            Assert.Null(key.GetECDsaPublicKey());
+            Assert.Null(key.GetECDiffieHellmanPublicKey());
+        }
+
+        [Fact]
+        [SkipOnPlatform(PlatformSupport.MobileAppleCrypto, "DSA is not available")]
+        public static void GetDSAPublicKey_NullForDifferentAlgorithm()
+        {
+            byte[] spki = TestData.GostR3410SubjectPublicKeyInfo;
+            PublicKey key = PublicKey.CreateFromSubjectPublicKeyInfo(spki, out _);
+
+            Assert.Null(key.GetDSAPublicKey());
+        }
+
+        [Fact]
+        public static void GetRSAPublicKey_ReturnsRsaKey()
+        {
+            PublicKey key = GetTestRsaKey();
+
+            using (RSA rsa = key.GetRSAPublicKey())
+            {
+                Assert.NotNull(rsa);
+                Assert.Equal(rsa.ExportSubjectPublicKeyInfo(), key.ExportSubjectPublicKeyInfo());
+            }
+        }
+
+        [Fact]
+        public static void GetRSAPublicKey_ThrowsForCorruptKey()
+        {
+            AsnEncodedData badData = new AsnEncodedData(new byte[] { 1, 2, 3, 4 });
+            PublicKey key = new PublicKey(GetTestRsaKey().Oid, badData, badData);
+
+            Assert.ThrowsAny<CryptographicException>(() => key.GetRSAPublicKey());
+        }
+
+        [Fact]
+        [SkipOnPlatform(PlatformSupport.MobileAppleCrypto, "DSA is not available")]
+        public static void GetDSAPublicKey_ReturnsDsaKey()
+        {
+            PublicKey key = GetTestDsaKey();
+
+            using (DSA dsa = key.GetDSAPublicKey())
+            {
+                Assert.NotNull(dsa);
+                Assert.Equal(dsa.ExportSubjectPublicKeyInfo(), key.ExportSubjectPublicKeyInfo());
+            }
+        }
+
+        [Fact]
+        [SkipOnPlatform(PlatformSupport.MobileAppleCrypto, "DSA is not available")]
+        public static void GetDSAPublicKey_ThrowsForCorruptKey()
+        {
+            AsnEncodedData badData = new AsnEncodedData(new byte[] { 1, 2, 3, 4 });
+            PublicKey key = new PublicKey(GetTestDsaKey().Oid, badData, badData);
+
+            Assert.ThrowsAny<CryptographicException>(() => key.GetDSAPublicKey());
+        }
+
+        [Fact]
+        public static void GetECDsaPublicKey_ReturnsECDsaKey()
+        {
+            PublicKey key = GetTestECDsaKey();
+
+            using (ECDsa ecdsa = key.GetECDsaPublicKey())
+            {
+                Assert.NotNull(ecdsa);
+                Assert.Equal(ecdsa.ExportSubjectPublicKeyInfo(), key.ExportSubjectPublicKeyInfo());
+            }
+        }
+
+        [Fact]
+        public static void GetECDsaPublicKey_ThrowsForCorruptKey()
+        {
+            AsnEncodedData badData = new AsnEncodedData(new byte[] { 1, 2, 3, 4 });
+            PublicKey key = new PublicKey(GetTestECDsaKey().Oid, badData, badData);
+
+            Assert.ThrowsAny<CryptographicException>(() => key.GetECDsaPublicKey());
+        }
+
+        [Fact]
+        public static void GetECDiffieHellmanPublicKey_ReturnsECDHKey()
+        {
+            PublicKey key = GetTestECDHKey();
+
+            using (ECDiffieHellman ecdh = key.GetECDiffieHellmanPublicKey())
+            {
+                Assert.NotNull(ecdh);
+                Assert.Equal(ecdh.ExportSubjectPublicKeyInfo(), key.ExportSubjectPublicKeyInfo());
+            }
+        }
+
+        [Fact]
+        public static void GetECDiffieHellmanPublicKey_ThrowsForCorruptKey()
+        {
+            AsnEncodedData badData = new AsnEncodedData(new byte[] { 1, 2, 3, 4 });
+            PublicKey key = new PublicKey(GetTestECDHKey().Oid, badData, badData);
+
+            Assert.ThrowsAny<CryptographicException>(() => key.GetECDiffieHellmanPublicKey());
         }
 
         private static void TestKey_ECDsaCng(byte[] certBytes, TestData.ECDsaCngKeyValues expected)

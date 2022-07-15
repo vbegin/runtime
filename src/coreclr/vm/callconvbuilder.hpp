@@ -78,7 +78,21 @@ namespace CallConv
         _In_ PCCOR_SIGNATURE pSig,
         _In_ ULONG cSig,
         _Inout_ CallConvBuilder *builder,
-        _Out_ UINT *errorResID);
+        _Out_ UINT* errorResID);
+
+    //-------------------------------------------------------------------------
+    // Gets the calling convention from the UnmanagedCallConv attribute
+    //
+    // Returns:
+    //   S_OK - No errors
+    //   S_FALSE - UnmanagedCallConv or UnmanagedCallConv.CallConvs not specified
+    //   COR_E_INVALIDPROGRAM - Program is considered invalid (more
+    //                          than one calling convention specified)
+    //-------------------------------------------------------------------------
+    HRESULT TryGetCallingConventionFromUnmanagedCallConv(
+        _In_ MethodDesc* pMD,
+        _Inout_ CallConvBuilder* builder,
+        _Out_opt_ UINT* errorResID);
 
     //-------------------------------------------------------------------------
     // Gets the unmanaged calling convention from the UnmanagedCallersOnly attribute.

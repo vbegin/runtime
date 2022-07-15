@@ -1,10 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
+    <TargetFrameworks>$(NetCoreAppCurrent);$(NetCoreAppMinimum);netstandard2.0;$(NetFrameworkMinimum)</TargetFrameworks>
+    <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
   <ItemGroup>
-    <Compile Condition="'$(TargetFramework)' != 'net461'" Include="System.Diagnostics.PerformanceCounter.cs" />
-    <Compile Condition="'$(TargetFramework)' == 'net461'" Include="System.Diagnostics.PerformanceCounter.net461.cs" />
+    <Compile Include="System.Diagnostics.PerformanceCounter.cs" Condition="'$(TargetFrameworkIdentifier)' != '.NETFramework'" />
+    <Compile Include="System.Diagnostics.PerformanceCounter.netframework.cs" Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'" />
+    <Compile Include="System.Diagnostics.PerformanceCounter.netcoreapp.cs" Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp'" />
   </ItemGroup>
 </Project>

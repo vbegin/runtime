@@ -235,7 +235,7 @@ int hostfxr_initialize_for_dotnet_command_line(
 
 Initializes the hosting components for running a managed application.
 The command line is parsed to determine the app path. The app path will be used to locate the `.runtimeconfig.json` and the `.deps.json` which will be used to load the application and its dependent frameworks.
-* `argc` and `argv` - the command line for running a managed application. These represent the arguments which would have been passed to the muxer if the app was being run from the command line.
+* `argc` and `argv` - the command line for running a managed application. These represent the arguments which would have been passed to the muxer if the app was being run from the command line. These are the parameters which are valid for the runtime installation by itself - SDK/CLI commands are not supported. For example, the arguments could be `app.dll app_argument_1 app_argument_2`. This API specifically doesn't support the `dotnet run` SDK command.
 * `parameters` - additional parameters - see `hostfxr_initialize_parameters` for details. (Could be made optional potentially)
 * `host_context_handle` - output parameter. On success receives an opaque value which identifies the initialized host context. The handle should be closed by calling `hostfxr_close`.
 
@@ -334,7 +334,7 @@ int hostfxr_get_runtime_properties(
 
 Returns the full set of all runtime properties for the specified host context.
 * `host_context_handle` - the initialized host context. If set to `NULL` the function will operate on runtime properties of the first host context in the process.
-* `count` - in/out parameter which must not be `NULL`. On input it specifies the size of the the `keys` and `values` buffers. On output it contains the number of entries used from `keys` and `values` buffers - the number of properties returned. If the size of the buffers is too small, the function returns a specific error code and fill the `count` with the number of available properties. If `keys` or `values` is `NULL` the function ignores the input value of `count` and just returns the number of properties.
+* `count` - in/out parameter which must not be `NULL`. On input it specifies the size of the `keys` and `values` buffers. On output it contains the number of entries used from `keys` and `values` buffers - the number of properties returned. If the size of the buffers is too small, the function returns a specific error code and fill the `count` with the number of available properties. If `keys` or `values` is `NULL` the function ignores the input value of `count` and just returns the number of properties.
 * `keys` - buffer which acts as an array of pointers to buffers with keys for the runtime properties.
 * `values` - buffer which acts as an array of pointer to buffers with values for the runtime properties.
 
@@ -537,7 +537,7 @@ params.dotnet_root = get_directory(get_directory(get_directory(hostfxr_path))); 
 hostfxr_handle host_context_handle;
 hostfxr_initialize_for_dotnet_command_line(
     _argc_,
-    _argv_,
+    _argv_,  // For example, 'app.dll app_argument_1 app_argument_2'
     &params,
     &host_context_handle);
 

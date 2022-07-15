@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Serialization;
 using System.Text;
 
@@ -39,14 +40,14 @@ namespace System
 
         protected Exception(SerializationInfo info, StreamingContext context)
         {
-            if (info == null)
-                throw new ArgumentNullException(nameof(info));
+            ArgumentNullException.ThrowIfNull(info);
 
             _message = info.GetString("Message"); // Do not rename (binary serialization)
             _data = (IDictionary?)(info.GetValueNoThrow("Data", typeof(IDictionary))); // Do not rename (binary serialization)
             _innerException = (Exception?)(info.GetValue("InnerException", typeof(Exception))); // Do not rename (binary serialization)
             _helpURL = info.GetString("HelpURL"); // Do not rename (binary serialization)
             _stackTraceString = info.GetString("StackTraceString"); // Do not rename (binary serialization)
+            _remoteStackTraceString = info.GetString("RemoteStackTraceString"); // Do not rename (binary serialization)
             _HResult = info.GetInt32("HResult"); // Do not rename (binary serialization)
             _source = info.GetString("Source"); // Do not rename (binary serialization)
 
@@ -88,21 +89,17 @@ namespace System
 
         public virtual string? Source
         {
-            get => _source ??= CreateSourceName();
+            [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+                Justification = "The API will return <unknown> if the metadata for current method cannot be established.")]
+            get => _source ??= HasBeenThrown ? (TargetSite?.Module.Assembly.GetName().Name ?? "<unknown>") : null;
             set => _source = value;
         }
 
         public virtual void GetObjectData(SerializationInfo info, StreamingContext context)
         {
-            if (info == null)
-            {
-                throw new ArgumentNullException(nameof(info));
-            }
+            ArgumentNullException.ThrowIfNull(info);
 
-            if (_source == null)
-            {
-                _source = Source; // Set the Source information correctly before serialization
-            }
+            _source ??= Source; // Set the Source information correctly before serialization
 
             info.AddValue("ClassName", GetClassName(), typeof(string)); // Do not rename (binary serialization)
             info.AddValue("Message", _message, typeof(string)); // Do not rename (binary serialization)
@@ -110,7 +107,7 @@ namespace System
             info.AddValue("InnerException", _innerException, typeof(Exception)); // Do not rename (binary serialization)
             info.AddValue("HelpURL", _helpURL, typeof(string)); // Do not rename (binary serialization)
             info.AddValue("StackTraceString", SerializationStackTraceString, typeof(string)); // Do not rename (binary serialization)
-            info.AddValue("RemoteStackTraceString", SerializationRemoteStackTraceString, typeof(string)); // Do not rename (binary serialization)
+            info.AddValue("RemoteStackTraceString", _remoteStackTraceString, typeof(string)); // Do not rename (binary serialization)
             info.AddValue("RemoteStackIndex", 0, typeof(int)); // Do not rename (binary serialization)
             info.AddValue("ExceptionMethod", null, typeof(string)); // Do not rename (binary serialization)
             info.AddValue("HResult", _HResult); // Do not rename (binary serialization)
@@ -200,6 +197,35 @@ namespace System
 
         partial void RestoreRemoteStackTrace(SerializationInfo info, StreamingContext context);
 
+        // Returns the stack trace as a string.  If no stack trace is
+        // available, null is returned.
+        public virtual string? StackTrace
+        {
+            get
+            {
+                string? stackTraceString = _stackTraceString;
+                string? remoteStackTraceString = _remoteStackTraceString;
+
+                // if no stack trace, try to get one
+                if (stackTraceString != null)
+                {
+                    return remoteStackTraceString + stackTraceString;
+                }
+                if (!HasBeenThrown)
+                {
+                    return remoteStackTraceString;
+                }
+
+                return remoteStackTraceString + GetStackTrace();
+            }
+        }
+
+        private string GetStackTrace()
+        {
+            // Do not include a trailing newline for backwards compatibility
+            return new StackTrace(this, fNeedFileInfo: true).ToString(System.Diagnostics.StackTrace.TraceFormat.Normal);
+        }
+
         [StackTraceHidden]
         internal void SetCurrentStackTrace()
         {
@@ -227,6 +253,21 @@ namespace System
             // Store the provided text into the "remote" stack trace, following the same format SetCurrentStackTrace
             // would have generated.
             _remoteStackTraceString = stackTrace + Environment.NewLineConst + SR.Exception_EndStackTraceFromPreviousThrow + Environment.NewLineConst;
+        }
+
+        private string? SerializationStackTraceString
+        {
+            get
+            {
+                string? stackTraceString = _stackTraceString;
+
+                if (stackTraceString == null && HasBeenThrown)
+                {
+                    stackTraceString = GetStackTrace();
+                }
+
+                return stackTraceString;
+            }
         }
     }
 }

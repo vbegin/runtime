@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
@@ -98,6 +98,8 @@ namespace System.Text.Json.Nodes
         /// <param name="value">
         ///   The object to be added to the end of the <see cref="JsonArray"/>.
         /// </param>
+        [RequiresUnreferencedCode(JsonValue.CreateUnreferencedCodeMessage)]
+        [RequiresDynamicCode(JsonValue.CreateDynamicCodeMessage)]
         public void Add<T>(T? value)
         {
             if (value == null)
@@ -106,11 +108,7 @@ namespace System.Text.Json.Nodes
             }
             else
             {
-                JsonNode? jNode = value as JsonNode;
-                if (jNode == null)
-                {
-                    jNode = new JsonValue<T>(value);
-                }
+                JsonNode jNode = value as JsonNode ?? new JsonValueNotTrimmable<T>(value);
 
                 // Call the IList.Add() implementation.
                 Add(jNode);
@@ -153,9 +151,9 @@ namespace System.Text.Json.Nodes
         /// <inheritdoc/>
         public override void WriteTo(Utf8JsonWriter writer, JsonSerializerOptions? options = null)
         {
-            if (writer == null)
+            if (writer is null)
             {
-                throw new ArgumentNullException(nameof(writer));
+                ThrowHelper.ThrowArgumentNullException(nameof(writer));
             }
 
             if (_jsonElement.HasValue)
@@ -167,7 +165,7 @@ namespace System.Text.Json.Nodes
                 CreateNodes();
                 Debug.Assert(_list != null);
 
-                options ??= JsonSerializerOptions.s_defaultOptions;
+                options ??= s_defaultOptions;
 
                 writer.WriteStartArray();
 
@@ -213,7 +211,7 @@ namespace System.Text.Json.Nodes
         }
 
         [ExcludeFromCodeCoverage] // Justification = "Design-time"
-        private class DebugView
+        private sealed class DebugView
         {
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private JsonArray _node;

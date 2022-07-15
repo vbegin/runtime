@@ -169,10 +169,16 @@ namespace Internal.TypeSystem.Ecma
 
                             var lowerBoundsCount = _reader.ReadCompressedInteger();
                             int []lowerBounds = lowerBoundsCount > 0 ? new int[lowerBoundsCount] : Array.Empty<int>();
+                            bool nonZeroLowerBounds = false;
                             for (int j = 0; j < lowerBoundsCount; j++)
-                                lowerBounds[j] = _reader.ReadCompressedSignedInteger();
+                            {
+                                int loBound = _reader.ReadCompressedSignedInteger();
+                                if (loBound != 0)
+                                    nonZeroLowerBounds = true;
+                                lowerBounds[j] = loBound;
+                            }
 
-                            if (boundsCount != 0 || lowerBoundsCount != 0)
+                            if (boundsCount != 0 || lowerBoundsCount != rank || nonZeroLowerBounds)
                             {
                                 StringBuilder arrayShapeString = new StringBuilder();
                                 arrayShapeString.Append(string.Join(",", bounds));
@@ -250,7 +256,8 @@ namespace Internal.TypeSystem.Ecma
                     else
                         return null;
                 default:
-                    throw new BadImageFormatException();
+                    ThrowHelper.ThrowBadImageFormatException();
+                    return null;
             }
         }
 
@@ -464,6 +471,25 @@ namespace Internal.TypeSystem.Ecma
             return ParseType();
         }
 
+        public TypeDesc ParseFieldSignature(out EmbeddedSignatureData[] embeddedSigData)
+        {
+            try
+            {
+                _indexStack = new Stack<int>();
+                _indexStack.Push(1);
+                _indexStack.Push(0);
+                _embeddedSignatureDataList = new List<EmbeddedSignatureData>();
+                TypeDesc parsedType = ParseFieldSignature();
+                embeddedSigData = _embeddedSignatureDataList.Count == 0 ? null : _embeddedSignatureDataList.ToArray();
+                return parsedType;
+            }
+            finally
+            {
+                _indexStack = null;
+                _embeddedSignatureDataList = null;
+            }
+        }
+
         public LocalVariableDefinition[] ParseLocalsSignature()
         {
             if (_reader.ReadSignatureHeader().Kind != SignatureKind.LocalVariables)
@@ -528,6 +554,8 @@ namespace Internal.TypeSystem.Ecma
             NativeTypeKind type = (NativeTypeKind)_reader.ReadByte();
             NativeTypeKind arraySubType = NativeTypeKind.Default;
             uint? paramNum = null, numElem = null;
+            string cookie = null;
+            TypeDesc marshallerType = null;
 
             switch (type)
             {
@@ -600,9 +628,6 @@ namespace Internal.TypeSystem.Ecma
                     break;
                 case NativeTypeKind.CustomMarshaler:
                     {
-                        // There's nobody to consume CustomMarshaller, so let's just parse the data
-                        // to avoid asserting later.
-
                         // Read typelib guid
                         _reader.ReadSerializedString();
 
@@ -610,10 +635,11 @@ namespace Internal.TypeSystem.Ecma
                         _reader.ReadSerializedString();
 
                         // Read managed marshaler name
-                        _reader.ReadSerializedString();
+                        var customMarshallerTypeName = _reader.ReadSerializedString();
+                        marshallerType = _ecmaModule.GetTypeByCustomAttributeTypeName(customMarshallerTypeName, true);
 
                         // Read cookie
-                        _reader.ReadSerializedString();
+                        cookie = _reader.ReadSerializedString();
                     }
                     break;
                 default:
@@ -622,7 +648,7 @@ namespace Internal.TypeSystem.Ecma
 
             Debug.Assert(_reader.RemainingBytes == 0);
 
-            return new MarshalAsDescriptor(type, arraySubType, paramNum, numElem);
+            return new MarshalAsDescriptor(type, arraySubType, paramNum, numElem, marshallerType, cookie);
         }
     }
 }

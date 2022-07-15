@@ -3,21 +3,6 @@
 
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using System.Text.Json.SourceGeneration.Tests;
-
-[assembly: JsonSerializable(typeof(Location))]
-[assembly: JsonSerializable(typeof(System.Text.Json.SourceGeneration.Tests.RepeatedTypes.Location), TypeInfoPropertyName = "RepeatedLocation")]
-[assembly: JsonSerializable(typeof(ActiveOrUpcomingEvent))]
-[assembly: JsonSerializable(typeof(CampaignSummaryViewModel))]
-[assembly: JsonSerializable(typeof(IndexViewModel))]
-[assembly: JsonSerializable(typeof(WeatherForecastWithPOCOs))]
-[assembly: JsonSerializable(typeof(EmptyPoco))]
-// Ensure no errors when type of member in previously specified object graph is passed as input type to generator.
-[assembly: JsonSerializable(typeof(HighLowTemps))]
-[assembly: JsonSerializable(typeof(MyType))]
-[assembly: JsonSerializable(typeof(MyType2))]
-[assembly: JsonSerializable(typeof(MyIntermediateType))]
-[assembly: JsonSerializable(typeof(HighLowTempsImmutable))]
 
 namespace System.Text.Json.SourceGeneration.Tests.RepeatedTypes
 {
@@ -50,6 +35,21 @@ namespace System.Text.Json.SourceGeneration.Tests
         public string Country { get; set; }
     }
 
+    public class NumberTypes
+    {
+        public float Single { get; set; }
+        public double Double { get; set; }
+        public decimal Decimal { get; set; }
+        public sbyte SByte { get; set; }
+        public byte Byte { get; set; }
+        public ushort UShort { get; set; }
+        public short Short { get; set; }
+        public uint UInt { get; set; }
+        public int Int { get; set; }
+        public ulong ULong { get; set; }
+        public long Long { get; set; }
+    }
+
     public class ActiveOrUpcomingEvent
     {
         public int Id { get; set; }
@@ -60,6 +60,7 @@ namespace System.Text.Json.SourceGeneration.Tests
         public string Description { get; set; }
         public DateTimeOffset StartDate { get; set; }
         public DateTimeOffset EndDate { get; set; }
+        public TimeSpan Offset { get; set; }
     }
 
     public class CampaignSummaryViewModel
@@ -105,6 +106,8 @@ namespace System.Text.Json.SourceGeneration.Tests
         public HighLowTempsImmutable(int high, int low) => (High, Low) = (high, low);
     }
 
+    public record HighLowTempsRecord(int High, int Low);
+
     public class EmptyPoco
     {
     }
@@ -122,5 +125,100 @@ namespace System.Text.Json.SourceGeneration.Tests
     public class MyIntermediateType
     {
         public MyType Type = new();
+    }
+
+    public class MyTypeWithCallbacks : IJsonOnSerializing, IJsonOnSerialized
+    {
+        public string MyProperty { get; set; }
+
+        public void OnSerializing() => MyProperty = "Before";
+        void IJsonOnSerialized.OnSerialized() => MyProperty = "After";
+    }
+
+    public class MyTypeWithPropertyOrdering
+    {
+        public int B { get; set; }
+
+        [JsonPropertyOrder(1)]
+        public int A { get; set; }
+
+        [JsonPropertyOrder(-1)]
+        [JsonInclude]
+        public int C = 0;
+    }
+
+    public class JsonMessage
+    {
+        public string Message { get; set; }
+        public int Length => Message?.Length ?? 0; // Read-only property
+    }
+
+    internal struct MyStruct { }
+
+    public struct PersonStruct
+    {
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+    }
+
+    public class TypeWithValidationAttributes
+    {
+        [ComponentModel.DataAnnotations.Required(ErrorMessage = "Name is required")]
+        [ComponentModel.DataAnnotations.StringLength(100, ErrorMessage = "Name must not be longer than 100 characters")]
+        public string Name { get; set; }
+
+        [ComponentModel.DataAnnotations.Required]
+        public string Email { get; set; }
+    }
+
+    public class BaseAttribute : Attribute
+    {
+        public string TestProperty { get; set; }
+    }
+
+    public class DerivedAttribute : BaseAttribute
+    { }
+
+    [Derived(TestProperty = "Test")]
+    public class TypeWithDerivedAttribute
+    { }
+
+    [JsonDerivedType(typeof(DerivedClass), "derivedClass")]
+    public class PolymorphicClass
+    {
+        public int Number { get; set; }
+
+        public class DerivedClass : PolymorphicClass
+        {
+            public bool Boolean { get; set; }
+        }
+    }
+
+    public class MyContainingClass
+    {
+        public class MyNestedClass
+        {
+            public class MyNestedNestedClass { }
+            public class MyNestedNestedGenericClass<T1> { }
+        }
+        public class MyNestedGenericClass<T1>
+        {
+            public class MyNestedGenericNestedClass { }
+            public class MyNestedGenericNestedGenericClass<T2> { }
+        }
+    }
+
+    public class MyContainingGenericClass<T>
+    {
+        public class MyNestedClass
+        {
+            public class MyNestedNestedClass { }
+            public class MyNestedNestedGenericClass<T1> { }
+        }
+        public class MyNestedGenericClass<T1>
+        {
+            public class MyNestedGenericNestedClass { }
+            public class MyNestedGenericNestedGenericClass<T2> { }
+        }
     }
 }

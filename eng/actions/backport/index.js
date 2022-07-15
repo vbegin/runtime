@@ -39,7 +39,7 @@ async function run() {
       console.log(`Verified ${comment_user} is a repo collaborator.`);
     } catch (error) {
       console.log(error);
-      throw new BackportException(`Error: @${comment_user} is not a repo collaborator, backporting is not allowed.`);
+      throw new BackportException(`Error: @${comment_user} is not a repo collaborator, backporting is not allowed. If you're a collaborator please make sure your ${repo_owner} team membership visibility is set to Public on https://github.com/orgs/${repo_owner}/people?query=${comment_user}`);
     }
 
     try { await exec.exec(`git ls-remote --exit-code --heads origin ${target_branch}`) } catch { throw new BackportException(`Error: The specified backport target branch ${target_branch} wasn't found in the repo.`); }
@@ -86,7 +86,7 @@ async function run() {
 
     if (git_am_failed) {
       const git_am_failed_body = `@${github.context.payload.comment.user.login} backporting to ${target_branch} failed, the patch most likely resulted in conflicts:\n\n\`\`\`shell\n${git_am_output}\n\`\`\`\n\nPlease backport manually!`;
-      await octokit.issues.createComment({
+      await octokit.rest.issues.createComment({
         owner: repo_owner,
         repo: repo_name,
         issue_number: pr_number,

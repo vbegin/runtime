@@ -1,15 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
+    <TargetFrameworks>$(NetCoreAppCurrent);$(NetCoreAppMinimum);netstandard2.0;$(NetFrameworkMinimum)</TargetFrameworks>
+    <Nullable>disable</Nullable>
   </PropertyGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'net461'">
-    <ProjectReference Include="..\..\System.Security.AccessControl\ref\System.Security.AccessControl.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-    <Reference Include="System.Security" />
-  </ItemGroup>
+
   <ItemGroup>
-    <Compile Condition="'$(TargetFramework)' != 'net461'" Include="System.Security.Cryptography.Xml.cs" />
-    <Compile Condition="'$(TargetFramework)' == 'net461'" Include="System.Security.Cryptography.Xml.net461.cs" />
+    <Compile Include="System.Security.Cryptography.Xml.cs" Condition="'$(TargetFrameworkIdentifier)' != '.NETFramework'" />
+    <Compile Include="System.Security.Cryptography.Xml.netframework.cs" Condition="'$(TargetFrameworkIdentifier)' == 'NETFramework'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Security.AccessControl" Version="$(SystemSecurityAccessControlVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <Reference Include="System.Security" />
   </ItemGroup>
 </Project>

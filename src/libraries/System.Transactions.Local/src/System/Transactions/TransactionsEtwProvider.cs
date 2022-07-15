@@ -1160,7 +1160,7 @@ namespace System.Transactions
             public const EventKeywords TraceDistributed = (EventKeywords)0x0004;
         }
 
-        private void SetActivityId(string str)
+        private static void SetActivityId(string str)
         {
             Guid guid = Guid.Empty;
 
@@ -1168,16 +1168,14 @@ namespace System.Transactions
             { // GUID with dash
                 if (str.Length >= 36)
                 {
-                    string str_part1 = str.Substring(0, 36);
-                    Guid.TryParse(str_part1, out guid);
+                    Guid.TryParse(str.AsSpan(0, 36), out guid);
                 }
             }
             else
             {
                 if (str.Length >= 32)
                 {
-                    string str_part1 = str.Substring(0, 32);
-                    Guid.TryParse(str_part1, out guid);
+                    Guid.TryParse(str.AsSpan(0, 32), out guid);
                 }
             }
             SetCurrentThreadActivityId(guid);

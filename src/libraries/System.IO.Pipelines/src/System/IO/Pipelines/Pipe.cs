@@ -347,7 +347,7 @@ namespace System.IO.Pipelines
             ValueTask<FlushResult> result;
             lock (SyncObj)
             {
-                PrepareFlush(out completionData, out result, cancellationToken);
+                PrepareFlushUnsynchronized(out completionData, out result, cancellationToken);
             }
 
             TrySchedule(ReaderScheduler, completionData);
@@ -355,7 +355,7 @@ namespace System.IO.Pipelines
             return result;
         }
 
-        private void PrepareFlush(out CompletionData completionData, out ValueTask<FlushResult> result, CancellationToken cancellationToken)
+        private void PrepareFlushUnsynchronized(out CompletionData completionData, out ValueTask<FlushResult> result, CancellationToken cancellationToken)
         {
             var completeReader = CommitUnsynchronized();
 
@@ -664,6 +664,11 @@ namespace System.IO.Pipelines
                 ThrowHelper.ThrowInvalidOperationException_NoReadingAllowed();
             }
 
+            if (token.IsCancellationRequested)
+            {
+                return new ValueTask<ReadResult>(Task.FromCanceled<ReadResult>(token));
+            }
+
             CompletionData completionData = default;
             ValueTask<ReadResult> result;
             lock (SyncObj)
@@ -686,6 +691,9 @@ namespace System.IO.Pipelines
 
                     // We also need to flip the reading state off
                     _operationState.EndRead();
+
+                    // Begin read again to wire up cancellation token
+                    _readerAwaitable.BeginOperation(token, s_signalReaderAwaitable, this);
                 }
 
                 // If the writer is currently paused and we are about the wait for more data then this would deadlock.
@@ -713,6 +721,11 @@ namespace System.IO.Pipelines
             if (_readerCompletion.IsCompleted)
             {
                 ThrowHelper.ThrowInvalidOperationException_NoReadingAllowed();
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                return new ValueTask<ReadResult>(Task.FromCanceled<ReadResult>(token));
             }
 
             ValueTask<ReadResult> result;
@@ -999,6 +1012,8 @@ namespace System.IO.Pipelines
             return result;
         }
 
+        internal long GetUnflushedBytes() => _unflushedBytes;
+
         private void GetFlushResult(ref FlushResult result)
         {
             // Change the state from to be canceled -> observed
@@ -1045,7 +1060,7 @@ namespace System.IO.Pipelines
                     WriteMultiSegment(source.Span);
                 }
 
-                PrepareFlush(out completionData, out result, cancellationToken);
+                PrepareFlushUnsynchronized(out completionData, out result, cancellationToken);
             }
 
             TrySchedule(ReaderScheduler, completionData);
@@ -1070,7 +1085,7 @@ namespace System.IO.Pipelines
                 }
 
                 // We filled the segment
-                _writingHead.End += writable;
+                _writingHead.End += _writingHeadBytesBuffered;
                 _writingHeadBytesBuffered = 0;
 
                 // This is optimized to use pooled memory. That's why we pass 0 instead of

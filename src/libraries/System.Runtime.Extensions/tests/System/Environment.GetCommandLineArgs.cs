@@ -23,7 +23,6 @@ namespace System.Tests
 
         [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
         [MemberData(nameof(GetCommandLineArgs_TestData))]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/49568", typeof(PlatformDetection), nameof(PlatformDetection.IsMacOsAppleSilicon))]
         public void GetCommandLineArgs_Invoke_ReturnsExpected(string[] args)
         {
             switch (args.Length)
@@ -67,6 +66,39 @@ namespace System.Tests
             for (int i = 0; i < args.Length; i++)
             {
                 Assert.Equal(args[i], cmdLineArgs[i + 5]);
+            }
+
+            return RemoteExecutor.SuccessExitCode;
+        }
+
+        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        public void GetCommandLineArgs_Fallback_Returns()
+        {
+            if (PlatformDetection.IsNotMonoRuntime
+                && PlatformDetection.IsNotNativeAot
+                && PlatformDetection.IsWindows)
+            {
+                // Currently fallback command line is only implemented on Windows coreclr
+                RemoteExecutor.Invoke(CheckCommandLineArgsFallback).Dispose();
+            }
+        }
+
+        public static int CheckCommandLineArgsFallback()
+        {
+            string[] oldArgs = Environment.GetCommandLineArgs();
+
+            // Clear the command line args set for managed entry point
+            var field = typeof(Environment).GetField("s_commandLineArgs", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            field.SetValue(null, null);
+
+            string[] args = Environment.GetCommandLineArgs();
+            Assert.NotEmpty(args);
+
+            // The native command line should be superset of managed command line
+            foreach (string arg in oldArgs)
+            {
+                Assert.Contains(arg, args);
             }
 
             return RemoteExecutor.SuccessExitCode;

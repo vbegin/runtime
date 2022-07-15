@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 #if !NETCOREAPP
@@ -21,7 +21,12 @@ namespace System.Net.Http.Json
 
         public JsonContent(TValue inputValue, JsonTypeInfo<TValue> jsonTypeInfo)
         {
-            _typeInfo = jsonTypeInfo ?? throw new ArgumentNullException(nameof(jsonTypeInfo));
+            if (jsonTypeInfo is null)
+            {
+                throw new ArgumentNullException(nameof(jsonTypeInfo));
+            }
+
+            _typeInfo = jsonTypeInfo;
             _typedValue = inputValue;
             Headers.ContentType = JsonHelpers.GetDefaultMediaType();
         }
@@ -58,10 +63,7 @@ namespace System.Net.Http.Json
                     }
                     else
                     {
-                        // Have to use Utf8JsonWriter because JsonSerializer doesn't support sync serialization into stream directly.
-                        // ToDo: Remove Utf8JsonWriter usage after https://github.com/dotnet/runtime/issues/1574
-                        using var writer = new Utf8JsonWriter(transcodingStream);
-                        JsonSerializer.Serialize(writer, _typedValue, _typeInfo);
+                        JsonSerializer.Serialize(transcodingStream, _typedValue, _typeInfo);
                     }
                 }
                 finally
@@ -99,10 +101,7 @@ namespace System.Net.Http.Json
                 else
                 {
 #if NETCOREAPP
-                    // Have to use Utf8JsonWriter because JsonSerializer doesn't support sync serialization into stream directly.
-                    // ToDo: Remove Utf8JsonWriter usage after https://github.com/dotnet/runtime/issues/1574
-                    using var writer = new Utf8JsonWriter(targetStream);
-                    JsonSerializer.Serialize(writer, _typedValue, _typeInfo);
+                    JsonSerializer.Serialize(targetStream, _typedValue, _typeInfo);
 #else
                     Debug.Fail("Synchronous serialization is only supported since .NET 5.0");
 #endif

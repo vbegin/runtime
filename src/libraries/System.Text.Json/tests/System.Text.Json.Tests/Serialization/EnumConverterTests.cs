@@ -2,8 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.DotNet.RemoteExecutor;
 using Xunit;
 
 namespace System.Text.Json.Serialization.Tests
@@ -135,17 +137,15 @@ namespace System.Text.Json.Serialization.Tests
             [JsonConverter(typeof(JsonStringEnumConverter))]
             public DayOfWeek WorkStart { get; set; }
             public DayOfWeek WorkEnd { get; set; }
-            [LowerCaseEnum]
+            [JsonConverter(typeof(LowerCaseEnumConverter))]
             public DayOfWeek WeekEnd { get; set; }
         }
 
-        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Class, AllowMultiple = false)]
-        private class LowerCaseEnumAttribute : JsonConverterAttribute
+        private class LowerCaseEnumConverter : JsonStringEnumConverter
         {
-            public LowerCaseEnumAttribute() { }
-
-            public override JsonConverter CreateConverter(Type typeToConvert)
-                => new JsonStringEnumConverter(new ToLowerNamingPolicy());
+            public LowerCaseEnumConverter() : base(new ToLowerNamingPolicy())
+            {
+            }
         }
 
         [Fact]
@@ -355,6 +355,39 @@ namespace System.Text.Json.Serialization.Tests
                 dictionary = new Dictionary<MyEnum, int> { { (MyEnum)i, i } };
                 JsonSerializer.Serialize(dictionary);
             }
+        }
+
+        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework)]
+        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        public static void NegativeEnumValue_CultureInvariance()
+        {
+            // Regression test for https://github.com/dotnet/runtime/issues/68600
+            RemoteExecutor.Invoke(static () =>
+            {
+                SampleEnumInt32 value = (SampleEnumInt32)(-2);
+                string expectedJson = "-2";
+
+                var options = new JsonSerializerOptions
+                {
+                    Converters = { new JsonStringEnumConverter(allowIntegerValues: true) },
+                };
+
+                // Sets the minus sign to -
+                CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
+                string actualJson = JsonSerializer.Serialize(value, options);
+                Assert.Equal(expectedJson, actualJson);
+                SampleEnumInt32 result = JsonSerializer.Deserialize<SampleEnumInt32>(actualJson, options);
+                Assert.Equal(value, result);
+
+                // Sets the minus sign to U+2212
+                CultureInfo.CurrentCulture = new CultureInfo("sv-SE");
+
+                actualJson = JsonSerializer.Serialize(value, options);
+                Assert.Equal(expectedJson, actualJson);
+                result = JsonSerializer.Deserialize<SampleEnumInt32>(actualJson, options);
+                Assert.Equal(value, result);
+            }).Dispose();
         }
 
         public abstract class NumericEnumKeyDictionaryBase<T>

@@ -3,12 +3,15 @@
 
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Generators.Tests.TestClasses;
+using Microsoft.Extensions.Logging.Generators.Tests.TestClasses.UsesConstraintInAnotherNamespace;
 using Xunit;
+using NamespaceForABC;
+using ConstraintInAnotherNamespace;
 
 namespace Microsoft.Extensions.Logging.Generators.Tests
 {
-    [ActiveIssue("https://github.com/dotnet/runtime/issues/32743", TestRuntimes.Mono)]
     public class LoggerMessageGeneratedCodeTests
     {
         [Fact]
@@ -178,6 +181,30 @@ namespace Microsoft.Extensions.Logging.Generators.Tests
             Assert.Equal(string.Empty, logger.LastFormattedString);
             Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
             Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            MessageTestExtensions.M5(logger, LogLevel.Trace);
+            Assert.Null(logger.LastException);
+            Assert.Equal(string.Empty, logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal(-1, logger.LastEventId.Id);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            MessageTestExtensions.M6(logger, LogLevel.Trace);
+            Assert.Null(logger.LastException);
+            Assert.Equal(string.Empty, logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal(6, logger.LastEventId.Id);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            MessageTestExtensions.M7(logger, LogLevel.Trace, "p", "q");
+            Assert.Null(logger.LastException);
+            Assert.Equal("\"p\" -> \"q\"", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal(7, logger.LastEventId.Id);
+            Assert.Equal(1, logger.CallCount);
         }
 
         [Fact]
@@ -309,6 +336,28 @@ namespace Microsoft.Extensions.Logging.Generators.Tests
             Assert.Equal("M9", logger.LastFormattedString);
             Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
             Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            LevelTestExtensions.M10vs11(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("event ID 10 vs. 11", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Warning, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+            Assert.Equal(11, logger.LastEventId.Id);
+
+            logger.Reset();
+            LevelTestExtensions.M12(logger, LogLevel.Trace);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M12 Trace", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            LevelTestExtensions.M13(logger, LogLevel.Trace);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M13 Microsoft.Extensions.Logging.Generators.Tests.MockLogger", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
         }
 
         [Fact]
@@ -329,6 +378,13 @@ namespace Microsoft.Extensions.Logging.Generators.Tests
             Assert.Equal("M1 System.ArgumentException: Bar", logger.LastFormattedString);
             Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
             Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ExceptionTestExtensions.M2(logger, "One", new ArgumentException("Foo"));
+            Assert.Equal("Foo", logger.LastException!.Message);
+            Assert.Equal("M2 One: System.ArgumentException: Foo", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
         }
 
         [Fact]
@@ -343,6 +399,146 @@ namespace Microsoft.Extensions.Logging.Generators.Tests
             Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
             Assert.Equal(1, logger.CallCount);
             Assert.Equal("CustomEventName", logger.LastEventId.Name);
+
+            logger.Reset();
+            EventNameTestExtensions.CustomEventName(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("CustomEventName", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+            Assert.Equal("CustomEventName", logger.LastEventId.Name);
+        }
+
+        [Fact]
+        public void SkipEnabledCheckTests()
+        {
+            var logger = new MockLogger();
+
+            logger.Reset();
+            logger.Enabled = false;
+            Assert.False(logger.IsEnabled(LogLevel.Information));
+            SkipEnabledCheckExtensions.LoggerMethodWithFalseSkipEnabledCheck(logger);
+            Assert.Null(logger.LastException);
+            Assert.Null(logger.LastFormattedString);
+            Assert.Equal((LogLevel)(-1), logger.LastLogLevel);
+            Assert.Equal(0, logger.CallCount);
+            Assert.Equal(default, logger.LastEventId);
+
+            logger.Reset();
+            logger.Enabled = false;
+            Assert.False(logger.IsEnabled(LogLevel.Debug));
+            SkipEnabledCheckExtensions.LoggerMethodWithTrueSkipEnabledCheck(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("Message: When using SkipEnabledCheck, the generated code skips logger.IsEnabled(logLevel) check before calling log. To be used when consumer has already guarded logger method in an IsEnabled check.", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+            Assert.Equal("LoggerMethodWithTrueSkipEnabledCheck", logger.LastEventId.Name);
+        }
+        private struct MyStruct { }
+
+        [Fact]
+        public void ConstraintsTests()
+        {
+            var logger = new MockLogger();
+
+            var printer = new MessagePrinter<Message>();
+            logger.Reset();
+            printer.Print(logger, new Message() { Text = "Hello" });
+            Assert.Equal(LogLevel.Information, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("The message is Hello.", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            var printer2 = new MessagePrinterHasConstraintOnLogClassAndLogMethod<Message>();
+            logger.Reset();
+            printer2.Print(logger, new Message() { Text = "Hello" });
+            Assert.Equal(LogLevel.Information, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("The message is `Hello`.", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ConstraintsTestExtensions<Object>.M0(logger, 12);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M012", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ConstraintsTestExtensions1<MyStruct>.M0(logger, 12);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M012", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ConstraintsTestExtensions2<MyStruct>.M0(logger, 12);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M012", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ConstraintsTestExtensions3<MyStruct>.M0(logger, 12);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M012", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ConstraintsTestExtensions4<Attribute>.M0(logger, 12);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M012", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            ConstraintsTestExtensions5<MyStruct>.M0(logger, 12);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M012", logger.LastFormattedString);
+            Assert.Equal(1, logger.CallCount);
+        }
+
+        [Fact]
+        public void NestedClassTests()
+        {
+            var logger = new MockLogger();
+
+            logger.Reset();
+            NestedClassTestsExtensions<ABC>.NestedMiddleParentClass.NestedClass.M8(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M8", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            NonStaticNestedClassTestsExtensions<ABC>.NonStaticNestedMiddleParentClass.NestedClass.M9(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M9", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            NestedStruct.Logger.M10(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M10", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            NestedRecord.Logger.M11(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M11", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
+
+            logger.Reset();
+            MultiLevelNestedClass.NestedStruct.NestedRecord.Logger.M12(logger);
+            Assert.Null(logger.LastException);
+            Assert.Equal("M12", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Debug, logger.LastLogLevel);
+            Assert.Equal(1, logger.CallCount);
         }
 
         [Fact]
@@ -389,6 +585,26 @@ namespace Microsoft.Extensions.Logging.Generators.Tests
                 new KeyValuePair<string, object?>("a2", 43),
                 new KeyValuePair<string, object?>("{OriginalFormat}", "M3 {a2} {A1}"));
 
+        }
+
+        [Fact]
+        public void OverloadTests()
+        {
+            var logger = new MockLogger();
+
+            logger.Reset();
+            OverloadTestExtensions.M0(logger, 1);
+            Assert.Null(logger.LastException);
+            Assert.Equal($"{nameof(OverloadTestExtensions.M0)}1", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal("M0", logger.LastEventId.Name);
+
+            logger.Reset();
+            OverloadTestExtensions.M0(logger, "string");
+            Assert.Null(logger.LastException);
+            Assert.Equal($"{nameof(OverloadTestExtensions.M0)}string", logger.LastFormattedString);
+            Assert.Equal(LogLevel.Trace, logger.LastLogLevel);
+            Assert.Equal("M0", logger.LastEventId.Name);
         }
 
         private static void AssertLastState(MockLogger logger, params KeyValuePair<string, object?>[] expected)

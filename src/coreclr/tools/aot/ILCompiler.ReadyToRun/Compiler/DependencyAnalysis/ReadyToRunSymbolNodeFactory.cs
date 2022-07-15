@@ -6,6 +6,7 @@ using ILCompiler.DependencyAnalysis.ReadyToRun;
 
 using Internal.JitInterface;
 using Internal.TypeSystem;
+using Internal.TypeSystem.Ecma;
 using Internal.ReadyToRunConstants;
 
 namespace ILCompiler.DependencyAnalysis
@@ -118,7 +119,8 @@ namespace ILCompiler.DependencyAnalysis
                 IMethodNode targetMethodNode = _codegenNodeFactory.MethodEntrypoint(
                     ctorKey.Method,
                     isInstantiatingStub: ctorKey.Method.Method.HasInstantiation,
-                    isPrecodeImportRequired: false);
+                    isPrecodeImportRequired: false,
+                    isJumpableImportRequired: false);
 
                 return new DelayLoadHelperImport(
                     _codegenNodeFactory,
@@ -134,6 +136,13 @@ namespace ILCompiler.DependencyAnalysis
                     _codegenNodeFactory.TypeSignature(_verifyTypeAndFieldLayout ? ReadyToRunFixupKind.Verify_TypeLayout: ReadyToRunFixupKind.Check_TypeLayout, key)
                 );
             });
+
+            _virtualFunctionOverrideCache = new NodeCache<VirtualResolutionFixupSignature, ISymbolNode>(key =>
+            {
+                return new PrecodeHelperImport(_codegenNodeFactory, key);
+            });
+
+            _ilBodyFixupsCache = new NodeCache<ILBodyFixupSignature, Import>(key => new PrecodeHelperImport(_codegenNodeFactory.ILBodyPrecodeImports, key));
 
             _genericLookupHelpers = new NodeCache<GenericLookupKey, ISymbolNode>(key =>
             {
@@ -430,7 +439,8 @@ namespace ILCompiler.DependencyAnalysis
                 delegateType,
                 method,
                 isInstantiatingStub: false,
-                isPrecodeImportRequired: false);
+                isPrecodeImportRequired: false,
+                isJumpableImportRequired: false);
             return _delegateCtors.GetOrAdd(ctorKey);
         }
 
@@ -439,6 +449,23 @@ namespace ILCompiler.DependencyAnalysis
         public ISymbolNode CheckTypeLayout(TypeDesc type)
         {
             return _checkTypeLayoutCache.GetOrAdd(type);
+        }
+
+        private NodeCache<VirtualResolutionFixupSignature, ISymbolNode> _virtualFunctionOverrideCache;
+
+        public ISymbolNode CheckVirtualFunctionOverride(MethodWithToken declMethod, TypeDesc implType, MethodWithToken implMethod)
+        {
+            return _virtualFunctionOverrideCache.GetOrAdd(_codegenNodeFactory.VirtualResolutionFixupSignature(
+                _verifyTypeAndFieldLayout ? ReadyToRunFixupKind.Verify_VirtualFunctionOverride : ReadyToRunFixupKind.Check_VirtualFunctionOverride,
+                declMethod, implType, implMethod));
+        }
+
+        private NodeCache<ILBodyFixupSignature, Import> _ilBodyFixupsCache;
+        public Import CheckILBodyFixupSignature(EcmaMethod method)
+        {
+            return _ilBodyFixupsCache.GetOrAdd(_codegenNodeFactory.ILBodyFixupSignature(
+                _verifyTypeAndFieldLayout ? ReadyToRunFixupKind.Verify_IL_Body : ReadyToRunFixupKind.Check_IL_Body,
+                method));
         }
 
         struct MethodAndCallSite : IEquatable<MethodAndCallSite>

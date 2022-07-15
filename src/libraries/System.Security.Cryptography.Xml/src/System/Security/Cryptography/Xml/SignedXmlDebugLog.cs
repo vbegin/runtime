@@ -219,11 +219,13 @@ namespace System.Security.Cryptography.Xml
             // * All others       -> hash code
             //
 
-            string keyName = null;
+            string keyName;
+#pragma warning disable CA1416 // This call site is reachable on all platforms. 'CspKeyContainerInfo.KeyContainerName' is supported on: 'windows'.
             if (cspKey != null && cspKey.CspKeyContainerInfo.KeyContainerName != null)
             {
                 keyName = "\"" + cspKey.CspKeyContainerInfo.KeyContainerName + "\"";
             }
+#pragma warning restore CA1416
             else if (certificate2 != null)
             {
                 keyName = "\"" + certificate2.GetNameInfo(X509NameType.SimpleName, false) + "\"";
@@ -247,7 +249,7 @@ namespace System.Security.Cryptography.Xml
         {
             Debug.Assert(o != null, "o != null");
 
-            return $"{o.GetType().Name}#{o.GetHashCode().ToString("x8", CultureInfo.InvariantCulture)}";
+            return $"{o.GetType().Name}#{o.GetHashCode():x8}";
         }
 
         /// <summary>
@@ -336,7 +338,7 @@ namespace System.Security.Cryptography.Xml
             {
                 string logMessage = SR.Format(CultureInfo.InvariantCulture,
                                                   SR.Log_CheckSignedInfo,
-                                                  signedInfo.Id != null ? signedInfo.Id : NullString);
+                                                  signedInfo.Id ?? NullString);
                 WriteLine(signedXml, TraceEventType.Information, SignedXmlDebugEvent.BeginCheckSignedInfo, logMessage);
             }
         }
@@ -584,7 +586,7 @@ namespace System.Security.Cryptography.Xml
 
                 // First read the input stream into our temporary stream
                 byte[] buffer = new byte[4096];
-                int readBytes = 0;
+                int readBytes;
                 do
                 {
                     readBytes = data.Read(buffer, 0, buffer.Length);

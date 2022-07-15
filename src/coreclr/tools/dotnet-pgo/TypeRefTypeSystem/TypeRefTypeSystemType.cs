@@ -119,12 +119,12 @@ namespace Microsoft.Diagnostics.Tools.Pgo.TypeRefTypeSystem
             return method;
         }
 
-        public FieldDesc GetOrAddField(string name, TypeDesc fieldType)
+        public FieldDesc GetOrAddField(string name, TypeDesc fieldType, EmbeddedSignatureData[] embeddedSigData)
         {
             FieldDesc fld = GetField(name);
             if (fld == null)
             {
-                TypeRefTypeSystemField newField = new TypeRefTypeSystemField(this, name, fieldType);
+                TypeRefTypeSystemField newField = new TypeRefTypeSystemField(this, name, fieldType, embeddedSigData);
                 fld = newField;
                 _fields.Add(newField);
             }
@@ -150,6 +150,8 @@ namespace Microsoft.Diagnostics.Tools.Pgo.TypeRefTypeSystem
         public override bool IsBeforeFieldInit => throw new NotImplementedException();
 
         public override ModuleDesc Module => _module;
+
+        public override DefType BaseType => MetadataBaseType;
 
         public override MetadataType MetadataBaseType
         {

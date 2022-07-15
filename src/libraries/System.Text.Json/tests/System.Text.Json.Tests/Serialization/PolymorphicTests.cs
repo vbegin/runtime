@@ -11,36 +11,53 @@ namespace System.Text.Json.Serialization.Tests
 {
     public class PolymorphicTests_Span : PolymorphicTests
     {
-        public PolymorphicTests_Span() : base(SerializationWrapper.SpanSerializer) { }
+        public PolymorphicTests_Span() : base(JsonSerializerWrapper.SpanSerializer) { }
     }
 
     public class PolymorphicTests_String : PolymorphicTests
     {
-        public PolymorphicTests_String() : base(SerializationWrapper.StringSerializer) { }
+        public PolymorphicTests_String() : base(JsonSerializerWrapper.StringSerializer) { }
     }
 
-    public class PolymorphicTests_Stream : PolymorphicTests
+    public class PolymorphicTests_AsyncStream : PolymorphicTests
     {
-        public PolymorphicTests_Stream() : base(SerializationWrapper.StreamSerializer) { }
+        public PolymorphicTests_AsyncStream() : base(JsonSerializerWrapper.AsyncStreamSerializer) { }
     }
 
-    public class PolymorphicTests_StreamWithSmallBuffer : PolymorphicTests
+    public class PolymorphicTests_AsyncStreamWithSmallBuffer : PolymorphicTests
     {
-        public PolymorphicTests_StreamWithSmallBuffer() : base(SerializationWrapper.StreamSerializerWithSmallBuffer) { }
+        public PolymorphicTests_AsyncStreamWithSmallBuffer() : base(JsonSerializerWrapper.AsyncStreamSerializerWithSmallBuffer) { }
+    }
+
+    public class PolymorphicTests_SyncStream : PolymorphicTests
+    {
+        public PolymorphicTests_SyncStream() : base(JsonSerializerWrapper.SyncStreamSerializer) { }
     }
 
     public class PolymorphicTests_Writer : PolymorphicTests
     {
-        public PolymorphicTests_Writer() : base(SerializationWrapper.WriterSerializer) { }
+        public PolymorphicTests_Writer() : base(JsonSerializerWrapper.ReaderWriterSerializer) { }
     }
 
-    public abstract class PolymorphicTests
+    public class PolymorphicTests_Document : PolymorphicTests
     {
-        private SerializationWrapper Serializer { get; }
+        public PolymorphicTests_Document() : base(JsonSerializerWrapper.DocumentSerializer) { }
+    }
 
-        public PolymorphicTests(SerializationWrapper serializer)
+    public class PolymorphicTests_Element : PolymorphicTests
+    {
+        public PolymorphicTests_Element() : base(JsonSerializerWrapper.ElementSerializer) { }
+    }
+
+    public class PolymorphicTests_Node : PolymorphicTests
+    {
+        public PolymorphicTests_Node() : base(JsonSerializerWrapper.NodeSerializer) { }
+    }
+
+    public abstract partial class PolymorphicTests : SerializerTests
+    {
+        public PolymorphicTests(JsonSerializerWrapper serializer) : base(serializer)
         {
-            Serializer = serializer;
         }
 
         [Fact]

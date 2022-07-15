@@ -72,6 +72,7 @@ mono_alcs_init (void)
 	mono_coop_mutex_init (&alc_list_lock);
 
 	default_alc = mono_alc_create (FALSE);
+	default_alc->gchandle = mono_gchandle_new_internal (NULL, FALSE);
 }
 
 MonoAssemblyLoadContext *
@@ -94,7 +95,7 @@ mono_alc_create_individual (MonoGCHandle this_gchandle, gboolean collectible, Mo
 static void
 mono_alc_cleanup_assemblies (MonoAssemblyLoadContext *alc)
 {
-	// The minimum refcount on assemblies is 2: one for the domain and one for the ALC. 
+	// The minimum refcount on assemblies is 2: one for the domain and one for the ALC.
 	// The domain refcount might be less than optimal on netcore, but its removal is too likely to cause issues for now.
 	GSList *tmp;
 
@@ -237,8 +238,10 @@ ves_icall_System_Runtime_Loader_AssemblyLoadContext_InternalInitializeNativeALC 
 	if (is_default_alc) {
 		alc = default_alc;
 		g_assert (alc);
-		if (!alc->gchandle)
-			alc->gchandle = this_gchandle;
+
+		// Change target of the existing GCHandle
+		mono_gchandle_set_target (alc->gchandle, mono_gchandle_get_target_internal (this_gchandle));
+		mono_gchandle_free_internal (this_gchandle);
 	} else {
 		alc = mono_alc_create_individual (this_gchandle, collectible, error);
 	}
@@ -297,7 +300,7 @@ ves_icall_System_Runtime_Loader_AssemblyLoadContext_InternalGetLoadedAssemblies 
 
 	MonoArrayHandle res = mono_array_new_handle (mono_class_get_assembly_class (), assemblies->len, error);
 	goto_if_nok (error, leave);
-	for (int i = 0; i < assemblies->len; ++i) {
+	for (guint i = 0; i < assemblies->len; ++i) {
 		if (!add_assembly_to_array (res, i, (MonoAssembly *)g_ptr_array_index (assemblies, i), error))
 			goto leave;
 	}
@@ -309,7 +312,7 @@ leave:
 
 static
 MonoAssembly *
-mono_alc_load_file (MonoAssemblyLoadContext *alc, MonoStringHandle fname, MonoAssembly *executing_assembly, MonoAssemblyContextKind asmctx, MonoError *error)
+mono_alc_load_file (MonoAssemblyLoadContext *alc, MonoStringHandle fname, MonoAssembly *executing_assembly, gboolean no_invoke_search_hook, MonoError *error)
 {
 	MonoAssembly *ass = NULL;
 	HANDLE_FUNCTION_ENTER ();
@@ -329,7 +332,8 @@ mono_alc_load_file (MonoAssemblyLoadContext *alc, MonoStringHandle fname, MonoAs
 
 	MonoImageOpenStatus status;
 	MonoAssemblyOpenRequest req;
-	mono_assembly_request_prepare_open (&req, asmctx, alc);
+	mono_assembly_request_prepare_open (&req, alc);
+	req.request.no_invoke_search_hook = no_invoke_search_hook;
 	req.requesting_assembly = executing_assembly;
 	ass = mono_assembly_request_open (filename, &req, &status);
 	if (!ass) {
@@ -352,7 +356,7 @@ ves_icall_System_Runtime_Loader_AssemblyLoadContext_InternalLoadFile (gpointer a
 
 	MonoAssembly *executing_assembly;
 	executing_assembly = mono_runtime_get_caller_from_stack_mark (stack_mark);
-	MonoAssembly *ass = mono_alc_load_file (alc, fname, executing_assembly, mono_alc_is_default (alc) ? MONO_ASMCTX_LOADFROM : MONO_ASMCTX_INDIVIDUAL, error);
+	MonoAssembly *ass = mono_alc_load_file (alc, fname, executing_assembly, !mono_alc_is_default (alc), error);
 	goto_if_nok (error, leave);
 
 	result = mono_assembly_get_object_handle (ass, error);
@@ -377,7 +381,8 @@ mono_alc_load_raw_bytes (MonoAssemblyLoadContext *alc, guint8 *assembly_data, gu
 		mono_debug_open_image_from_memory (image, raw_symbol_data, raw_symbol_len);
 
 	MonoAssemblyLoadRequest req;
-	mono_assembly_request_prepare_load (&req, MONO_ASMCTX_INDIVIDUAL, alc);
+	mono_assembly_request_prepare_load (&req, alc);
+	req.no_invoke_search_hook = TRUE;
 	ass = mono_assembly_request_load_from (image, "", &req, &status);
 
 	if (!ass) {
@@ -416,10 +421,22 @@ mono_alc_is_default (MonoAssemblyLoadContext *alc)
 MonoAssemblyLoadContext *
 mono_alc_from_gchandle (MonoGCHandle alc_gchandle)
 {
-	HANDLE_FUNCTION_ENTER ();
-	MonoManagedAssemblyLoadContextHandle managed_alc = MONO_HANDLE_CAST (MonoManagedAssemblyLoadContext, mono_gchandle_get_target_handle (alc_gchandle));
-	MonoAssemblyLoadContext *alc = MONO_HANDLE_GETVAL (managed_alc, native_assembly_load_context);
-	HANDLE_FUNCTION_RETURN_VAL (alc);
+	if (alc_gchandle == default_alc->gchandle)
+		return default_alc;
+
+	MONO_STATIC_POINTER_INIT (MonoClassField, resolve)
+
+		MonoClass *alc_class = mono_class_get_assembly_load_context_class ();
+		g_assert (alc_class);
+		resolve = mono_class_get_field_from_name_full (alc_class, "_nativeAssemblyLoadContext", NULL);
+
+	MONO_STATIC_POINTER_INIT_END (MonoClassField, resolve)
+
+	g_assert (resolve);
+
+	MonoAssemblyLoadContext *alc = NULL;
+	mono_field_get_value_internal (mono_gchandle_get_target_internal (alc_gchandle), resolve, &alc);
+	return alc;
 }
 
 MonoGCHandle
@@ -446,8 +463,7 @@ invoke_resolve_method (MonoMethod *resolve_method, MonoAssemblyLoadContext *alc,
 	goto_if_nok (error, leave);
 
 	MonoReflectionAssemblyHandle assm;
-	gpointer gchandle;
-	gchandle = (gpointer)alc->gchandle;
+	gpointer gchandle = mono_alc_get_gchandle_for_resolving (alc);
 	gpointer args [2];
 	args [0] = &gchandle;
 	args [1] = MONO_HANDLE_RAW (aname_obj);

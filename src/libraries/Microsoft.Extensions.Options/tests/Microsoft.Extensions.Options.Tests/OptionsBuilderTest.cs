@@ -12,7 +12,6 @@ using Xunit;
 
 namespace Microsoft.Extensions.Options.Tests
 {
-    [ActiveIssue("https://github.com/dotnet/runtime/issues/49568", typeof(PlatformDetection), nameof(PlatformDetection.IsMacOsAppleSilicon))]
     public class OptionsBuilderTest
     {
         [Fact]
@@ -668,7 +667,6 @@ namespace Microsoft.Extensions.Options.Tests
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/34582", TestPlatforms.Windows, TargetFrameworkMonikers.Netcoreapp, TestRuntimes.Mono)]
         public void ValidateOnStart_CallValidateDataAnnotations_ValidationSuccessful()
         {
             var services = new ServiceCollection();
@@ -695,7 +693,6 @@ namespace Microsoft.Extensions.Options.Tests
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/34582", TestPlatforms.Windows, TargetFrameworkMonikers.Netcoreapp, TestRuntimes.Mono)]
         public void ValidateOnStart_CallValidateAndValidateDataAnnotations_FailuresCaughtFromBothValidateAndValidateDataAnnotations()
         {
             var services = new ServiceCollection();
@@ -725,7 +722,6 @@ namespace Microsoft.Extensions.Options.Tests
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/34582", TestPlatforms.Windows, TargetFrameworkMonikers.Netcoreapp, TestRuntimes.Mono)]
         public void ValidateOnStart_CallValidateOnStartFirst_ValidatesFailuresCorrectly()
         {
             var services = new ServiceCollection();
@@ -755,7 +751,6 @@ namespace Microsoft.Extensions.Options.Tests
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/34582", TestPlatforms.Windows, TargetFrameworkMonikers.Netcoreapp, TestRuntimes.Mono)]
         public void ValidateOnStart_ConfigureBasedOnDataAnnotationRestrictions_ValidationSuccessful()
         {
             var services = new ServiceCollection();

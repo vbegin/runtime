@@ -169,14 +169,12 @@ namespace System.Threading.Tasks.Dataflow.Internal
                 {
                     // We won the race.  This task is now the consumer.
 
-#if FEATURE_TRACING
                     DataflowEtwProvider etwLog = DataflowEtwProvider.Log;
                     if (etwLog.IsEnabled())
                     {
                         etwLog.TaskLaunchedForMessageHandling(
                             _owningTarget, newConsumer, DataflowEtwProvider.TaskLaunchedReason.ProcessingInputMessages, _messages.Count);
                     }
-#endif
 
                     // Start the task.  In the erroneous case where the scheduler throws an exception,
                     // just allow it to propagate. Our other option would be to fault the block with
@@ -325,8 +323,7 @@ namespace System.Threading.Tasks.Dataflow.Internal
             Debug.Assert(_completionReserved, "Should only invoke once completion has been reserved.");
 
             // Dump any messages that might remain in the queue, which could happen if we completed due to exceptions.
-            TInput? dumpedMessage;
-            while (_messages.TryDequeue(out dumpedMessage)) ;
+            while (_messages.TryDequeue(out _)) ;
 
             // Complete the completion task
             bool result;
@@ -346,13 +343,11 @@ namespace System.Threading.Tasks.Dataflow.Internal
             // seeing _activeTask as null and queueing a new consumer task even
             // though the block has completed.
 
-#if FEATURE_TRACING
             DataflowEtwProvider etwLog = DataflowEtwProvider.Log;
             if (etwLog.IsEnabled())
             {
                 etwLog.DataflowBlockCompleted(_owningTarget);
             }
-#endif
         }
 
         /// <include file='XmlDocs/CommonXmlDocComments.xml' path='CommonXmlDocComments/Blocks/Member[@name="Completion"]/*' />

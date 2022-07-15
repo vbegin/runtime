@@ -4,9 +4,8 @@ project(monodroid)
 
 enable_language(C ASM)
 
-if(NOT USE_LLVM)
-    # the assembler code we generate is GNU which isn't understood by llvm
-    add_compile_options(-no-integrated-as)
+if(ANDROID_NDK_MAJOR VERSION_LESS "23")
+    message(FATAL_ERROR "Error: need at least Android NDK 23, got ${ANDROID_NDK_REVISION}!")
 endif()
 
 add_library(
@@ -14,7 +13,9 @@ add_library(
     SHARED
     monodroid.c
     %AotModulesSource%
-    %AotSources%)
+)
+
+%AotSources%
 
 %Defines%
 

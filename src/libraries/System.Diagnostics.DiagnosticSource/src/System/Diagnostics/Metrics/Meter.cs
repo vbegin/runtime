@@ -15,8 +15,9 @@ namespace System.Diagnostics.Metrics
 #endif
     public class Meter : IDisposable
     {
-        private static LinkedList<Meter> s_allMeters = new LinkedList<Meter>();
-        private LinkedList<Instrument>? _instruments;
+        private static readonly List<Meter> s_allMeters = new List<Meter>();
+        private List<Instrument> _instruments = new List<Instrument>();
+        internal bool Disposed { get; private set; }
 
         /// <summary>
         /// Initializes a new instance of the Meter using the meter name.
@@ -31,15 +32,16 @@ namespace System.Diagnostics.Metrics
         /// <param name="version">The optional Meter version.</param>
         public Meter(string name, string? version)
         {
-            if (name == null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
-
-            Name = name;
+            Name = name ?? throw new ArgumentNullException(nameof(name));
             Version = version;
 
-            s_allMeters.Add(this);
+            lock (Instrument.SyncObject)
+            {
+                s_allMeters.Add(this);
+            }
+
+            // Ensure the metrics EventSource has been created in case we need to log this meter
+            GC.KeepAlive(MetricsEventSource.Log);
         }
 
         /// <summary>
@@ -76,10 +78,63 @@ namespace System.Diagnostics.Metrics
         public Histogram<T> CreateHistogram<T>(string name, string? unit = null, string? description = null) where T : struct => new Histogram<T>(this, name, unit, description);
 
         /// <summary>
+        /// Create a metrics UpDownCounter object.
+        /// </summary>
+        /// <param name="name">The instrument name. Cannot be null.</param>
+        /// <param name="unit">Optional instrument unit of measurements.</param>
+        /// <param name="description">Optional instrument description.</param>
+        /// <remarks>
+        /// UpDownCounter is an Instrument which supports reporting positive or negative metric values.
+        /// Example uses for UpDownCounter: reporting the change in active requests or queue size.
+        /// </remarks>
+        public UpDownCounter<T> CreateUpDownCounter<T>(string name, string? unit = null, string? description = null) where T : struct => new UpDownCounter<T>(this, name, unit, description);
+
+        /// <summary>
+        /// Create an ObservableUpDownCounter object. ObservableUpDownCounter is an Instrument which reports increasing or decreasing value(s) when the instrument is being observed.
+        /// </summary>
+        /// <param name="name">The instrument name. Cannot be null.</param>
+        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="unit">Optional instrument unit of measurements.</param>
+        /// <param name="description">Optional instrument description.</param>
+        /// <remarks>
+        /// Example uses for ObservableUpDownCounter: the process heap size or the approximate number of items in a lock-free circular buffer.
+        /// </remarks>
+        public ObservableUpDownCounter<T> CreateObservableUpDownCounter<T>(string name, Func<T> observeValue, string? unit = null, string? description = null) where T : struct =>
+                                        new ObservableUpDownCounter<T>(this, name, observeValue, unit, description);
+
+
+        /// <summary>
+        /// Create an ObservableUpDownCounter object. ObservableUpDownCounter is an Instrument which reports increasing or decreasing value(s) when the instrument is being observed.
+        /// </summary>
+        /// <param name="name">The instrument name. Cannot be null.</param>
+        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" /></param>
+        /// <param name="unit">Optional instrument unit of measurements.</param>
+        /// <param name="description">Optional instrument description.</param>
+        /// <remarks>
+        /// Example uses for ObservableUpDownCounter: the process heap size or the approximate number of items in a lock-free circular buffer.
+        /// </remarks>
+        public ObservableUpDownCounter<T> CreateObservableUpDownCounter<T>(string name, Func<Measurement<T>> observeValue, string? unit = null, string? description = null) where T : struct =>
+                                        new ObservableUpDownCounter<T>(this, name, observeValue, unit, description);
+
+        /// <summary>
+        /// Create an ObservableUpDownCounter object. ObservableUpDownCounter is an Instrument which reports increasing or decreasing value(s) when the instrument is being observed.
+        /// </summary>
+        /// <param name="name">The instrument name. Cannot be null.</param>
+        /// <param name="observeValues">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="unit">Optional instrument unit of measurements.</param>
+        /// <param name="description">Optional instrument description.</param>
+        /// <remarks>
+        /// Example uses for ObservableUpDownCounter: the process heap size or the approximate number of items in a lock-free circular buffer.
+        /// </remarks>
+        public ObservableUpDownCounter<T> CreateObservableUpDownCounter<T>(string name, Func<IEnumerable<Measurement<T>>> observeValues, string? unit = null, string? description = null) where T : struct =>
+                                        new ObservableUpDownCounter<T>(this, name, observeValues, unit, description);
+
+
+        /// <summary>
         /// ObservableCounter is an Instrument which reports monotonically increasing value(s) when the instrument is being observed.
         /// </summary>
         /// <param name="name">The instrument name. cannot be null.</param>
-        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableCounter{t}.Observe" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
         /// <param name="unit">Optional instrument unit of measurements.</param>
         /// <param name="description">Optional instrument description.</param>
         /// <remarks>
@@ -93,7 +148,7 @@ namespace System.Diagnostics.Metrics
         /// ObservableCounter is an Instrument which reports monotonically increasing value(s) when the instrument is being observed.
         /// </summary>
         /// <param name="name">The instrument name. cannot be null.</param>
-        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableCounter{t}.Observe" /> is called by <see cref="MeterListener.RecordObservableInstruments" /></param>
+        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" /></param>
         /// <param name="unit">Optional instrument unit of measurements.</param>
         /// <param name="description">Optional instrument description.</param>
         /// <remarks>
@@ -106,7 +161,7 @@ namespace System.Diagnostics.Metrics
         /// ObservableCounter is an Instrument which reports monotonically increasing value(s) when the instrument is being observed.
         /// </summary>
         /// <param name="name">The instrument name. cannot be null.</param>
-        /// <param name="observeValues">The callback to call to get the measurements when the <see cref="ObservableCounter{t}.Observe" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="observeValues">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
         /// <param name="unit">Optional instrument unit of measurements.</param>
         /// <param name="description">Optional instrument description.</param>
         /// <remarks>
@@ -115,11 +170,12 @@ namespace System.Diagnostics.Metrics
         public ObservableCounter<T> CreateObservableCounter<T>(string name, Func<IEnumerable<Measurement<T>>> observeValues, string? unit = null, string? description = null) where T : struct =>
                                         new ObservableCounter<T>(this, name, observeValues, unit, description);
 
+
         /// <summary>
         /// ObservableGauge is an asynchronous Instrument which reports non-additive value(s) (e.g. the room temperature - it makes no sense to report the temperature value from multiple rooms and sum them up) when the instrument is being observed.
         /// </summary>
         /// <param name="name">The instrument name. cannot be null.</param>
-        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableCounter{t}.Observe" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
         /// <param name="unit">Optional instrument unit of measurements.</param>
         /// <param name="description">Optional instrument description.</param>
         public ObservableGauge<T> CreateObservableGauge<T>(string name, Func<T> observeValue, string? unit = null, string? description = null) where T : struct =>
@@ -129,7 +185,7 @@ namespace System.Diagnostics.Metrics
         /// ObservableGauge is an asynchronous Instrument which reports non-additive value(s) (e.g. the room temperature - it makes no sense to report the temperature value from multiple rooms and sum them up) when the instrument is being observed.
         /// </summary>
         /// <param name="name">The instrument name. cannot be null.</param>
-        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableCounter{t}.Observe" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="observeValue">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
         /// <param name="unit">Optional instrument unit of measurements.</param>
         /// <param name="description">Optional instrument description.</param>
         public ObservableGauge<T> CreateObservableGauge<T>(string name, Func<Measurement<T>> observeValue, string? unit = null, string? description = null) where T : struct =>
@@ -139,7 +195,7 @@ namespace System.Diagnostics.Metrics
         /// ObservableGauge is an asynchronous Instrument which reports non-additive value(s) (e.g. the room temperature - it makes no sense to report the temperature value from multiple rooms and sum them up) when the instrument is being observed.
         /// </summary>
         /// <param name="name">The instrument name. cannot be null.</param>
-        /// <param name="observeValues">The callback to call to get the measurements when the <see cref="ObservableCounter{t}.Observe" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
+        /// <param name="observeValues">The callback to call to get the measurements when the <see cref="ObservableInstrument{t}.Observe()" /> is called by <see cref="MeterListener.RecordObservableInstruments" />.</param>
         /// <param name="unit">Optional instrument unit of measurements.</param>
         /// <param name="description">Optional instrument description.</param>
         public ObservableGauge<T> CreateObservableGauge<T>(string name, Func<IEnumerable<Measurement<T>>> observeValues, string? unit = null, string? description = null) where T : struct =>
@@ -150,55 +206,60 @@ namespace System.Diagnostics.Metrics
         /// </summary>
         public void Dispose()
         {
-            s_allMeters.Remove(this, (meter1, meter2) => object.ReferenceEquals(meter1, meter2));
+            List<Instrument>? instruments = null;
 
-            if (_instruments is not null)
+            lock (Instrument.SyncObject)
             {
-                LinkedListNode<Instrument>? current = _instruments.First;
-
-                while (current is not null)
+                if (Disposed)
                 {
-                    current.Value.NotifyForUnpublishedInstrument();
-                    current = current.Next;
+                    return;
                 }
+                Disposed = true;
 
-                _instruments.Clear();
+                s_allMeters.Remove(this);
+                instruments = _instruments;
+                _instruments = new List<Instrument>();
+            }
+
+            if (instruments is not null)
+            {
+                foreach (Instrument instrument in instruments)
+                {
+                    instrument.NotifyForUnpublishedInstrument();
+                }
             }
         }
 
         // AddInstrument will be called when publishing the instrument (i.e. calling Instrument.Publish()).
-        internal void AddInstrument(Instrument instrument)
+        internal bool AddInstrument(Instrument instrument)
         {
-            if (_instruments is null)
+            if (!_instruments.Contains(instrument))
             {
-                Interlocked.CompareExchange(ref _instruments, new LinkedList<Instrument>(), null);
+                _instruments.Add(instrument);
+                return true;
             }
-
-            Debug.Assert(_instruments is not null);
-
-            _instruments.AddIfNotExist(instrument, (instrument1, instrument2) => object.ReferenceEquals(instrument1, instrument2));
+            return false;
         }
 
         // Called from MeterListener.Start
-        internal static void NotifyListenerWithAllPublishedInstruments(MeterListener listener)
+        internal static List<Instrument>? GetPublishedInstruments()
         {
-            Action<Instrument, MeterListener>? instrumentPublished = listener.InstrumentPublished;
-            if (instrumentPublished is null)
+            List<Instrument>? instruments = null;
+
+            if (s_allMeters.Count > 0)
             {
-                return;
+                instruments = new List<Instrument>();
+
+                foreach (Meter meter in s_allMeters)
+                {
+                    foreach (Instrument instrument in meter._instruments)
+                    {
+                        instruments.Add(instrument);
+                    }
+                }
             }
 
-            LinkedListNode<Meter>? current = s_allMeters.First;
-            while (current is not null)
-            {
-                LinkedListNode<Instrument>? currentInstrument = current.Value._instruments?.First;
-                while (currentInstrument is not null)
-                {
-                    instrumentPublished.Invoke(currentInstrument.Value, listener);
-                    currentInstrument = currentInstrument.Next;
-                }
-                current = current.Next;
-            }
+            return instruments;
         }
     }
 }

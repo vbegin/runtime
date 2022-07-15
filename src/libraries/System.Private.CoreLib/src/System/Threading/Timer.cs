@@ -94,8 +94,12 @@ namespace System.Threading
         {
             private readonly TimerQueue _queue;
 
-            public TimerQueueDebuggerTypeProxy(TimerQueue queue) =>
-                _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+            public TimerQueueDebuggerTypeProxy(TimerQueue queue)
+            {
+                ArgumentNullException.ThrowIfNull(queue);
+
+                _queue = queue;
+            }
 
             [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
             public TimerQueueTimer[] Items => new List<TimerQueueTimer>(_queue.GetTimersForDebugger()).ToArray();
@@ -440,7 +444,7 @@ namespace System.Threading
     // A timer in our TimerQueue.
     [DebuggerDisplay("{DisplayString,nq}")]
     [DebuggerTypeProxy(typeof(TimerDebuggerTypeProxy))]
-    internal sealed partial class TimerQueueTimer : IThreadPoolWorkItem
+    internal sealed class TimerQueueTimer : IThreadPoolWorkItem
     {
         // The associated timer queue.
         private readonly TimerQueue _associatedTimerQueue;
@@ -473,12 +477,12 @@ namespace System.Threading
         // after all pending callbacks are complete.  We set _canceled to prevent any callbacks that
         // are already queued from running.  We track the number of callbacks currently executing in
         // _callbacksRunning.  We set _notifyWhenNoCallbacksRunning only when _callbacksRunning
-        // reaches zero.  Same applies if Timer.DisposeAsync() is used, except with a Task<bool>
+        // reaches zero.  Same applies if Timer.DisposeAsync() is used, except with a Task
         // instead of with a provided WaitHandle.
         private int _callbacksRunning;
         private bool _canceled;
         internal bool _everQueued;
-        private object? _notifyWhenNoCallbacksRunning; // may be either WaitHandle or Task<bool>
+        private object? _notifyWhenNoCallbacksRunning; // may be either WaitHandle or Task
 
         internal TimerQueueTimer(TimerCallback timerCallback, object? state, uint dueTime, uint period, bool flowExecutionContext)
         {
@@ -515,14 +519,14 @@ namespace System.Threading
             }
         }
 
-        internal bool Change(uint dueTime, uint period)
+        internal bool Change(uint dueTime, uint period, bool throwIfDisposed = true)
         {
             bool success;
 
             lock (_associatedTimerQueue)
             {
                 if (_canceled)
-                    throw new ObjectDisposedException(null, SR.ObjectDisposed_Generic);
+                    return throwIfDisposed ? throw new ObjectDisposedException(null, SR.ObjectDisposed_Generic) : false;
 
                 _period = period;
 
@@ -626,20 +630,20 @@ namespace System.Threading
 
                 Debug.Assert(
                     notifyWhenNoCallbacksRunning == null ||
-                    notifyWhenNoCallbacksRunning is Task<bool>);
+                    notifyWhenNoCallbacksRunning is Task);
 
-                // There are callbacks queued or running, so we need to store a Task<bool>
+                // There are callbacks queued or running, so we need to store a Task
                 // that'll be used to signal the caller when all callbacks complete. Do so as long as
                 // there wasn't a previous CloseAsync call that did.
                 if (notifyWhenNoCallbacksRunning == null)
                 {
-                    var t = new Task<bool>((object?)null, TaskCreationOptions.RunContinuationsAsynchronously);
+                    var t = new Task((object?)null, TaskCreationOptions.RunContinuationsAsynchronously, true);
                     _notifyWhenNoCallbacksRunning = t;
                     return new ValueTask(t);
                 }
 
                 // A previous CloseAsync call already hooked up a task.  Just return it.
-                return new ValueTask((Task<bool>)notifyWhenNoCallbacksRunning);
+                return new ValueTask((Task)notifyWhenNoCallbacksRunning);
             }
         }
 
@@ -675,7 +679,7 @@ namespace System.Threading
         internal void SignalNoCallbacksRunning()
         {
             object? toSignal = _notifyWhenNoCallbacksRunning;
-            Debug.Assert(toSignal is WaitHandle || toSignal is Task<bool>);
+            Debug.Assert(toSignal is WaitHandle || toSignal is Task);
 
             if (toSignal is WaitHandle wh)
             {
@@ -683,7 +687,7 @@ namespace System.Threading
             }
             else
             {
-                ((Task<bool>)toSignal).TrySetResult(true);
+                ((Task)toSignal).TrySetResult();
             }
         }
 
@@ -888,8 +892,7 @@ namespace System.Threading
                                 uint period,
                                 bool flowExecutionContext = true)
         {
-            if (callback == null)
-                throw new ArgumentNullException(nameof(callback));
+            ArgumentNullException.ThrowIfNull(callback);
 
             _timer = new TimerHolder(new TimerQueueTimer(callback, state, dueTime, period, flowExecutionContext));
         }
@@ -951,8 +954,7 @@ namespace System.Threading
 
         public bool Dispose(WaitHandle notifyObject)
         {
-            if (notifyObject == null)
-                throw new ArgumentNullException(nameof(notifyObject));
+            ArgumentNullException.ThrowIfNull(notifyObject);
 
             return _timer.Close(notifyObject);
         }

@@ -197,7 +197,6 @@ namespace System.Collections.Immutable
                 }
             }
 
-#if !NETSTANDARD1_0
             /// <summary>
             /// Returns a read-only reference to the value associated with the provided key.
             /// </summary>
@@ -208,7 +207,6 @@ namespace System.Collections.Immutable
 
                 return ref _root.ValueRef(key, _keyComparer);
             }
-#endif
 
             #endregion
 
@@ -642,12 +640,7 @@ namespace System.Collections.Immutable
                 // Creating an instance of ImmutableSortedMap<T> with our root node automatically freezes our tree,
                 // ensuring that the returned instance is immutable.  Any further mutations made to this builder
                 // will clone (and unfreeze) the spine of modified nodes until the next time this method is invoked.
-                if (_immutable == null)
-                {
-                    _immutable = Wrap(this.Root, _count, _keyComparer, _valueComparer);
-                }
-
-                return _immutable;
+                return _immutable ??= Wrap(this.Root, _count, _keyComparer, _valueComparer);
             }
             #endregion
         }
@@ -681,17 +674,6 @@ namespace System.Collections.Immutable
         /// Gets a simple debugger-viewable collection.
         /// </summary>
         [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
-        public KeyValuePair<TKey, TValue>[] Contents
-        {
-            get
-            {
-                if (_contents == null)
-                {
-                    _contents = _map.ToArray(_map.Count);
-                }
-
-                return _contents;
-            }
-        }
+        public KeyValuePair<TKey, TValue>[] Contents => _contents ??= _map.ToArray(_map.Count);
     }
 }

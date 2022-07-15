@@ -159,7 +159,7 @@ struct _MonoMemoryManager {
 	// Hashtables for Reflection handles
 	MonoGHashTable *type_hash;
 	MonoConcGHashTable *refobject_hash;
-	// Maps class -> type initializaiton exception object
+	// Maps class -> type initialization exception object
 	MonoGHashTable *type_init_exception_hash;
 	// Maps delegate trampoline addr -> delegate object
 	//MonoGHashTable *delegate_hash_table;
@@ -254,6 +254,7 @@ mono_alc_invoke_resolve_using_resolving_event_nofail (MonoAssemblyLoadContext *a
 MonoAssembly*
 mono_alc_invoke_resolve_using_resolve_satellite_nofail (MonoAssemblyLoadContext *alc, MonoAssemblyName *aname);
 
+MONO_COMPONENT_API
 MonoAssemblyLoadContext *
 mono_alc_get_default (void);
 
@@ -266,6 +267,19 @@ mono_alc_get_ambient (void)
 	 * passed to them from their callers.
 	 */
 	return mono_alc_get_default ();
+}
+
+static inline MonoGCHandle
+mono_alc_get_gchandle_for_resolving (MonoAssemblyLoadContext *alc)
+{
+	/* for the default ALC, pass NULL to ask for the Default ALC - see
+	 * AssemblyLoadContext.GetAssemblyLoadContext(IntPtr gchManagedAssemblyLoadContext) - which
+	 * will create the managed ALC object if it hasn't been created yet
+	 */
+	if (alc->gchandle == mono_alc_get_default ()->gchandle)
+		return NULL;
+	else
+		return GUINT_TO_POINTER (alc->gchandle);
 }
 
 MonoAssemblyLoadContext *
@@ -295,12 +309,13 @@ mono_mem_manager_free (MonoMemoryManager *memory_manager, gboolean debug_unload)
 void
 mono_mem_manager_free_objects (MonoMemoryManager *memory_manager);
 
-void
+MONO_COMPONENT_API void
 mono_mem_manager_lock (MonoMemoryManager *memory_manager);
 
-void
+MONO_COMPONENT_API void
 mono_mem_manager_unlock (MonoMemoryManager *memory_manager);
 
+MONO_COMPONENT_API
 void *
 mono_mem_manager_alloc (MonoMemoryManager *memory_manager, guint size);
 
@@ -340,6 +355,18 @@ mono_mem_manager_get_generic (MonoImage **images, int nimages);
 
 MonoMemoryManager*
 mono_mem_manager_merge (MonoMemoryManager *mm1, MonoMemoryManager *mm2);
+
+static inline GSList*
+g_slist_prepend_mem_manager (MonoMemoryManager *memory_manager, GSList *list, gpointer data)
+{
+	GSList *new_list;
+
+	new_list = (GSList *) mono_mem_manager_alloc (memory_manager, sizeof (GSList));
+	new_list->data = data;
+	new_list->next = list;
+
+	return new_list;
+}
 
 G_END_DECLS
 

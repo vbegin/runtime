@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -37,24 +38,23 @@ namespace System.IO.Pipelines
             {
                 lock (_lockObject)
                 {
-                    if (_internalTokenSource == null)
-                    {
-                        _internalTokenSource = new CancellationTokenSource();
-                    }
-                    return _internalTokenSource;
+                    return _internalTokenSource ??= new CancellationTokenSource();
                 }
             }
         }
 
         public StreamPipeWriter(Stream writingStream, StreamPipeWriterOptions options)
         {
-            InnerStream = writingStream ?? throw new ArgumentNullException(nameof(writingStream));
-
-            if (options == null)
+            if (writingStream is null)
             {
-                throw new ArgumentNullException(nameof(options));
+                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.writingStream);
+            }
+            if (options is null)
+            {
+                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.options);
             }
 
+            InnerStream = writingStream;
             _minimumBufferSize = options.MinimumBufferSize;
             _pool = options.Pool == MemoryPool<byte>.Shared ? null : options.Pool;
             _maxPooledBufferSize = _pool?.MaxBufferSize ?? -1;
@@ -206,6 +206,9 @@ namespace System.IO.Pipelines
         }
 
         /// <inheritdoc />
+        public override bool CanGetUnflushedBytes => true;
+
+        /// <inheritdoc />
         public override void Complete(Exception? exception = null)
         {
             if (_isCompleted)
@@ -215,13 +218,18 @@ namespace System.IO.Pipelines
 
             _isCompleted = true;
 
-            FlushInternal(writeToStream: exception == null);
-
-            _internalTokenSource?.Dispose();
-
-            if (!_leaveOpen)
+            try
             {
-                InnerStream.Dispose();
+                FlushInternal(writeToStream: exception == null);
+            }
+            finally
+            {
+                _internalTokenSource?.Dispose();
+
+                if (!_leaveOpen)
+                {
+                    InnerStream.Dispose();
+                }
             }
         }
 
@@ -234,17 +242,22 @@ namespace System.IO.Pipelines
 
             _isCompleted = true;
 
-            await FlushAsyncInternal(writeToStream: exception == null, data: Memory<byte>.Empty).ConfigureAwait(false);
-
-            _internalTokenSource?.Dispose();
-
-            if (!_leaveOpen)
+            try
             {
+                await FlushAsyncInternal(writeToStream: exception == null, data: Memory<byte>.Empty).ConfigureAwait(false);
+            }
+            finally
+            {
+                _internalTokenSource?.Dispose();
+
+                if (!_leaveOpen)
+                {
 #if (!NETSTANDARD2_0 && !NETFRAMEWORK)
-                await InnerStream.DisposeAsync().ConfigureAwait(false);
+                    await InnerStream.DisposeAsync().ConfigureAwait(false);
 #else
-                InnerStream.Dispose();
+                    InnerStream.Dispose();
 #endif
+                }
             }
         }
 
@@ -259,6 +272,9 @@ namespace System.IO.Pipelines
             return FlushAsyncInternal(writeToStream: true, data: Memory<byte>.Empty, cancellationToken);
         }
 
+        /// <inheritdoc />
+        public override long UnflushedBytes => _bytesBuffered;
+
         public override ValueTask<FlushResult> WriteAsync(ReadOnlyMemory<byte> source, CancellationToken cancellationToken = default)
         {
             return FlushAsyncInternal(writeToStream: true, data: source, cancellationToken);
@@ -269,6 +285,9 @@ namespace System.IO.Pipelines
             InternalTokenSource.Cancel();
         }
 
+#if NETCOREAPP
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+#endif
         private async ValueTask<FlushResult> FlushAsyncInternal(bool writeToStream, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
         {
             // Write all completed segments and whatever remains in the current segment

@@ -1,22 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-// ==++==
-//
-//
-
-//
-// ==--==
-//
-// File: METHODTABLEBUILDER.H
-//
-
-
-//
-
-//
-// ============================================================================
-
 #ifndef METHODTABLEBUILDER_H
 #define METHODTABLEBUILDER_H
 
@@ -1725,6 +1709,7 @@ private:
             : m_pType(pItfType),
               m_pImplTable(NULL),       // Lazily created
               m_cImplTable(0),
+              m_cImplTableStatics(0),
               m_declScope(declScope),
               m_equivalenceSet(0),
               m_fEquivalenceSetWithMultipleEntries(false)
@@ -1762,13 +1747,14 @@ private:
         typedef IteratorUtil::ArrayIterator<bmtInterfaceSlotImpl>
             InterfaceSlotIterator;
 
+        // Iterate the interface virtual methods that can be implemented. The static methods can be iterated if statics is set to true
         InterfaceSlotIterator
         IterateInterfaceSlots(
-            StackingAllocator * pStackingAllocator)
+            StackingAllocator * pStackingAllocator, bool statics = false)
         {
             WRAPPER_NO_CONTRACT;
             CheckCreateSlotTable(pStackingAllocator);
-            return InterfaceSlotIterator(m_pImplTable, m_cImplTable);
+            return InterfaceSlotIterator(m_pImplTable + (statics ? m_cImplTable : 0), statics ? m_cImplTableStatics : m_cImplTable);
         }
 
         //-----------------------------------------------------------------------------------------
@@ -1850,6 +1836,7 @@ private:
         bmtRTType *               m_pType;
         bmtInterfaceSlotImpl *    m_pImplTable;
         SLOT_INDEX                m_cImplTable;
+        SLOT_INDEX                m_cImplTableStatics;
         InterfaceDeclarationScope m_declScope;
         UINT32                    m_equivalenceSet;
         bool                      m_fEquivalenceSetWithMultipleEntries;
@@ -2086,7 +2073,7 @@ private:
 
     // --------------------------------------------------------------------------------------------
     // Used for analyzing overlapped fields defined by explicit layout types.
-    enum bmtFieldLayoutTag {empty, nonoref, oref};
+    enum bmtFieldLayoutTag : BYTE {empty, nonoref, oref, byref};
 
     // --------------------------------------------------------------------------------------------
     // used for calculating pointer series for tdexplicit
@@ -2451,7 +2438,8 @@ private:
         MethodTable *               pIntf,
         const Substitution *        pSubstForTypeLoad_OnStack,  // Allocated on stack!
         const Substitution *        pSubstForComparing_OnStack, // Allocated on stack!
-        StackingAllocator *         pStackingAllocator
+        StackingAllocator *         pStackingAllocator,
+        MethodTable *               pMTInterfaceMapOwner
         COMMA_INDEBUG(MethodTable * dbg_pClassMT));
 
 public:
@@ -2462,7 +2450,8 @@ public:
         mdToken                     typeDef,
         const Substitution *        pSubstForTypeLoad,
         Substitution *              pSubstForComparing,
-        StackingAllocator *     pStackingAllocator
+        StackingAllocator *         pStackingAllocator,
+        MethodTable *               pMTInterfaceMapOwner
         COMMA_INDEBUG(MethodTable * dbg_pClassMT));
 
     static void
@@ -2471,7 +2460,8 @@ public:
         MethodTable *           pParentMT,
         const Substitution *    pSubstForTypeLoad,
         Substitution *          pSubstForComparing,
-        StackingAllocator *     pStackingAllocator);
+        StackingAllocator *     pStackingAllocator,
+        MethodTable *           pMTInterfaceMapOwner);
 
 public:
     // --------------------------------------------------------------------------------------------
@@ -2734,7 +2724,7 @@ private:
     // Find the decl method on a given interface entry that matches the method name+signature specified
     // If none is found, return a null method handle
     bmtMethodHandle
-    FindDeclMethodOnInterfaceEntry(bmtInterfaceEntry *pItfEntry, MethodSignature &declSig);
+    FindDeclMethodOnInterfaceEntry(bmtInterfaceEntry *pItfEntry, MethodSignature &declSig, bool searchForStaticMethods = false);
 
     // --------------------------------------------------------------------------------------------
     // Find the decl method within the class hierarchy method name+signature specified
@@ -2772,7 +2762,7 @@ private:
         DWORD               cSlots,
         DWORD *             rgSlots,
         mdToken *           rgTokens,
-        RelativePointer<MethodDesc *> *       rgDeclMD);
+        MethodDesc **       rgDeclMD);
 
     // --------------------------------------------------------------------------------------------
     // Places a methodImpl pair where the decl is declared by the type being built.
@@ -2781,7 +2771,7 @@ private:
         bmtMDMethod *    pDecl,
         bmtMDMethod *    pImpl,
         DWORD*           slots,
-        RelativePointer<MethodDesc *> *     replaced,
+        MethodDesc**     replaced,
         DWORD*           pSlotIndex,
         DWORD            dwMaxSlotSize);
 
@@ -2792,7 +2782,7 @@ private:
         bmtRTMethod *     pDecl,
         bmtMDMethod *     pImpl,
         DWORD*            slots,
-        RelativePointer<MethodDesc *> *      replaced,
+        MethodDesc**      replaced,
         DWORD*            pSlotIndex,
         DWORD             dwMaxSlotSize);
 
@@ -2810,9 +2800,16 @@ private:
         bmtMethodHandle   hDecl,
         bmtMDMethod *     pImpl,
         DWORD*            slots,
-        RelativePointer<MethodDesc *> *      replaced,
+        MethodDesc**      replaced,
         DWORD*            pSlotIndex,
         DWORD             dwMaxSlotSize);
+
+    // --------------------------------------------------------------------------------------------
+    // Validate that the methodimpl is handled correctly
+    VOID
+    ValidateStaticMethodImpl(
+        bmtMethodHandle     hDecl,
+        bmtMethodHandle     hImpl);
 
     // --------------------------------------------------------------------------------------------
     // This will validate that all interface methods that were matched during
@@ -2880,11 +2877,7 @@ private:
     CheckForSystemTypes();
 
     VOID SetupMethodTable2(
-        Module* pLoaderModule
-#ifdef FEATURE_PREJIT
-        , Module* pComputedPZM
-#endif // FEATURE_PREJIT
-        );
+        Module* pLoaderModule);
 
     VOID HandleGCForValueClasses(
         MethodTable **);
@@ -2923,12 +2916,20 @@ private:
 
     static ExplicitFieldTrust::TrustLevel CheckValueClassLayout(
         MethodTable * pMT,
-        BYTE *    pFieldLayout,
-        DWORD *  pFirstObjectOverlapOffset);
+        bmtFieldLayoutTag* pFieldLayout);
+
+    static ExplicitFieldTrust::TrustLevel CheckByRefLikeValueClassLayout(
+        MethodTable * pMT,
+        bmtFieldLayoutTag* pFieldLayout);
+
+    static ExplicitFieldTrust::TrustLevel MarkTagType(
+        bmtFieldLayoutTag* field,
+        SIZE_T size,
+        bmtFieldLayoutTag tagType);
 
     void FindPointerSeriesExplicit(
         UINT   instanceSliceSize,
-        BYTE * pFieldLayout);
+        bmtFieldLayoutTag* pFieldLayout);
 
     VOID    HandleGCForExplicitLayout();
 
@@ -2990,9 +2991,6 @@ private:
 #ifdef FEATURE_COMINTEROP
                                 , BOOL bHasDynamicInterfaceMap
 #endif
-#ifdef FEATURE_PREJIT
-                                , Module *pComputedPZM
-#endif // FEATURE_PREJIT
                                 , AllocMemTracker *pamTracker
         );
 

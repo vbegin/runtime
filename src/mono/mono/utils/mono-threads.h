@@ -407,7 +407,7 @@ mono_thread_info_set_tid (THREAD_INFO_TYPE *info, MonoNativeThreadId tid)
 
 /*
  * @thread_info_size is sizeof (GcThreadInfo), a struct the GC defines to make it possible to have
- * a single block with info from both camps. 
+ * a single block with info from both camps.
  */
 void
 mono_thread_info_init (size_t thread_info_size);
@@ -479,7 +479,7 @@ mono_thread_info_lookup (MonoNativeThreadId id);
 gboolean
 mono_thread_info_resume (MonoNativeThreadId tid);
 
-void
+MONO_COMPONENT_API void
 mono_thread_info_safe_suspend_and_run (MonoNativeThreadId id, gboolean interrupt_kernel, MonoSuspendThreadCallback callback, gpointer user_data);
 
 void
@@ -494,10 +494,10 @@ mono_thread_info_suspend_unlock (void);
 void
 mono_thread_info_abort_socket_syscall_for_close (MonoNativeThreadId tid);
 
-void
+MONO_COMPONENT_API void
 mono_thread_info_set_is_async_context (gboolean async_context);
 
-gboolean
+MONO_COMPONENT_API gboolean
 mono_thread_info_is_async_context (void);
 
 void
@@ -539,7 +539,7 @@ mono_thread_info_self_interrupt (void);
 void
 mono_thread_info_clear_self_interrupt (void);
 
-gboolean
+MONO_COMPONENT_API gboolean
 mono_thread_info_is_interrupt_state (THREAD_INFO_TYPE *info);
 
 void
@@ -552,7 +552,7 @@ mono_thread_info_is_live (THREAD_INFO_TYPE *info);
 int
 mono_thread_info_get_system_max_stack_size (void);
 
-MonoThreadHandle*
+MONO_COMPONENT_API MonoThreadHandle*
 mono_threads_open_thread_handle (MonoThreadHandle *handle);
 
 void
@@ -634,6 +634,7 @@ void mono_threads_platform_init (void);
 gboolean mono_threads_platform_in_critical_region (THREAD_INFO_TYPE *info);
 gboolean mono_threads_platform_yield (void);
 void mono_threads_platform_exit (gsize exit_code);
+gboolean mono_threads_platform_stw_defer_initial_suspend (THREAD_INFO_TYPE *info);
 
 void mono_threads_coop_begin_global_suspend (void);
 void mono_threads_coop_end_global_suspend (void);
@@ -647,8 +648,8 @@ mono_native_thread_id_main_thread_known (MonoNativeThreadId *main_thread_tid);
 /*
  * This does _not_ return the same value as mono_native_thread_id_get, except on Windows.
  * On POSIX, mono_native_thread_id_get returns the value from pthread_self, which is then
- * passed around as an identifier to other pthread functions. However this function, where 
- * possible, returns the OS-unique thread id value, fetched in a platform-specific manner. 
+ * passed around as an identifier to other pthread functions. However this function, where
+ * possible, returns the OS-unique thread id value, fetched in a platform-specific manner.
  * It will not work with the various pthread functions, should never be used as a
  * MonoNativeThreadId, and is intended solely to match the output of various diagonistic tools.
  */

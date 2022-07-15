@@ -23,7 +23,15 @@ public:
     MethodDesc        *m_pMD;
     MethodTable       *m_pMT;
     Signature          m_sig;
+    // Module to use for signature reading.
     Module            *m_pModule;
+    // Module that owns any metadata that influences interop behavior.
+    // This is usually the same as m_pModule, but can differ with vararg
+    // P/Invokes, where the calling assembly's module is assigned to m_pModule
+    // since the specific caller signature is defined in that assembly, not the
+    // assembly that defined the P/Invoke.
+    Module            *m_pMetadataModule;
+    // Used for ILStubCache selection and MethodTable creation.
     Module            *m_pLoaderModule;
     mdMethodDef        m_tkMethodDef;
     SigTypeContext     m_typeContext;
@@ -56,14 +64,15 @@ public:
 class NDirect
 {
 public:
-    // Get the calling convention for a method by checking:
+    // Get the calling convention and whether to suppress GC transition for a method by checking:
+    //   - SuppressGCTransition attribute
     //   - For delegates: UnmanagedFunctionPointer attribute
     //   - For non-delegates: P/Invoke metadata
     //   - Any modopts encoded in the method signature
     // If no calling convention is specified, the default calling convention is returned
     // This function ignores any errors when reading attributes/metadata, treating them as
     // if no calling convention was specified through that mechanism.
-    static CorInfoCallConvExtension GetCallingConvention_IgnoreErrors(_In_ MethodDesc* pMD);
+    static void GetCallingConvention_IgnoreErrors(_In_ MethodDesc* pMD, _Out_opt_ CorInfoCallConvExtension* callConv, _Out_opt_ bool* suppressGCTransition);
 
     //---------------------------------------------------------
     // Does a class or method have a NAT_L CustomAttribute?
@@ -112,7 +121,7 @@ public:
                              DWORD dwStubFlags,
                              MethodDesc* pMD);
 
-    static MethodDesc*      GetILStubMethodDesc(NDirectMethodDesc* pNMD, PInvokeStaticSigInfo* pSigInfo, DWORD dwNGenStubFlags);
+    static MethodDesc*      GetILStubMethodDesc(NDirectMethodDesc* pNMD, PInvokeStaticSigInfo* pSigInfo, DWORD dwStubFlags);
     static PCODE            GetStubForILStub(NDirectMethodDesc* pNMD, MethodDesc** ppStubMD, DWORD dwStubFlags);
     static PCODE            GetStubForILStub(MethodDesc* pMD, MethodDesc** ppStubMD, DWORD dwStubFlags);
 
@@ -128,18 +137,18 @@ enum NDirectStubFlags
     NDIRECTSTUB_FL_CONVSIGASVARARG          = 0x00000001,
     NDIRECTSTUB_FL_BESTFIT                  = 0x00000002,
     NDIRECTSTUB_FL_THROWONUNMAPPABLECHAR    = 0x00000004,
-    NDIRECTSTUB_FL_NGENEDSTUB               = 0x00000008,
+    // unused                               = 0x00000008,
     NDIRECTSTUB_FL_DELEGATE                 = 0x00000010,
     NDIRECTSTUB_FL_DOHRESULTSWAPPING        = 0x00000020,
     NDIRECTSTUB_FL_REVERSE_INTEROP          = 0x00000040,
 #ifdef FEATURE_COMINTEROP
     NDIRECTSTUB_FL_COM                      = 0x00000080,
 #endif // FEATURE_COMINTEROP
-    NDIRECTSTUB_FL_NGENEDSTUBFORPROFILING   = 0x00000100,
+    // unused                               = 0x00000100,
     NDIRECTSTUB_FL_GENERATEDEBUGGABLEIL     = 0x00000200,
     NDIRECTSTUB_FL_STRUCT_MARSHAL           = 0x00000400,
     NDIRECTSTUB_FL_UNMANAGED_CALLI          = 0x00000800,
-    NDIRECTSTUB_FL_TRIGGERCCTOR             = 0x00001000,
+    // unused                               = 0x00001000,
 #ifdef FEATURE_COMINTEROP
     NDIRECTSTUB_FL_FIELDGETTER              = 0x00002000, // COM->CLR field getter
     NDIRECTSTUB_FL_FIELDSETTER              = 0x00004000, // COM->CLR field setter
@@ -196,14 +205,11 @@ enum ILStubTypes
 inline bool SF_IsVarArgStub            (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_CONVSIGASVARARG)); }
 inline bool SF_IsBestFit               (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_BESTFIT)); }
 inline bool SF_IsThrowOnUnmappableChar (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_THROWONUNMAPPABLECHAR)); }
-inline bool SF_IsNGENedStub            (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_NGENEDSTUB)); }
 inline bool SF_IsDelegateStub          (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_DELEGATE)); }
 inline bool SF_IsHRESULTSwapping       (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_DOHRESULTSWAPPING)); }
 inline bool SF_IsReverseStub           (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_REVERSE_INTEROP)); }
-inline bool SF_IsNGENedStubForProfiling(DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_NGENEDSTUBFORPROFILING)); }
 inline bool SF_IsDebuggableStub        (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_GENERATEDEBUGGABLEIL)); }
 inline bool SF_IsCALLIStub             (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_UNMANAGED_CALLI)); }
-inline bool SF_IsStubWithCctorTrigger  (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_TRIGGERCCTOR)); }
 inline bool SF_IsForNumParamBytes      (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_FOR_NUMPARAMBYTES)); }
 inline bool SF_IsStructMarshalStub     (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_STRUCT_MARSHAL)); }
 inline bool SF_IsCheckPendingException (DWORD dwStubFlags) { LIMITED_METHOD_CONTRACT; return (dwStubFlags < NDIRECTSTUB_FL_INVALID && 0 != (dwStubFlags & NDIRECTSTUB_FL_CHECK_PENDING_EXCEPTION)); }
@@ -319,16 +325,17 @@ public:
     PInvokeStaticSigInfo(_In_ MethodDesc* pMD, _Outptr_opt_ LPCUTF8* pLibName, _Outptr_opt_ LPCUTF8* pEntryPointName);
 
 private:
-    void ThrowError(WORD errorResourceID);
-    void InitCallConv(CorInfoCallConvExtension callConv, BOOL bIsVarArg);
+    void ThrowError(_In_ UINT errorResourceID);
+    void InitCallConv(_In_ CorInfoCallConvExtension callConv, _In_ MethodDesc* pMD);
+    void InitCallConv(_In_ CorInfoCallConvExtension callConv, _In_ BOOL bIsVarArg);
     void DllImportInit(_In_ MethodDesc* pMD, _Outptr_opt_ LPCUTF8* pLibName, _Outptr_opt_ LPCUTF8* pEntryPointName);
-    void PreInit(Module* pModule, MethodTable *pClass);
-    void PreInit(MethodDesc* pMD);
+    void PreInit(_In_ Module* pModule, _In_ MethodTable* pClass);
+    void PreInit(_In_ MethodDesc* pMD);
 
 private:
     enum
     {
-        PINVOKE_STATIC_SIGINFO_IS_STATIC = 0x0001,
+        PINVOKE_STATIC_SIGINFO_SUPPRESS_GC_TRANSITION = 0x0001,
         PINVOKE_STATIC_SIGINFO_THROW_ON_UNMAPPABLE_CHAR = 0x0002,
         PINVOKE_STATIC_SIGINFO_BEST_FIT = 0x0004,
 
@@ -346,9 +353,20 @@ public: // public getters
     DWORD GetStubFlags() const
     {
         WRAPPER_NO_CONTRACT;
-        return (GetThrowOnUnmappableChar() ? NDIRECTSTUB_FL_THROWONUNMAPPABLECHAR : 0) |
-               (GetBestFitMapping() ? NDIRECTSTUB_FL_BESTFIT : 0) |
-               (IsDelegateInterop() ? NDIRECTSTUB_FL_DELEGATE : 0);
+        DWORD flags = 0;
+        if (GetThrowOnUnmappableChar())
+            flags |= NDIRECTSTUB_FL_THROWONUNMAPPABLECHAR;
+
+        if (GetBestFitMapping())
+            flags |= NDIRECTSTUB_FL_BESTFIT;
+
+        if (IsDelegateInterop())
+            flags |= NDIRECTSTUB_FL_DELEGATE;
+
+        if (ShouldSuppressGCTransition())
+            flags |= NDIRECTSTUB_FL_SUPPRESSGCTRANSITION;
+
+        return flags;
     }
     Module* GetModule() const { LIMITED_METHOD_CONTRACT; return m_pModule; }
     BOOL IsDelegateInterop() const { LIMITED_METHOD_CONTRACT; return m_wFlags & PINVOKE_STATIC_SIGINFO_IS_DELEGATE_INTEROP; }
@@ -360,6 +378,7 @@ public: // public getters
 public: // private getters
     BOOL GetThrowOnUnmappableChar() const { LIMITED_METHOD_CONTRACT; return m_wFlags & PINVOKE_STATIC_SIGINFO_THROW_ON_UNMAPPABLE_CHAR; }
     BOOL GetBestFitMapping() const { LIMITED_METHOD_CONTRACT; return m_wFlags & PINVOKE_STATIC_SIGINFO_BEST_FIT; }
+    BOOL ShouldSuppressGCTransition() const { LIMITED_METHOD_CONTRACT; return m_wFlags & PINVOKE_STATIC_SIGINFO_SUPPRESS_GC_TRANSITION; }
 
 private: // setters
     void SetThrowOnUnmappableChar(BOOL throwOnUnmappableChar)
@@ -377,6 +396,14 @@ private: // setters
             m_wFlags |= PINVOKE_STATIC_SIGINFO_BEST_FIT;
         else
             m_wFlags &= ~PINVOKE_STATIC_SIGINFO_BEST_FIT;
+    }
+    void SetShouldSuppressGCTransition(BOOL suppress)
+    {
+        LIMITED_METHOD_CONTRACT;
+        if (suppress)
+            m_wFlags |= PINVOKE_STATIC_SIGINFO_SUPPRESS_GC_TRANSITION;
+        else
+            m_wFlags &= ~PINVOKE_STATIC_SIGINFO_SUPPRESS_GC_TRANSITION;
     }
     void SetIsDelegateInterop(BOOL delegateInterop)
     {
@@ -547,10 +574,8 @@ DWORD STDMETHODCALLTYPE FalseGetLastError();
 
 PCODE GetILStubForCalli(VASigCookie *pVASigCookie, MethodDesc *pMD);
 
-MethodDesc *GetStubMethodDescFromInteropMethodDesc(MethodDesc* pMD, DWORD dwStubFlags);
 PCODE JitILStub(MethodDesc* pStubMD);
-MethodDesc *RestoreNGENedStub(MethodDesc* pStubMD);
-PCODE GetStubForInteropMethod(MethodDesc* pMD, DWORD dwStubFlags = 0, MethodDesc **ppStubMD = NULL);
+PCODE GetStubForInteropMethod(MethodDesc* pMD, DWORD dwStubFlags = 0);
 
 #ifdef FEATURE_COMINTEROP
 // Resolve and return the predefined IL stub method

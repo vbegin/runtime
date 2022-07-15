@@ -3,10 +3,11 @@
 
 #include "ep-rt-config.h"
 
+#include <minipal/utils.h>
+
 #ifdef ENABLE_PERFTRACING
 #include "ep-types.h"
 
-#define EP_ARRAY_SIZE(expr) ep_rt_redefine
 #define EP_INFINITE_WAIT ep_rt_redefine
 
 #define EP_GCX_PREEMP_ENTER ep_rt_redefine
@@ -150,6 +151,45 @@ prefix_name ## _rt_ ## type_name ## _ ## func_name
 #define EP_RT_DEFINE_HASH_MAP_ITERATOR ep_rt_redefine
 
 /*
+ * Little-Endian Conversion.
+ */
+
+static
+inline
+uint16_t
+ep_rt_val_uint16_t (uint16_t value);
+
+static
+inline
+uint32_t
+ep_rt_val_uint32_t (uint32_t value);
+
+static
+inline
+uint64_t
+ep_rt_val_uint64_t (uint64_t value);
+
+static
+inline
+int16_t
+ep_rt_val_int16_t (int16_t value);
+
+static
+inline
+int32_t
+ep_rt_val_int32_t (int32_t value);
+
+static
+inline
+int64_t
+ep_rt_val_int64_t (int64_t value);
+
+static
+inline
+uintptr_t
+ep_rt_val_uintptr_t (uintptr_t value);
+
+/*
 * Atomics.
 */
 
@@ -181,12 +221,19 @@ static
 size_t
 ep_rt_atomic_compare_exchange_size_t (volatile size_t *target, size_t expected, size_t value);
 
+static
+ep_char8_t *
+eo_rt_atomic_compare_exchange_utf8_string (volatile ep_char8_t **target, ep_char8_t *expected, ep_char8_t *value);
+
 /*
  * EventPipe.
  */
 
 EP_RT_DECLARE_ARRAY (session_id_array, ep_rt_session_id_array_t, ep_rt_session_id_array_iterator_t, EventPipeSessionID)
 EP_RT_DECLARE_ARRAY_ITERATOR (session_id_array, ep_rt_session_id_array_t, ep_rt_session_id_array_iterator_t, EventPipeSessionID)
+
+EP_RT_DECLARE_ARRAY (execution_checkpoint_array, ep_rt_execution_checkpoint_array_t, ep_rt_execution_checkpoint_array_iterator_t, EventPipeExecutionCheckpoint *)
+EP_RT_DECLARE_ARRAY_ITERATOR (execution_checkpoint_array, ep_rt_execution_checkpoint_array_t, ep_rt_execution_checkpoint_array_iterator_t, EventPipeExecutionCheckpoint *)
 
 static
 void
@@ -481,7 +528,7 @@ ep_rt_is_running (void);
 
 static
 void
-ep_rt_execute_rundown (void);
+ep_rt_execute_rundown (ep_rt_execution_checkpoint_array_t *execution_checkpoints);
 
 /*
  * Objects.
@@ -597,6 +644,14 @@ static
 void
 ep_rt_os_environment_get_utf16 (ep_rt_env_array_utf16_t *env_array);
 
+static
+const ep_char8_t *
+ep_rt_entrypoint_assembly_name_get_utf8 (void);
+
+static
+const ep_char8_t *
+ep_rt_runtime_version_get_utf8 (void);
+
 /*
 * Lock
 */
@@ -709,7 +764,7 @@ ep_rt_utf8_string_replace (
 
 static
 ep_char16_t *
-ep_rt_utf8_to_utf16_string (
+ep_rt_utf8_to_utf16le_string (
 	const ep_char8_t *str,
 	size_t len);
 
@@ -728,6 +783,12 @@ ep_rt_utf16_string_len (const ep_char16_t *str);
 static
 ep_char8_t *
 ep_rt_utf16_to_utf8_string (
+	const ep_char16_t *str,
+	size_t len);
+
+static
+ep_char8_t *
+ep_rt_utf16le_to_utf8_string (
 	const ep_char16_t *str,
 	size_t len);
 

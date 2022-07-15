@@ -239,18 +239,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Return the object that manages the state needed to implement various Xslt functions.
         /// </summary>
-        public XsltLibrary XsltFunctions
-        {
-            get
-            {
-                if (_xsltLib == null)
-                {
-                    _xsltLib = new XsltLibrary(this);
-                }
-
-                return _xsltLib;
-            }
-        }
+        public XsltLibrary XsltFunctions => _xsltLib ??= new XsltLibrary(this);
 
         /// <summary>
         /// Get the early-bound extension object identified by "index".  If it does not yet exist, create an instance using the
@@ -377,10 +366,10 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public XmlQualifiedName ParseTagName(string tagName, int indexPrefixMappings)
         {
-            string prefix, localName, ns;
+            string localName, ns;
 
             // Parse the tagName as a prefix, localName pair and resolve the prefix
-            ParseTagName(tagName, indexPrefixMappings, out prefix, out localName, out ns);
+            ParseTagName(tagName, indexPrefixMappings, out _, out localName, out ns);
             return new XmlQualifiedName(localName, ns);
         }
 
@@ -390,10 +379,10 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public XmlQualifiedName ParseTagName(string tagName, string ns)
         {
-            string prefix, localName;
+            string localName;
 
             // Parse the tagName as a prefix, localName pair
-            ValidateNames.ParseQNameThrow(tagName, out prefix, out localName);
+            ValidateNames.ParseQNameThrow(tagName, out _, out localName);
             return new XmlQualifiedName(localName, ns);
         }
 
@@ -486,13 +475,13 @@ namespace System.Xml.Xsl.Runtime
         /// Convert from the Clr type of "value" to Clr type "destinationType" using V1 Xslt rules.
         /// These rules include converting any Rtf values to Nodes.
         /// </summary>
-        internal object ChangeTypeXsltArgument(XmlQueryType xmlType, object value, Type destinationType)
+        internal static object ChangeTypeXsltArgument(XmlQueryType xmlType, object value, Type destinationType)
         {
             Debug.Assert(XmlILTypeHelper.GetStorageType(xmlType).IsAssignableFrom(value.GetType()),
                          "Values passed to ChangeTypeXsltArgument should be in ILGen's default Clr representation.");
 
             Debug.Assert(destinationType == XsltConvert.ObjectType || !destinationType.IsAssignableFrom(value.GetType()),
-                         "No need to call ChangeTypeXsltArgument since value is already assignable to destinationType " + destinationType);
+                         $"No need to call ChangeTypeXsltArgument since value is already assignable to destinationType {destinationType}");
 
             switch (xmlType.TypeCode)
             {
@@ -566,7 +555,7 @@ namespace System.Xml.Xsl.Runtime
                     }
             }
 
-            Debug.Assert(destinationType.IsAssignableFrom(value.GetType()), "ChangeType from type " + value.GetType().Name + " to type " + destinationType.Name + " failed");
+            Debug.Assert(destinationType.IsAssignableFrom(value.GetType()), $"ChangeType from type {value.GetType().Name} to type {destinationType.Name} failed");
             return value;
         }
 
@@ -688,7 +677,7 @@ namespace System.Xml.Xsl.Runtime
                     }
             }
 
-            Debug.Assert(XmlILTypeHelper.GetStorageType(xmlType).IsAssignableFrom(value.GetType()), "Xml type " + xmlType + " is not represented in ILGen as " + value.GetType().Name);
+            Debug.Assert(XmlILTypeHelper.GetStorageType(xmlType).IsAssignableFrom(value.GetType()), $"Xml type {xmlType} is not represented in ILGen as {value.GetType().Name}");
 
             return value;
         }
@@ -726,7 +715,7 @@ namespace System.Xml.Xsl.Runtime
             typBase = typBase.Prime;
             for (int i = 0; i < seq.Count; i++)
             {
-                if (!CreateXmlType(seq[0]).IsSubtypeOf(typBase))
+                if (!CreateXmlType(seq[i]).IsSubtypeOf(typBase))
                     return false;
             }
 
@@ -786,14 +775,14 @@ namespace System.Xml.Xsl.Runtime
                     break;
             }
 
-            Debug.Fail("XmlTypeCode " + code + " was not fully handled.");
+            Debug.Fail($"XmlTypeCode {code} was not fully handled.");
             return false;
         }
 
         /// <summary>
         /// Create an XmlQueryType that represents the type of "item".
         /// </summary>
-        private XmlQueryType CreateXmlType(XPathItem item)
+        private static XmlQueryType CreateXmlType(XPathItem item)
         {
             if (item.IsNode)
             {
@@ -872,8 +861,6 @@ namespace System.Xml.Xsl.Runtime
                 return seq;
 
             XmlQueryNodeSequence nodeSeq = (XmlQueryNodeSequence)seq;
-            if (nodeSeq == null)
-                nodeSeq = new XmlQueryNodeSequence(seq);
 
             return nodeSeq.DocOrderDistinct(_docOrderCmp);
         }
@@ -884,7 +871,7 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public string GenerateId(XPathNavigator navigator)
         {
-            return string.Concat("ID", _docOrderCmp.GetDocumentIndex(navigator).ToString(CultureInfo.InvariantCulture), navigator.UniqueId);
+            return string.Create(CultureInfo.InvariantCulture, $"ID{_docOrderCmp.GetDocumentIndex(navigator)}{navigator.UniqueId}");
         }
 
 

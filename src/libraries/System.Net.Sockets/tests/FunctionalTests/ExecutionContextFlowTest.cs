@@ -335,7 +335,7 @@ namespace System.Net.Sockets.Tests
             }
         }
 
-        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsNotWindowsSubsystemForLinux))] // [ActiveIssue("https://github.com/dotnet/runtime/issues/18258")]
+        [Theory]
         [InlineData(false, 0)]
         [InlineData(true, 0)]
         [InlineData(false, 1)]
@@ -501,7 +501,7 @@ namespace System.Net.Sockets.Tests
         }
 
         [OuterLoop("Relies on finalization")]
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsPreciseGcSupported))]
         public void ExecutionContext_NotCachedInSocketAsyncEventArgs()
         {
             using (var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))

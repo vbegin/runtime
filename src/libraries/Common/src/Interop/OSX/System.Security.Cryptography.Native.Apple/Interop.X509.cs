@@ -14,33 +14,38 @@ internal static partial class Interop
 {
     internal static partial class AppleCrypto
     {
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_X509GetRawData(
+        [LibraryImport(Libraries.AppleCryptoNative)]
+        private static partial int AppleCryptoNative_X509GetRawData(
             SafeSecCertificateHandle cert,
             out SafeCFDataHandle cfDataOut,
             out int pOSStatus);
 
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_X509GetPublicKey(SafeSecCertificateHandle cert, out SafeSecKeyRefHandle publicKey, out int pOSStatus);
+        [LibraryImport(Libraries.AppleCryptoNative)]
+        private static partial int AppleCryptoNative_X509GetSubjectSummary(
+            SafeSecCertificateHandle cert,
+            out SafeCFStringHandle cfSubjectSummaryOut);
+
+        [LibraryImport(Libraries.AppleCryptoNative)]
+        private static partial int AppleCryptoNative_X509GetPublicKey(SafeSecCertificateHandle cert, out SafeSecKeyRefHandle publicKey, out int pOSStatus);
 
         internal static X509ContentType X509GetContentType(ReadOnlySpan<byte> data)
             => X509GetContentType(ref MemoryMarshal.GetReference(data), data.Length);
 
-        [DllImport(Libraries.AppleCryptoNative, EntryPoint = "AppleCryptoNative_X509GetContentType")]
-        private static extern X509ContentType X509GetContentType(ref byte pbData, int cbData);
+        [LibraryImport(Libraries.AppleCryptoNative, EntryPoint = "AppleCryptoNative_X509GetContentType")]
+        private static partial X509ContentType X509GetContentType(ref byte pbData, int cbData);
 
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_X509CopyCertFromIdentity(
+        [LibraryImport(Libraries.AppleCryptoNative)]
+        private static partial int AppleCryptoNative_X509CopyCertFromIdentity(
             SafeSecIdentityHandle identity,
             out SafeSecCertificateHandle cert);
 
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_X509CopyPrivateKeyFromIdentity(
+        [LibraryImport(Libraries.AppleCryptoNative)]
+        private static partial int AppleCryptoNative_X509CopyPrivateKeyFromIdentity(
             SafeSecIdentityHandle identity,
             out SafeSecKeyRefHandle key);
 
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_X509DemuxAndRetainHandle(
+        [LibraryImport(Libraries.AppleCryptoNative)]
+        private static partial int AppleCryptoNative_X509DemuxAndRetainHandle(
             IntPtr handle,
             out SafeSecCertificateHandle certHandle,
             out SafeSecIdentityHandle identityHandle);
@@ -55,14 +60,42 @@ internal static partial class Interop
                 out data,
                 out osStatus);
 
-            if (ret == 1)
+            using (data)
             {
-                return CoreFoundation.CFGetData(data);
+                if (ret == 1)
+                {
+                    return CoreFoundation.CFGetData(data);
+                }
+
+                if (ret == 0)
+                {
+                    throw CreateExceptionForOSStatus(osStatus);
+                }
+
+                Debug.Fail($"Unexpected return value {ret}");
+                throw new CryptographicException();
+            }
+        }
+
+        internal static string? X509GetSubjectSummary(SafeSecCertificateHandle cert)
+        {
+            SafeCFStringHandle subjectSummary;
+
+            int ret = AppleCryptoNative_X509GetSubjectSummary(
+                cert,
+                out subjectSummary);
+
+            using (subjectSummary)
+            {
+                if (ret == 1)
+                {
+                    return CoreFoundation.CFStringToString(subjectSummary);
+                }
             }
 
             if (ret == 0)
             {
-                throw CreateExceptionForOSStatus(osStatus);
+                return null;
             }
 
             Debug.Fail($"Unexpected return value {ret}");

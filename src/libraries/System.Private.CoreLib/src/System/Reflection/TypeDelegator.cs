@@ -29,8 +29,7 @@ namespace System.Reflection
         // TypeDelegator. The only purpose of the annotation here is to avoid dataflow warnings _within_ this type.
         public TypeDelegator([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type delegatingType)
         {
-            if (delegatingType is null)
-                throw new ArgumentNullException(nameof(delegatingType));
+            ArgumentNullException.ThrowIfNull(delegatingType);
 
             typeImpl = delegatingType;
         }
@@ -125,6 +124,8 @@ namespace System.Reflection
 
         [DynamicallyAccessedMembers(GetAllMembers)]
         public override MemberInfo[] GetMembers(BindingFlags bindingAttr) => typeImpl.GetMembers(bindingAttr);
+
+        public override MemberInfo GetMemberWithSameMetadataDefinitionAs(MemberInfo member) => typeImpl.GetMemberWithSameMetadataDefinitionAs(member);
 
         protected override TypeAttributes GetAttributeFlagsImpl() => typeImpl.Attributes;
 

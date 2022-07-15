@@ -20,6 +20,7 @@ typedef struct _DiagnosticsStartupProfilerCommandPayload DiagnosticsStartupProfi
 typedef struct _DiagnosticsConnectPort DiagnosticsConnectPort;
 typedef struct _DiagnosticsEnvironmentInfoPayload DiagnosticsEnvironmentInfoPayload;
 typedef struct _DiagnosticsGenerateCoreDumpCommandPayload DiagnosticsGenerateCoreDumpCommandPayload;
+typedef struct _DiagnosticsGenerateCoreDumpResponsePayload DiagnosticsGenerateCoreDumpResponsePayload;
 typedef struct _DiagnosticsSetEnvironmentVariablePayload DiagnosticsSetEnvironmentVariablePayload;
 typedef struct _DiagnosticsGetEnvironmentVariablePayload DiagnosticsGetEnvironmentVariablePayload;
 typedef struct _DiagnosticsIpcHeader DiagnosticsIpcHeader;
@@ -29,6 +30,7 @@ typedef struct _DiagnosticsPort DiagnosticsPort;
 typedef struct _DiagnosticsPortBuilder DiagnosticsPortBuilder;
 typedef struct _DiagnosticsPortVtable DiagnosticsPortVtable;
 typedef struct _DiagnosticsProcessInfoPayload DiagnosticsProcessInfoPayload;
+typedef struct _DiagnosticsProcessInfo2Payload DiagnosticsProcessInfo2Payload;
 typedef struct _EventPipeCollectTracingCommandPayload EventPipeCollectTracingCommandPayload;
 typedef struct _EventPipeCollectTracing2CommandPayload EventPipeCollectTracing2CommandPayload;
 typedef struct _EventPipeStopTracingCommandPayload EventPipeStopTracingCommandPayload;
@@ -43,6 +45,8 @@ typedef struct _EventPipeStopTracingCommandPayload EventPipeStopTracingCommandPa
 typedef enum {
 	DS_DUMP_COMMANDID_RESERVED = 0x00,
 	DS_DUMP_COMMANDID_GENERATE_CORE_DUMP = 0x01,
+	DS_DUMP_COMMANDID_GENERATE_CORE_DUMP2 = 0x02,
+	DS_DUMP_COMMANDID_GENERATE_CORE_DUMP3 = 0x03,
 	// future
 } DiagnosticsDumpCommandId;
 
@@ -67,6 +71,7 @@ typedef enum {
 	DS_PROCESS_COMMANDID_RESUME_RUNTIME = 0x01,
 	DS_PROCESS_COMMANDID_GET_PROCESS_ENV = 0x02,
 	DS_PROCESS_COMMANDID_SET_ENV_VAR = 0x03,
+	DS_PROCESS_COMMANDID_GET_PROCESS_INFO_2 = 0x04
 	// future
 } DiagnosticsProcessCommandId;
 
@@ -108,16 +113,6 @@ typedef enum {
 #define DOTNET_IPC_V1_MAGIC "DOTNET_IPC_V1"
 #define DOTNET_IPC_V1_ADVERTISE_MAGIC "ADVR_V1"
 #define DOTNET_IPC_V1_ADVERTISE_SIZE 34
-
-#if BIGENDIAN
-#define DS_VAL16(x)    (((x) >> 8) | ((x) << 8))
-#define DS_VAL32(y)    (((y) >> 24) | (((y) >> 8) & 0x0000FF00L) | (((y) & 0x0000FF00L) << 8) | ((y) << 24))
-#define DS_VAL64(z)    (((uint64_t)DS_VAL32(z) << 32) | DS_VAL32((z) >> 32))
-#else
-#define DS_VAL16(x) x
-#define DS_VAL32(x) x
-#define DS_VAL64(x) x
-#endif // BIGENDIAN
 
 typedef int32_t ds_ipc_result_t;
 

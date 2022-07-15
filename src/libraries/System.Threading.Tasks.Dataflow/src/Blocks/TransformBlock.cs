@@ -90,6 +90,11 @@ namespace System.Threading.Tasks.Dataflow
         /// <exception cref="System.ArgumentNullException">The <paramref name="dataflowBlockOptions"/> is null (Nothing in Visual Basic).</exception>
         private TransformBlock(Func<TInput, TOutput>? transformSync, Func<TInput, Task<TOutput>>? transformAsync, ExecutionDataflowBlockOptions dataflowBlockOptions)
         {
+            if (dataflowBlockOptions is null)
+            {
+                throw new ArgumentNullException(nameof(dataflowBlockOptions));
+            }
+
             if (transformSync == null && transformAsync == null) throw new ArgumentNullException("transform");
             if (dataflowBlockOptions == null) throw new ArgumentNullException(nameof(dataflowBlockOptions));
 
@@ -156,13 +161,11 @@ namespace System.Threading.Tasks.Dataflow
             // Handle async cancellation requests by declining on the target
             Common.WireCancellationToComplete(
                 dataflowBlockOptions.CancellationToken, Completion, state => ((TargetCore<TInput>)state!).Complete(exception: null, dropPendingMessages: true), _target);
-#if FEATURE_TRACING
             DataflowEtwProvider etwLog = DataflowEtwProvider.Log;
             if (etwLog.IsEnabled())
             {
                 etwLog.DataflowBlockCreated(this, dataflowBlockOptions);
             }
-#endif
         }
 
         /// <summary>Processes the message with a user-provided transform function that returns a TOutput.</summary>
@@ -245,7 +248,7 @@ namespace System.Threading.Tasks.Dataflow
                 }
 
                 // If there's a reordering buffer, notify it that this message is done.
-                if (_reorderingBuffer != null) _reorderingBuffer.IgnoreItem(messageWithId.Value);
+                _reorderingBuffer?.IgnoreItem(messageWithId.Value);
 
                 // Signal that we're done this async operation, and remove the bounding
                 // count for the input item that didn't yield any output.
@@ -332,7 +335,10 @@ namespace System.Threading.Tasks.Dataflow
         /// <include file='XmlDocs/CommonXmlDocComments.xml' path='CommonXmlDocComments/Blocks/Member[@name="Fault"]/*' />
         void IDataflowBlock.Fault(Exception exception)
         {
-            if (exception == null) throw new ArgumentNullException(nameof(exception));
+            if (exception is null)
+            {
+                throw new ArgumentNullException(nameof(exception));
+            }
 
             _target.Complete(exception, dropPendingMessages: true);
         }

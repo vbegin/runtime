@@ -98,13 +98,13 @@ The following shows how to run tests for a specific library
 
 ### Passing arguments to xharness
 
-- `$(WasmXHarnessArgs)` - xharness command arguments
+- `$(WasmXHarnessArgsCli)` - xharness command arguments
 
-    Example: `WasmXHarnessArgs="--xyz"` -> becomes `dotnet xharness wasm test --xyz`
+    Example: `WasmXHarnessArgsCli="--set-web-server-http-env=DOTNET_TEST_WEBSOCKETHOST"` -> becomes `dotnet xharness wasm test --set-web-server-http-env=DOTNET_TEST_WEBSOCKETHOST`
 
-- `$(WasmXHarnessMonoArgs)` - arguments to mono
+- `$(WasmXHarnessMonoArgs)` - arguments and variables for mono
 
-    Example: `WasmXHarnessMonoArgs="--runtime-arg=--trace=E"`
+    Example: `WasmXHarnessMonoArgs="--runtime-arg=--trace=E --setenv=MONO_LOG_LEVEL=debug"`
 
 - `$(WasmTestAppArgs)` - arguments for the test app itself
 

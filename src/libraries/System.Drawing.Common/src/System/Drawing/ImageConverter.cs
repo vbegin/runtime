@@ -4,6 +4,7 @@
 using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
@@ -14,21 +15,17 @@ namespace System.Drawing
 {
     public class ImageConverter : TypeConverter
     {
-        private static ReadOnlySpan<byte> PBrush => new byte[] { (byte)'P', (byte)'B', (byte)'r', (byte)'u', (byte)'s', (byte)'h' };
-
-        private static ReadOnlySpan<byte> BMBytes => new byte[] { (byte)'B', (byte)'M' };
-
         public override bool CanConvertFrom(ITypeDescriptorContext? context, Type? sourceType)
         {
             return sourceType == typeof(byte[]) || sourceType == typeof(Icon);
         }
 
-        public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType)
+        public override bool CanConvertTo(ITypeDescriptorContext? context, [NotNullWhen(true)] Type? destinationType)
         {
             return destinationType == typeof(byte[]) || destinationType == typeof(string);
         }
 
-        public override object ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
+        public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
         {
             if (value is Icon icon)
             {
@@ -102,6 +99,7 @@ namespace System.Drawing
             return null;
         }
 
+        [RequiresUnreferencedCode("The Type of value cannot be statically discovered. The public parameterless constructor or the 'Default' static field may be trimmed from the Attribute's Type.")]
         public override PropertyDescriptorCollection GetProperties(ITypeDescriptorContext? context, object? value, Attribute[]? attributes)
         {
             return TypeDescriptor.GetProperties(typeof(Image), attributes);
@@ -109,7 +107,7 @@ namespace System.Drawing
 
         public override bool GetPropertiesSupported(ITypeDescriptorContext? context) => true;
 
-        private unsafe Stream? GetBitmapStream(ReadOnlySpan<byte> rawData)
+        private static unsafe Stream? GetBitmapStream(ReadOnlySpan<byte> rawData)
         {
             try
             {
@@ -144,7 +142,7 @@ namespace System.Drawing
                 // pHeader.signature will always be 0x1c15.
                 // "PBrush" should be the 6 chars after position 12 as well.
                 if (rawData.Length <= headersize + 18 ||
-                    !rawData.Slice(headersize + 12, 6).SequenceEqual(PBrush))
+                    !rawData.Slice(headersize + 12, 6).SequenceEqual("PBrush"u8))
                 {
                     return null;
                 }

@@ -25,10 +25,7 @@ namespace Microsoft.Extensions.Logging
 
         public LogValuesFormatter(string format)
         {
-            if (format == null)
-            {
-                throw new ArgumentNullException(nameof(format));
-            }
+            ThrowHelper.ThrowIfNull(format);
 
             OriginalFormat = format;
 
@@ -233,7 +230,7 @@ namespace Microsoft.Extensions.Logging
             {
                 var vsb = new ValueStringBuilder(stackalloc char[256]);
                 bool first = true;
-                foreach (object e in enumerable)
+                foreach (object? e in enumerable)
                 {
                     if (!first)
                     {

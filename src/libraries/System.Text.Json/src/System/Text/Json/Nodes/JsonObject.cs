@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
@@ -32,7 +32,7 @@ namespace System.Text.Json.Nodes
         /// </summary>
         /// <param name="properties">The properties to be added.</param>
         /// <param name="options">Options to control the behavior.</param>
-        public JsonObject(IEnumerable<KeyValuePair<string, JsonNode?>> properties, JsonNodeOptions? options = null)
+        public JsonObject(IEnumerable<KeyValuePair<string, JsonNode?>> properties, JsonNodeOptions? options = null) : this(options)
         {
             foreach (KeyValuePair<string, JsonNode?> node in properties)
             {
@@ -64,7 +64,7 @@ namespace System.Text.Json.Nodes
             throw new InvalidOperationException(SR.Format(SR.NodeElementWrongType, nameof(JsonValueKind.Object)));
         }
 
-        internal JsonObject(JsonElement element, JsonNodeOptions? options = null) : base(options)
+        internal JsonObject(JsonElement element, JsonNodeOptions? options = null) : this(options)
         {
             Debug.Assert(element.ValueKind == JsonValueKind.Object);
             _jsonElement = element;
@@ -84,9 +84,9 @@ namespace System.Text.Json.Nodes
         /// <inheritdoc/>
         public override void WriteTo(Utf8JsonWriter writer, JsonSerializerOptions? options = null)
         {
-            if (writer == null)
+            if (writer is null)
             {
-                throw new ArgumentNullException(nameof(writer));
+                ThrowHelper.ThrowArgumentNullException(nameof(writer));
             }
 
             if (_jsonElement.HasValue)
@@ -96,7 +96,7 @@ namespace System.Text.Json.Nodes
             }
             else
             {
-                options ??= JsonSerializerOptions.s_defaultOptions;
+                options ??= s_defaultOptions;
 
                 writer.WriteStartObject();
 
@@ -125,7 +125,9 @@ namespace System.Text.Json.Nodes
         {
             if (child != null)
             {
-                string propertyName = FindNode(child)!.Value.Key;
+                InitializeIfRequired();
+                Debug.Assert(_dictionary != null);
+                string propertyName = _dictionary.FindValue(child)!.Value.Key;
                 if (propertyName.IndexOfAny(ReadStack.SpecialCharacters) != -1)
                 {
                     path.Add($"['{propertyName}']");
@@ -136,36 +138,30 @@ namespace System.Text.Json.Nodes
                 }
             }
 
-            if (Parent != null)
-            {
-                Parent.GetPath(path, this);
-            }
+            Parent?.GetPath(path, this);
         }
 
         internal void SetItem(string propertyName, JsonNode? value)
         {
-            if (propertyName == null)
-            {
-                throw new ArgumentNullException(nameof(propertyName));
-            }
-
-            JsonNode? existing = SetNode(propertyName, value);
+            InitializeIfRequired();
+            Debug.Assert(_dictionary != null);
+            JsonNode? existing = _dictionary.SetValue(propertyName, value, () => value?.AssignParent(this));
             DetachParent(existing);
         }
 
         private void DetachParent(JsonNode? item)
         {
+            InitializeIfRequired();
+            Debug.Assert(_dictionary != null);
+
             if (item != null)
             {
                 item.Parent = null;
             }
-
-            // Prevent previous child from being returned from these cached variables.
-            ClearLastValueCache();
         }
 
         [ExcludeFromCodeCoverage] // Justification = "Design-time"
-        private class DebugView
+        private sealed class DebugView
         {
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private JsonObject _node;

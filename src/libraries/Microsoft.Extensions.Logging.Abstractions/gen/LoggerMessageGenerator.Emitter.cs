@@ -10,16 +10,24 @@ namespace Microsoft.Extensions.Logging.Generators
 {
     public partial class LoggerMessageGenerator
     {
-        internal class Emitter
+        internal sealed class Emitter
         {
             // The maximum arity of LoggerMessage.Define.
             private const int MaxLoggerMessageDefineArguments = 6;
             private const int DefaultStringBuilderCapacity = 1024;
 
+            private const string GeneratedTypeSummary =
+                "<summary> " +
+                "This API supports the logging infrastructure and is not intended to be used directly from your code. " +
+                "It is subject to change in the future. " +
+                "</summary>";
             private static readonly string s_generatedCodeAttribute =
                 $"global::System.CodeDom.Compiler.GeneratedCodeAttribute(" +
                 $"\"{typeof(Emitter).Assembly.GetName().Name}\", " +
                 $"\"{typeof(Emitter).Assembly.GetName().Version}\")";
+            private const string EditorBrowsableAttribute =
+                "global::System.ComponentModel.EditorBrowsableAttribute(" +
+                "global::System.ComponentModel.EditorBrowsableState.Never)";
             private readonly StringBuilder _builder = new StringBuilder(DefaultStringBuilderCapacity);
             private bool _needEnumerationHelper;
 
@@ -65,6 +73,7 @@ namespace Microsoft.Extensions.Logging.Generators
 
             private void GenType(LoggerClass lc)
             {
+                string nestedIndentation = "";
                 if (!string.IsNullOrWhiteSpace(lc.Namespace))
                 {
                     _builder.Append($@"
@@ -72,22 +81,49 @@ namespace {lc.Namespace}
 {{");
                 }
 
+                LoggerClass parent = lc.ParentClass;
+                var parentClasses = new List<string>();
+                // loop until you find top level nested class
+                while (parent != null)
+                {
+                    parentClasses.Add($"partial {parent.Keyword} {parent.Name}");
+                    parent = parent.ParentClass;
+                }
+
+                // write down top level nested class first
+                for (int i = parentClasses.Count - 1; i >= 0; i--)
+                {
+                    _builder.Append($@"
+    {nestedIndentation}{parentClasses[i]}
+    {nestedIndentation}{{");
+                    nestedIndentation += "    ";
+                }
+
                 _builder.Append($@"
-    partial class {lc.Name} {lc.Constraints}
-    {{");
+    {nestedIndentation}partial {lc.Keyword} {lc.Name}
+    {nestedIndentation}{{");
 
                 foreach (LoggerMethod lm in lc.Methods)
                 {
                     if (!UseLoggerMessageDefine(lm))
                     {
-                        GenStruct(lm);
+                        GenStruct(lm, nestedIndentation);
                     }
 
-                    GenLogMethod(lm);
+                    GenLogMethod(lm, nestedIndentation);
                 }
 
                 _builder.Append($@"
-    }}");
+    {nestedIndentation}}}");
+
+                parent = lc.ParentClass;
+                while (parent != null)
+                {
+                    nestedIndentation = new string(' ', nestedIndentation.Length - 4);
+                    _builder.Append($@"
+    {nestedIndentation}}}");
+                    parent = parent.ParentClass;
+                }
 
                 if (!string.IsNullOrWhiteSpace(lc.Namespace))
                 {
@@ -96,90 +132,92 @@ namespace {lc.Namespace}
                 }
             }
 
-            private void GenStruct(LoggerMethod lm)
+            private void GenStruct(LoggerMethod lm, string nestedIndentation)
             {
                 _builder.AppendLine($@"
-        [{s_generatedCodeAttribute}]
-        private readonly struct __{lm.Name}Struct : global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<string, object?>>
-        {{");
-                GenFields(lm);
+        {nestedIndentation}/// {GeneratedTypeSummary}
+        {nestedIndentation}[{s_generatedCodeAttribute}]
+        {nestedIndentation}[{EditorBrowsableAttribute}]
+        {nestedIndentation}private readonly struct __{lm.UniqueName}Struct : global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<string, object?>>
+        {nestedIndentation}{{");
+                GenFields(lm, nestedIndentation);
 
                 if (lm.TemplateParameters.Count > 0)
                 {
                     _builder.Append($@"
-            public __{lm.Name}Struct(");
+            {nestedIndentation}public __{lm.UniqueName}Struct(");
                     GenArguments(lm);
                     _builder.Append($@")
-            {{");
+            {nestedIndentation}{{");
                     _builder.AppendLine();
-                    GenFieldAssignments(lm);
+                    GenFieldAssignments(lm, nestedIndentation);
                     _builder.Append($@"
-            }}
+            {nestedIndentation}}}
 ");
                 }
 
                 _builder.Append($@"
-            public override string ToString()
-            {{
+            {nestedIndentation}public override string ToString()
+            {nestedIndentation}{{
 ");
-                GenVariableAssignments(lm);
+                GenVariableAssignments(lm, nestedIndentation);
                 _builder.Append($@"
-                return $""{lm.Message}"";
-            }}
+                {nestedIndentation}return $""{ConvertEndOfLineAndQuotationCharactersToEscapeForm(lm.Message)}"";
+            {nestedIndentation}}}
 ");
                 _builder.Append($@"
-            public static string Format(__{lm.Name}Struct state, global::System.Exception? ex) => state.ToString();
+            {nestedIndentation}public static readonly global::System.Func<__{lm.UniqueName}Struct, global::System.Exception?, string> Format = (state, ex) => state.ToString();
 
-            public int Count => {lm.TemplateParameters.Count + 1};
+            {nestedIndentation}public int Count => {lm.TemplateParameters.Count + 1};
 
-            public global::System.Collections.Generic.KeyValuePair<string, object?> this[int index]
-            {{
-                get => index switch
-                {{
+            {nestedIndentation}public global::System.Collections.Generic.KeyValuePair<string, object?> this[int index]
+            {nestedIndentation}{{
+                {nestedIndentation}get => index switch
+                {nestedIndentation}{{
 ");
-                GenCases(lm);
+                GenCases(lm, nestedIndentation);
                 _builder.Append($@"
-                    _ => throw new global::System.IndexOutOfRangeException(nameof(index)),  // return the same exception LoggerMessage.Define returns in this case
-                }};
-            }}
-
-            public global::System.Collections.Generic.IEnumerator<global::System.Collections.Generic.KeyValuePair<string, object?>> GetEnumerator()
-            {{
-                for (int i = 0; i < {lm.TemplateParameters.Count + 1}; i++)
-                {{
-                    yield return this[i];
-                }}
+                    {nestedIndentation}_ => throw new global::System.IndexOutOfRangeException(nameof(index)),  // return the same exception LoggerMessage.Define returns in this case
+                {nestedIndentation}}};
             }}
 
-            global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        }}
+            {nestedIndentation}public global::System.Collections.Generic.IEnumerator<global::System.Collections.Generic.KeyValuePair<string, object?>> GetEnumerator()
+            {nestedIndentation}{{
+                {nestedIndentation}for (int i = 0; i < {lm.TemplateParameters.Count + 1}; i++)
+                {nestedIndentation}{{
+                    {nestedIndentation}yield return this[i];
+                {nestedIndentation}}}
+            {nestedIndentation}}}
+
+            {nestedIndentation}global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        {nestedIndentation}}}
 ");
             }
 
-            private void GenFields(LoggerMethod lm)
+            private void GenFields(LoggerMethod lm, string nestedIndentation)
             {
                 foreach (LoggerParameter p in lm.TemplateParameters)
                 {
-                    _builder.AppendLine($"            private readonly {p.Type} _{p.Name};");
+                    _builder.AppendLine($"            {nestedIndentation}private readonly {p.Type} _{p.Name};");
                 }
             }
 
-            private void GenFieldAssignments(LoggerMethod lm)
+            private void GenFieldAssignments(LoggerMethod lm, string nestedIndentation)
             {
                 foreach (LoggerParameter p in lm.TemplateParameters)
                 {
-                    _builder.AppendLine($"                this._{p.Name} = {p.Name};");
+                    _builder.AppendLine($"                {nestedIndentation}this._{p.Name} = {p.CodeName};");
                 }
             }
 
-            private void GenVariableAssignments(LoggerMethod lm)
+            private void GenVariableAssignments(LoggerMethod lm, string nestedIndentation)
             {
                 foreach (KeyValuePair<string, string> t in lm.TemplateMap)
                 {
                     int index = 0;
                     foreach (LoggerParameter p in lm.TemplateParameters)
                     {
-                        if (t.Key.Equals(p.Name, System.StringComparison.OrdinalIgnoreCase))
+                        if (t.Key.Equals(p.Name, StringComparison.OrdinalIgnoreCase))
                         {
                             break;
                         }
@@ -192,20 +230,20 @@ namespace {lc.Namespace}
                     {
                         if (lm.TemplateParameters[index].IsEnumerable)
                         {
-                            _builder.AppendLine($"                var {t.Key} = "
+                            _builder.AppendLine($"                {nestedIndentation}var {t.Key} = "
                                 + $"global::__LoggerMessageGenerator.Enumerate((global::System.Collections.IEnumerable ?)this._{lm.TemplateParameters[index].Name});");
 
                             _needEnumerationHelper = true;
                         }
                         else
                         {
-                            _builder.AppendLine($"                var {t.Key} = this._{lm.TemplateParameters[index].Name};");
+                            _builder.AppendLine($"                {nestedIndentation}var {t.Key} = this._{lm.TemplateParameters[index].Name};");
                         }
                     }
                 }
             }
 
-            private void GenCases(LoggerMethod lm)
+            private void GenCases(LoggerMethod lm, string nestedIndentation)
             {
                 int index = 0;
                 foreach (LoggerParameter p in lm.TemplateParameters)
@@ -217,17 +255,17 @@ namespace {lc.Namespace}
                         name = lm.TemplateMap[name];
                     }
 
-                    _builder.AppendLine($"                    {index++} => new global::System.Collections.Generic.KeyValuePair<string, object?>(\"{name}\", this._{p.Name}),");
+                    _builder.AppendLine($"                    {nestedIndentation}{index++} => new global::System.Collections.Generic.KeyValuePair<string, object?>(\"{name}\", this._{p.Name}),");
                 }
 
-                _builder.AppendLine($"                    {index++} => new global::System.Collections.Generic.KeyValuePair<string, object?>(\"{{OriginalFormat}}\", \"{ConvertEndOfLineAndQuotationCharactersToEscapeForm(lm.Message)}\"),");
+                _builder.AppendLine($"                    {nestedIndentation}{index++} => new global::System.Collections.Generic.KeyValuePair<string, object?>(\"{{OriginalFormat}}\", \"{ConvertEndOfLineAndQuotationCharactersToEscapeForm(lm.Message)}\"),");
             }
 
             private void GenCallbackArguments(LoggerMethod lm)
             {
                 foreach (LoggerParameter p in lm.TemplateParameters)
                 {
-                    _builder.Append($"{p.Name}, ");
+                    _builder.Append($"{p.CodeName}, ");
                 }
             }
 
@@ -281,7 +319,11 @@ namespace {lc.Namespace}
                         _builder.Append(", ");
                     }
 
-                    _builder.Append($"{p.Type} {p.Name}");
+                    if (p.Qualifier != null)
+                    {
+                        _builder.Append($"{p.Qualifier} ");
+                    }
+                    _builder.Append($"{p.Type} {p.CodeName}");
                 }
             }
 
@@ -299,13 +341,13 @@ namespace {lc.Namespace}
                         _builder.Append(", ");
                     }
 
-                    _builder.Append($"{p.Type} {p.Name}");
+                    _builder.Append($"{p.Type} {p.CodeName}");
                 }
             }
 
             private void GenHolder(LoggerMethod lm)
             {
-                string typeName = $"__{lm.Name}Struct";
+                string typeName = $"__{lm.UniqueName}Struct";
 
                 _builder.Append($"new {typeName}(");
                 foreach (LoggerParameter p in lm.TemplateParameters)
@@ -315,13 +357,13 @@ namespace {lc.Namespace}
                         _builder.Append(", ");
                     }
 
-                    _builder.Append(p.Name);
+                    _builder.Append(p.CodeName);
                 }
 
                 _builder.Append(')');
             }
 
-            private void GenLogMethod(LoggerMethod lm)
+            private void GenLogMethod(LoggerMethod lm, string nestedIndentation)
             {
                 string level = GetLogLevel(lm);
                 string extension = lm.IsExtensionMethod ? "this " : string.Empty;
@@ -332,56 +374,67 @@ namespace {lc.Namespace}
                 if (UseLoggerMessageDefine(lm))
                 {
                     _builder.Append($@"
-        [{s_generatedCodeAttribute}]
-        private static readonly global::System.Action<global::Microsoft.Extensions.Logging.ILogger, ");
+        {nestedIndentation}[{s_generatedCodeAttribute}]
+        {nestedIndentation}private static readonly global::System.Action<global::Microsoft.Extensions.Logging.ILogger, ");
 
                     GenDefineTypes(lm, brackets: false);
 
-                    _builder.Append(@$"global::System.Exception?> __{lm.Name}Callback =
-            global::Microsoft.Extensions.Logging.LoggerMessage.Define");
+                    _builder.Append($@"global::System.Exception?> __{lm.UniqueName}Callback =
+            {nestedIndentation}global::Microsoft.Extensions.Logging.LoggerMessage.Define");
 
                     GenDefineTypes(lm, brackets: true);
 
-                    _builder.Append(@$"({level}, new global::Microsoft.Extensions.Logging.EventId({lm.EventId}, {eventName}), ""{ConvertEndOfLineAndQuotationCharactersToEscapeForm(lm.Message)}"", true); 
+                    _builder.Append(@$"({level}, new global::Microsoft.Extensions.Logging.EventId({lm.EventId}, {eventName}), ""{ConvertEndOfLineAndQuotationCharactersToEscapeForm(lm.Message)}"", new global::Microsoft.Extensions.Logging.LogDefineOptions() {{ SkipEnabledCheck = true }}); 
 ");
                 }
 
                 _builder.Append($@"
-        [{s_generatedCodeAttribute}]
-        {lm.Modifiers} void {lm.Name}({extension}");
+        {nestedIndentation}[{s_generatedCodeAttribute}]
+        {nestedIndentation}{lm.Modifiers} void {lm.Name}({extension}");
 
                 GenParameters(lm);
 
                 _builder.Append($@")
-        {{
-            if ({logger}.IsEnabled({level}))
-            {{");
+        {nestedIndentation}{{");
+
+                string enabledCheckIndentation = lm.SkipEnabledCheck ? "" : "    ";
+                if (!lm.SkipEnabledCheck)
+                {
+                    _builder.Append($@"
+            {nestedIndentation}if ({logger}.IsEnabled({level}))
+            {nestedIndentation}{{");
+                }
 
                 if (UseLoggerMessageDefine(lm))
                 {
                     _builder.Append($@"
-                __{lm.Name}Callback({logger}, ");
+            {nestedIndentation}{enabledCheckIndentation}__{lm.UniqueName}Callback({logger}, ");
 
                     GenCallbackArguments(lm);
 
-                    _builder.Append(@$"{exceptionArg});");
+                    _builder.Append($"{exceptionArg});");
                 }
                 else
                 {
                     _builder.Append($@"
-                {logger}.Log(
-                    {level},
-                    new global::Microsoft.Extensions.Logging.EventId({lm.EventId}, {eventName}),
-                    ");
-                    GenHolder(lm);
-                    _builder.Append($@",
-                    {exceptionArg},
-                    __{lm.Name}Struct.Format);");
+            {nestedIndentation}{enabledCheckIndentation}{logger}.Log(
+                {nestedIndentation}{enabledCheckIndentation}{level},
+                {nestedIndentation}{enabledCheckIndentation}new global::Microsoft.Extensions.Logging.EventId({lm.EventId}, {eventName}),
+                {nestedIndentation}{enabledCheckIndentation}");
+                GenHolder(lm);
+                _builder.Append($@",
+                {nestedIndentation}{enabledCheckIndentation}{exceptionArg},
+                {nestedIndentation}{enabledCheckIndentation}__{lm.UniqueName}Struct.Format);");
+                }
+
+                if (!lm.SkipEnabledCheck)
+                {
+                    _builder.Append($@"
+            {nestedIndentation}}}");
                 }
 
                 _builder.Append($@"
-            }}
-        }}");
+        {nestedIndentation}}}");
 
                 static string GetException(LoggerMethod lm)
                 {
@@ -450,7 +503,9 @@ namespace {lc.Namespace}
                 if (_needEnumerationHelper)
                 {
                                 _builder.Append($@"
+/// {GeneratedTypeSummary}
 [{s_generatedCodeAttribute}]
+[{EditorBrowsableAttribute}]
 internal static class __LoggerMessageGenerator
 {{
     public static string Enumerate(global::System.Collections.IEnumerable? enumerable)
@@ -504,7 +559,7 @@ internal static class __LoggerMessageGenerator
             int index = 0;
             while (index < s.Length)
             {
-                if (s[index] == '\n' || s[index] == '\r' || s[index] == '"')
+                if (s[index] is '\n' or '\r' or '"')
                 {
                     break;
                 }

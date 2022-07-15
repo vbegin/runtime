@@ -13,7 +13,7 @@
 #define __MONO_METADATA_GC_INTERNAL_H__
 
 #include <glib.h>
-#include <mono/utils/gc_wrapper.h>
+#include <mono/metadata/gc_wrapper.h>
 #include <mono/metadata/object-internals.h>
 #include <mono/metadata/threads-types.h>
 #include <mono/sgen/gc-internal-agnostic.h>
@@ -68,7 +68,7 @@ void
 mono_object_register_finalizer_handle (MonoObjectHandle obj);
 
 extern void mono_gc_init (void);
-extern void mono_gc_base_init (void);
+MONO_COMPONENT_API extern void mono_gc_base_init (void);
 extern void mono_gc_base_cleanup (void);
 extern void mono_gc_init_icalls (void);
 
@@ -78,7 +78,7 @@ extern void mono_gc_init_icalls (void);
  */
 extern gboolean mono_gc_is_gc_thread (void);
 
-extern gboolean mono_gc_is_finalizer_internal_thread (MonoInternalThread *thread);
+MONO_COMPONENT_API extern gboolean mono_gc_is_finalizer_internal_thread (MonoInternalThread *thread);
 
 extern void mono_gc_set_stack_end (void *stack_end);
 
@@ -86,7 +86,7 @@ extern void mono_gc_set_stack_end (void *stack_end);
  * Not exported in public headers, but can be linked to (unsupported).
  */
 gboolean mono_object_is_alive (MonoObject* obj);
-gboolean mono_gc_is_finalizer_thread (MonoThread *thread);
+MONO_COMPONENT_API gboolean mono_gc_is_finalizer_thread (MonoThread *thread);
 
 void mono_gchandle_set_target (MonoGCHandle gchandle, MonoObject *obj);
 
@@ -115,7 +115,7 @@ gboolean mono_gc_user_markers_supported (void);
  */
 MonoObject* mono_gc_alloc_fixed      (size_t size, MonoGCDescriptor descr, MonoGCRootSource source, void *key, const char *msg);
 
-// C++ callers outside of metadata (mini/tasklets.c) must use mono_gc_alloc_fixed_no_descriptor
+// C++ callers outside of metadata must use mono_gc_alloc_fixed_no_descriptor
 // instead of mono_gc_alloc_fixed, or else compile twice -- boehm and sgen.
 MonoObject*
 mono_gc_alloc_fixed_no_descriptor (size_t size, MonoGCRootSource source, void *key, const char *msg);
@@ -174,7 +174,7 @@ typedef void (*MonoFinalizationProc)(gpointer, gpointer); // same as SGenFinaliz
 void  mono_gc_register_for_finalization (MonoObject *obj, MonoFinalizationProc user_data);
 void  mono_gc_add_memory_pressure (gint64 value);
 MONO_API int   mono_gc_register_root (char *start, size_t size, MonoGCDescriptor descr, MonoGCRootSource source, void *key, const char *msg);
-void  mono_gc_deregister_root (char* addr);
+MONO_COMPONENT_API void  mono_gc_deregister_root (char* addr);
 void  mono_gc_finalize_domain (MonoDomain *domain);
 void  mono_gc_run_finalize (void *obj, void *data);
 void  mono_gc_clear_domain (MonoDomain * domain);
@@ -182,7 +182,7 @@ void  mono_gc_clear_domain (MonoDomain * domain);
 void  mono_gc_suspend_finalizers (void);
 
 
-/* 
+/*
  * Register a root which can only be written using a write barrier.
  * Writes to the root must be done using a write barrier (MONO_ROOT_SETREF).
  * If the root uses an user defined mark routine, the writes are not required to be
@@ -235,30 +235,30 @@ typedef void (*MonoRangeCopyFunction)(gpointer, gconstpointer, int size);
 MonoRangeCopyFunction
 mono_gc_get_range_copy_func (void);
 
-/* 
+/*
  * Functions supplied by the runtime and called by the GC. Currently only used
  * by SGEN.
  */
 typedef struct {
-	/* 
-	 * Function called during thread startup/attach to allocate thread-local data 
+	/*
+	 * Function called during thread startup/attach to allocate thread-local data
 	 * needed by the other functions.
 	 */
 	gpointer (*thread_attach_func) (void);
-	/* 
+	/*
 	 * Function called during thread deatch to free the data allocated by
 	 * thread_attach_func.
 	 */
 	void (*thread_detach_func) (gpointer user_data);
-	/* 
+	/*
 	 * Function called from every thread when suspending for GC. It can save
-	 * data needed for marking from thread stacks. user_data is the data returned 
+	 * data needed for marking from thread stacks. user_data is the data returned
 	 * by attach_func. This might called with GC locks held and the word stopped,
 	 * so it shouldn't do any synchronization etc.
 	 */
 	void (*thread_suspend_func) (gpointer user_data, void *sigcontext, MonoContext *ctx);
-	/* 
-	 * Function called to mark from thread stacks. user_data is the data returned 
+	/*
+	 * Function called to mark from thread stacks. user_data is the data returned
 	 * by attach_func. This is called twice, with the word stopped:
 	 * - in the first pass, it should mark areas of the stack using
 	 *   conservative marking by calling mono_gc_conservatively_scan_area ().
@@ -310,7 +310,7 @@ void mono_gc_set_desktop_mode (void);
 /*
  * Return whenever this GC can move objects
  */
-gboolean mono_gc_is_moving (void);
+MONO_COMPONENT_API gboolean mono_gc_is_moving (void);
 
 typedef void* (*MonoGCLockedCallbackFunc) (void *data);
 

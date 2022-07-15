@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json.Serialization.Metadata;
 
@@ -30,19 +31,19 @@ namespace System.Text.Json.Serialization.Converters
 
             bool success;
 
-            switch (jsonParameterInfo.Position)
+            switch (jsonParameterInfo.ClrInfo.Position)
             {
                 case 0:
-                    success = TryRead<TArg0>(ref state, ref reader, jsonParameterInfo, out arguments.Arg0);
+                    success = TryRead(ref state, ref reader, jsonParameterInfo, out arguments.Arg0);
                     break;
                 case 1:
-                    success = TryRead<TArg1>(ref state, ref reader, jsonParameterInfo, out arguments.Arg1);
+                    success = TryRead(ref state, ref reader, jsonParameterInfo, out arguments.Arg1);
                     break;
                 case 2:
-                    success = TryRead<TArg2>(ref state, ref reader, jsonParameterInfo, out arguments.Arg2);
+                    success = TryRead(ref state, ref reader, jsonParameterInfo, out arguments.Arg2);
                     break;
                 case 3:
-                    success = TryRead<TArg3>(ref state, ref reader, jsonParameterInfo, out arguments.Arg3);
+                    success = TryRead(ref state, ref reader, jsonParameterInfo, out arguments.Arg3);
                     break;
                 default:
                     Debug.Fail("More than 4 params: we should be in override for LargeObjectWithParameterizedConstructorConverter.");
@@ -52,7 +53,7 @@ namespace System.Text.Json.Serialization.Converters
             return success;
         }
 
-        private bool TryRead<TArg>(
+        private static bool TryRead<TArg>(
             ref ReadStack state,
             ref Utf8JsonReader reader,
             JsonParameterInfo jsonParameterInfo,
@@ -64,9 +65,9 @@ namespace System.Text.Json.Serialization.Converters
             var info = (JsonParameterInfo<TArg>)jsonParameterInfo;
             var converter = (JsonConverter<TArg>)jsonParameterInfo.ConverterBase;
 
-            bool success = converter.TryRead(ref reader, info.RuntimePropertyType, info.Options!, ref state, out TArg? value);
+            bool success = converter.TryRead(ref reader, info.PropertyType, info.Options!, ref state, out TArg? value);
 
-            arg = value == null && jsonParameterInfo.IgnoreDefaultValuesOnRead
+            arg = value == null && jsonParameterInfo.IgnoreNullTokensOnRead
                 ? (TArg?)info.DefaultValue! // Use default value specified on parameter, if any.
                 : value!;
 
@@ -77,19 +78,21 @@ namespace System.Text.Json.Serialization.Converters
         {
             JsonTypeInfo typeInfo = state.Current.JsonTypeInfo;
 
-            if (typeInfo.CreateObjectWithArgs == null)
-            {
-                typeInfo.CreateObjectWithArgs =
-                    options.MemberAccessorStrategy.CreateParameterizedConstructor<T, TArg0, TArg1, TArg2, TArg3>(ConstructorInfo!);
-            }
+            typeInfo.CreateObjectWithArgs ??=
+                options.MemberAccessorStrategy.CreateParameterizedConstructor<T, TArg0, TArg1, TArg2, TArg3>(ConstructorInfo!);
 
             var arguments = new Arguments<TArg0, TArg1, TArg2, TArg3>();
 
-            foreach (JsonParameterInfo parameterInfo in typeInfo.ParameterCache!.Values)
+            List<KeyValuePair<string, JsonParameterInfo>> cache = typeInfo.ParameterCache!.List;
+            for (int i = 0; i < typeInfo.ParameterCount; i++)
             {
+                JsonParameterInfo parameterInfo = cache[i].Value;
+
+                // We can afford not to set default values for ctor arguments when we should't deserialize because the
+                // type parameters of the `Arguments` type provide default semantics that work well with value types.
                 if (parameterInfo.ShouldDeserialize)
                 {
-                    int position = parameterInfo.Position;
+                    int position = parameterInfo.ClrInfo.Position;
 
                     switch (position)
                     {

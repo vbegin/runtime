@@ -13,7 +13,7 @@ namespace NetCoreServer
         // Must have constructor with this signature, otherwise exception at run time.
         public GenericHandler(RequestDelegate next)
         {
-            // This is an HTTP Handler, so no need to store next.
+            // This catch all HTTP Handler, so no need to store next.
         }
 
         public async Task Invoke(HttpContext context)
@@ -81,6 +81,11 @@ namespace NetCoreServer
             if (path.Equals(new PathString("/test.ashx")))
             {
                 await TestHandler.InvokeAsync(context);
+                return;
+            }
+            if (path.Equals(new PathString("/large.ashx")))
+            {
+                await LargeResponseHandler.InvokeAsync(context);
                 return;
             }
 

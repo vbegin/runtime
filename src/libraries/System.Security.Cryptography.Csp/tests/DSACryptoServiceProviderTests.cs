@@ -2,10 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Security.Cryptography.Dsa.Tests;
+using Test.Cryptography;
 using Xunit;
 
 namespace System.Security.Cryptography.Csp.Tests
 {
+    [SkipOnPlatform(PlatformSupport.MobileAppleCrypto, "DSA is not available")]
     public class DSACryptoServiceProviderTests
     {
         const int PROV_DSS_DH = 13;
@@ -351,9 +353,9 @@ namespace System.Security.Cryptography.Csp.Tests
 
         [Fact]
         [PlatformSpecific(TestPlatforms.AnyUnix)] // Only Unix has _impl shim pattern
-        public static void TestShimOverloads_Unix()
+        public static void TestShimOverrides_Unix()
         {
-            ShimHelpers.VerifyAllBaseMembersOverloaded(typeof(DSACryptoServiceProvider));
+            ShimHelpers.VerifyAllBaseMembersOverridden(typeof(DSACryptoServiceProvider));
         }
 
         private sealed class DsaKeyLifetime : IDisposable

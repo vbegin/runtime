@@ -22,8 +22,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Condition="'$(MonoLLVMTargetArchitecture)' != 'x86'" Include="runtime.$(MonoLLVMHostOS)-$(MonoLLVMTargetArchitecture).Microsoft.NETCore.Runtime.Mono.LLVM.Sdk" Version="$(MonoLLVMSDKVersion)"/>
-    <PackageReference Condition="'$(MonoLLVMTargetArchitecture)' != 'x86'" Include="runtime.$(MonoLLVMHostOS)-$(MonoLLVMTargetArchitecture).Microsoft.NETCore.Runtime.Mono.LLVM.Tools" Version="$(MonoLLVMToolsVersion)"/>
+    <PackageReference Include="runtime.$(MonoLLVMHostOS)-$(MonoLLVMTargetArchitecture).Microsoft.NETCore.Runtime.Mono.LLVM.Sdk"
+                      Version="$(MonoLLVMSDKVersion)"
+                      Condition="'$(MonoLLVMTargetArchitecture)' != 'x86' and '$(MonoLLVMTargetArchitecture)' != '$(BuildArchitecture)'" />
+    <PackageReference Include="runtime.$(MonoLLVMHostOS)-$(MonoLLVMTargetArchitecture).Microsoft.NETCore.Runtime.Mono.LLVM.Tools"
+                      Version="$(MonoLLVMToolsVersion)"
+                      Condition="'$(MonoLLVMTargetArchitecture)' != 'x86' and '$(MonoLLVMTargetArchitecture)' != '$(BuildArchitecture)'" />
 
     <PackageReference Include="runtime.$(MonoLLVMHostOS)-$(BuildArchitecture).Microsoft.NETCore.Runtime.Mono.LLVM.Sdk" Version="$(MonoLLVMSDKVersion)"/>
     <PackageReference Include="runtime.$(MonoLLVMHostOS)-$(BuildArchitecture).Microsoft.NETCore.Runtime.Mono.LLVM.Tools" Version="$(MonoLLVMToolsVersion)"/>
@@ -39,11 +43,11 @@
       <AOTLLVMFiles Include="$(NuGetPackageRoot)\runtime.$(MonoLLVMHostOS)-$(BuildArchitecture).microsoft.netcore.runtime.mono.llvm.tools\$(MonoLLVMSDKVersion)\tools\$(MonoLLVMHostOS)-$(BuildArchitecture)\**" />
     </ItemGroup>
 
-    <Copy SourceFiles="@(LLVMFiles)" DestinationFolder="$(MonoLLVMDir)\%(RecursiveDir)">
+    <Copy SourceFiles="@(LLVMFiles)" DestinationFolder="$(MonoLLVMDir)\%(RecursiveDir)" Condition="'$(_MonoUseLLVMPackage)' == 'true'">
       <Output TaskParameter="DestinationFiles" ItemName="FileWrites"/>
     </Copy>
 
-    <Copy SourceFiles="@(AOTLLVMFiles)" DestinationFolder="$(MonoAOTLLVMDir)\%(RecursiveDir)">
+    <Copy SourceFiles="@(AOTLLVMFiles)" DestinationFolder="$(MonoAOTLLVMDir)\%(RecursiveDir)" Condition="'$(_MonoUseAOTLLVMPackage)' == 'true'">
       <Output TaskParameter="DestinationFiles" ItemName="FileWrites"/>
     </Copy>
   </Target>
