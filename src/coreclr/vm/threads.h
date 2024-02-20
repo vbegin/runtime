@@ -39,7 +39,7 @@
 //
 // The runtime keeps a table of all threads that have ever run managed code in the code:ThreadStore table.
 // The ThreadStore table holds a list of Thread objects (see code:#ThreadClass). This object holds all
-// infomation about managed threads. Cooperative mode is defined as the mode the thread is in when the field
+// information about managed threads. Cooperative mode is defined as the mode the thread is in when the field
 // code:Thread.m_fPreemptiveGCDisabled is non-zero. When this field is zero the thread is said to be in
 // Preemptive mode (named because if you preempt the thread in this mode, it is guaranteed to be in a place
 // where a GC can occur).
@@ -77,8 +77,8 @@
 //     * The CPU is running code elsewhere (which should only be in mscorwks.dll, because everywhere else a
 //         transition to preemptive mode should have happened first)
 //
-// * #PartiallyInteruptibleCode
-// * #FullyInteruptibleCode
+// * #PartiallyInterruptibleCode
+// * #FullyInterruptibleCode
 //
 // If the Instruction pointer (x86/x64: EIP, ARM: R15/PC) is in JIT compiled code, we can detect this because we have tables that
 // map the ranges of every method back to their code:MethodDesc (this the code:ICodeManager interface). In
@@ -192,15 +192,9 @@ private:
 
     ThreadStaticHandleTable * m_pThreadStaticHandleTable;
 
-    // Need to keep a list of the pinning handles we've created
-    // so they can be cleaned up when the thread dies
-    ObjectHandleList          m_PinningHandleList;
-
 public:
 
 #ifndef DACCESS_COMPILE
-    void AddPinningHandleToList(OBJECTHANDLE oh);
-    void FreePinningHandles();
     void AllocateThreadStaticHandles(Module * pModule, ThreadLocalModule * pThreadLocalModule);
     OBJECTHANDLE AllocateStaticFieldObjRefPtrs(int nRequested, OBJECTHANDLE* ppLazyAllocate = NULL);
     void InitThreadStaticHandleTable();
@@ -257,6 +251,9 @@ struct TailCallArgBuffer
 #endif
 #if (defined(TARGET_ARM64) && defined(FEATURE_EMULATE_SINGLESTEP))
 #include "arm64singlestepper.h"
+#endif
+#if (defined(TARGET_RISCV64) && defined(FEATURE_EMULATE_SINGLESTEP))
+#include "riscv64singlestepper.h"
 #endif
 
 #if !defined(PLATFORM_SUPPORTS_SAFE_THREADSUSPEND)
@@ -804,8 +801,8 @@ public:
 
 // #ThreadClass
 //
-// A code:Thread contains all the per-thread information needed by the runtime.  You can get at this
-// structure throught the and OS TLS slot see code:#RuntimeThreadLocals for more
+// A code:Thread contains all the per-thread information needed by the runtime.  We can get this
+// structure through the OS TLS slot see code:#RuntimeThreadLocals for more information.
 class Thread
 {
     friend struct ThreadQueue;  // used to enqueue & dequeue threads onto SyncBlocks
@@ -1034,7 +1031,7 @@ public:
         TSNC_WinRTInitialized           = 0x08000000, // the thread has initialized WinRT
 #endif // FEATURE_COMINTEROP
 
-        TSNC_TSLTakenForStartup         = 0x10000000, // The ThreadStoreLock (TSL) is held by another mechansim during
+        TSNC_TSLTakenForStartup         = 0x10000000, // The ThreadStoreLock (TSL) is held by another mechanism during
                                                       // thread startup so can be skipped.
 
         TSNC_CallingManagedCodeDisabled = 0x20000000, // Use by multicore JIT feature to asert on calling managed code/loading module in background thread
@@ -2496,7 +2493,7 @@ private:
 
 public:
     void MarkThreadForAbort(EEPolicy::ThreadAbortTypes abortType);
-    void UnmarkThreadForAbort();
+    void UnmarkThreadForAbort(EEPolicy::ThreadAbortTypes abortType = EEPolicy::TA_Rude);
 
     static ULONGLONG GetNextSelfAbortEndTime()
     {
@@ -2536,7 +2533,7 @@ public:
     }
 
     PTR_CONTEXT m_OSContext;    // ptr to a Context structure used to record the OS specific ThreadContext for a thread
-                                // this is used for thread stop/abort and is intialized on demand
+                                // this is used for thread stop/abort and is initialized on demand
 
     PT_CONTEXT GetAbortContext ();
 
@@ -2572,6 +2569,8 @@ public:
 private:
 #if defined(TARGET_ARM)
     ArmSingleStepper m_singleStepper;
+#elif defined(TARGET_RISCV64)
+    RiscV64SingleStepper m_singleStepper;
 #else
     Arm64SingleStepper m_singleStepper;
 #endif
@@ -2587,7 +2586,7 @@ public:
         m_singleStepper.Enable();
     }
 
-    void BypassWithSingleStep(const void* ip ARM_ARG(WORD opcode1) ARM_ARG(WORD opcode2) ARM64_ARG(uint32_t opcode))
+    void BypassWithSingleStep(const void* ip ARM_ARG(WORD opcode1) ARM_ARG(WORD opcode2) ARM64_ARG(uint32_t opcode) RISCV64_ARG(uint32_t opcode))
     {
 #if defined(TARGET_ARM)
         m_singleStepper.Bypass((DWORD)ip, opcode1, opcode2);
@@ -2654,7 +2653,9 @@ public:
     // undecided. The last state may indicate that the apartment has not been set at
     // all (nobody has called CoInitializeEx) or that the EE does not know the
     // current state (EE has not called CoInitializeEx).
+    // Keep in sync with System.Threading.ApartmentState
     enum ApartmentState { AS_InSTA, AS_InMTA, AS_Unknown };
+
     ApartmentState GetApartment();
     ApartmentState GetApartmentRare(Thread::ApartmentState as);
     ApartmentState GetExplicitApartment();
@@ -2686,7 +2687,7 @@ public:
 private:
     void           DoAppropriateWaitWorkerAlertableHelper(WaitMode mode);
     DWORD          DoAppropriateWaitWorker(int countHandles, HANDLE *handles, BOOL waitAll,
-                                           DWORD millis, WaitMode mode);
+                                           DWORD millis, WaitMode mode, void *associatedObjectForMonitorWait);
     DWORD          DoAppropriateWaitWorker(AppropriateWaitFunc func, void *args,
                                            DWORD millis, WaitMode mode);
     DWORD          DoSignalAndWaitWorker(HANDLE* pHandles, DWORD millis,BOOL alertable);
@@ -2767,6 +2768,8 @@ public:
     // may still execute GS cookie tracking/checking code paths.
     #define SKIP_GSCOOKIE_CHECK 0x10000
 
+    #define UNWIND_FLOATS 0x20000
+
     StackWalkAction StackWalkFramesEx(
                         PREGDISPLAY pRD,        // virtual register set at crawl start
                         PSTACKWALKFRAMESCALLBACK pCallback,
@@ -2828,6 +2831,29 @@ public:
 
     typedef StateHolder<Thread::IncPreventAsync, Thread::DecPreventAsync> ThreadPreventAsyncHolder;
 
+    // While executing the new exception handling managed code,
+    // this thread must not be aborted.
+    static void        IncPreventAbort()
+    {
+        WRAPPER_NO_CONTRACT;
+        Thread *pThread = GetThread();
+        InterlockedIncrement((LONG*)&pThread->m_PreventAbort);
+    }
+    static void        DecPreventAbort()
+    {
+        WRAPPER_NO_CONTRACT;
+        Thread *pThread = GetThread();
+#ifdef _DEBUG
+        LONG c =
+#endif // _DEBUG
+        InterlockedDecrement((LONG*)&pThread->m_PreventAbort);
+        _ASSERTE(c >= 0);
+    }
+
+    BOOL IsAbortPrevented()
+    {
+        return m_PreventAbort != 0;
+    }
     // The ThreadStore manages a list of all the threads in the system.  I
     // can't figure out how to expand the ThreadList template type without
     // making m_Link public.
@@ -3168,7 +3194,6 @@ private:
 
     // Support for Wait/Notify
     BOOL        Block(INT32 timeOut, PendingSync *syncInfo);
-    void        Wake(SyncBlock *psb);
     DWORD       Wait(HANDLE *objs, int cntObjs, INT32 timeOut, PendingSync *syncInfo);
     DWORD       Wait(CLREvent* pEvent, INT32 timeOut, PendingSync *syncInfo);
 
@@ -3430,10 +3455,6 @@ private:
 #endif // defined(PROFILING_SUPPORTED) || defined(PROFILING_SUPPORTED_DATA)
 
 private:
-    UINT32 m_workerThreadPoolCompletionCount;
-    static UINT64 s_workerThreadPoolCompletionCountOverflow;
-    UINT32 m_ioThreadPoolCompletionCount;
-    static UINT64 s_ioThreadPoolCompletionCountOverflow;
     UINT32 m_monitorLockContentionCount;
     static UINT64 s_monitorLockContentionCountOverflow;
 
@@ -3487,38 +3508,6 @@ private:
     static UINT64 GetTotalCount(SIZE_T threadLocalCountOffset, UINT64 *overflowCount);
 
 public:
-    static void IncrementWorkerThreadPoolCompletionCount(Thread *pThread)
-    {
-        WRAPPER_NO_CONTRACT;
-        IncrementCount(pThread, offsetof(Thread, m_workerThreadPoolCompletionCount), &s_workerThreadPoolCompletionCountOverflow);
-    }
-
-    static UINT64 GetWorkerThreadPoolCompletionCountOverflow()
-    {
-        WRAPPER_NO_CONTRACT;
-        return GetOverflowCount(&s_workerThreadPoolCompletionCountOverflow);
-    }
-
-    static UINT64 GetTotalWorkerThreadPoolCompletionCount()
-    {
-        WRAPPER_NO_CONTRACT;
-        return GetTotalCount(offsetof(Thread, m_workerThreadPoolCompletionCount), &s_workerThreadPoolCompletionCountOverflow);
-    }
-
-    static void IncrementIOThreadPoolCompletionCount(Thread *pThread)
-    {
-        WRAPPER_NO_CONTRACT;
-        IncrementCount(pThread, offsetof(Thread, m_ioThreadPoolCompletionCount), &s_ioThreadPoolCompletionCountOverflow);
-    }
-
-    static UINT64 GetIOThreadPoolCompletionCountOverflow()
-    {
-        WRAPPER_NO_CONTRACT;
-        return GetOverflowCount(&s_ioThreadPoolCompletionCountOverflow);
-    }
-
-    static UINT64 GetTotalThreadPoolCompletionCount();
-
     static void IncrementMonitorLockContentionCount(Thread *pThread)
     {
         WRAPPER_NO_CONTRACT;
@@ -3679,6 +3668,8 @@ private:
     // Don't allow a thread to be asynchronously stopped or interrupted (e.g. because
     // it is performing a <clinit>)
     int         m_PreventAsync;
+    // Don't allow a thread to be aborted while running the new exception handling managed code
+    int         m_PreventAbort;
 
     static LONG m_DebugWillSyncCount;
 
@@ -3772,6 +3763,9 @@ public:
             // If the pointer lives in the GC heap, than it is protected, and thus valid.
             if (dac_cast<TADDR>(g_lowest_address) <= val && val < dac_cast<TADDR>(g_highest_address))
                 return(true);
+            // Same for frozen segments
+            if (GCHeapUtilities::GetGCHeap()->IsInFrozenSegment(*(Object**)ref))
+                return(true);
             return(false);
         }
 
@@ -3835,7 +3829,7 @@ public:
 #endif
     }
 
-    void UnmarkRedirectContextInUse(PTR_CONTEXT pCtx)
+    bool UnmarkRedirectContextInUse(PTR_CONTEXT pCtx)
     {
         LIMITED_METHOD_CONTRACT;
 #ifdef _DEBUG
@@ -3846,6 +3840,7 @@ public:
             m_RedirectContextInUse = false;
         }
 #endif
+        return (pCtx == m_pSavedRedirectContext);
     }
 #endif //DACCESS_COMPILE
 
@@ -3932,7 +3927,7 @@ public:
 
 private:
     //-----------------------------------------------------------------------------
-    // AVInRuntimeImplOkay : its okay to have an AV in Runtime implemetation while
+    // AVInRuntimeImplOkay : its okay to have an AV in Runtime implementation while
     // this holder is in effect.
     //
     //  {
@@ -4185,20 +4180,6 @@ public:
     }
 
 private:
-    //
-    //This context is used for optimizations on I/O thread pool thread. In case the
-    //overlapped structure is from a different appdomain, it is stored in this structure
-    //to be processed later correctly by entering the right domain.
-    PVOID m_pIOCompletionContext;
-    BOOL AllocateIOCompletionContext();
-    VOID FreeIOCompletionContext();
-public:
-    inline PVOID GetIOCompletionContext()
-    {
-        return m_pIOCompletionContext;
-    }
-
-private:
     // Inside a host, we don't own a thread handle, and we avoid DuplicateHandle call.
     // If a thread is dying after we obtain the thread handle, our SuspendThread may fail
     // because the handle may be closed and reused for a completely different type of handle.
@@ -4304,7 +4285,7 @@ public:
 
     // GC calls this when creating special threads that also happen to have an EE Thread
     // object associated with them (e.g., the bgc thread).
-    void SetGCSpecial(bool fGCSpecial);
+    void SetGCSpecial();
 
 private:
 
@@ -5000,6 +4981,7 @@ inline void Thread::DecrementTraceCallCount()
 // state to be correct.  So we carry it around in case we need to restore it.
 struct PendingSync
 {
+    void*           m_Object;
     LONG            m_EnterCount;
     WaitEventLink  *m_WaitEventLink;
 #ifdef _DEBUG
@@ -5114,7 +5096,7 @@ protected:
         {
             // Either we initialized m_Thread explicitly with GetThread() in the
             // constructor, or our caller (instantiator of GCHolder) called our constructor
-            // with GetThread() (which we already asserted in the constuctor)
+            // with GetThread() (which we already asserted in the constructor)
             // (i.e., m_Thread == GetThread()).  Also, note that if THREAD_EXISTS,
             // then m_Thread must be non-null (as it's == GetThread()).  So the
             // "if" below looks a little hokey since we're checking for either condition.
@@ -6001,10 +5983,6 @@ struct ManagedThreadBase
     // The 'new Thread(...).Start()' case from COMSynchronizable kickoff thread worker
     static void KickOff(ADCallBackFcnType pTarget,
                         LPVOID args);
-
-    // The IOCompletion, QueueUserWorkItem, RegisterWaitForSingleObject cases in
-    // the ThreadPool
-    static void ThreadPool(ADCallBackFcnType pTarget, LPVOID args);
 
     // The Finalizer thread uses this path
     static void FinalizerBase(ADCallBackFcnType pTarget);

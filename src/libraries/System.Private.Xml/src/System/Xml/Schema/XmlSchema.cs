@@ -1,14 +1,14 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.IO;
 using System.Collections;
-using System.ComponentModel;
-using System.Xml.Serialization;
-using System.Threading;
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Threading;
+using System.Xml.Serialization;
 
 namespace System.Xml.Schema
 {
@@ -58,16 +58,19 @@ namespace System.Xml.Schema
 
         public static XmlSchema? Read(TextReader reader, ValidationEventHandler? validationEventHandler)
         {
+            ArgumentNullException.ThrowIfNull(reader);
             return Read(new XmlTextReader(reader), validationEventHandler);
         }
 
         public static XmlSchema? Read(Stream stream, ValidationEventHandler? validationEventHandler)
         {
+            ArgumentNullException.ThrowIfNull(stream);
             return Read(new XmlTextReader(stream), validationEventHandler);
         }
 
         public static XmlSchema? Read(XmlReader reader, ValidationEventHandler? validationEventHandler)
         {
+            ArgumentNullException.ThrowIfNull(reader);
             XmlNameTable nameTable = reader.NameTable;
             Parser parser = new Parser(SchemaType.XSD, nameTable, new SchemaNames(nameTable), validationEventHandler);
             try
@@ -98,6 +101,7 @@ namespace System.Xml.Schema
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public void Write(Stream stream, XmlNamespaceManager? namespaceManager)
         {
+            ArgumentNullException.ThrowIfNull(stream);
             XmlTextWriter xmlWriter = new XmlTextWriter(stream, null);
             xmlWriter.Formatting = Formatting.Indented;
             Write(xmlWriter, namespaceManager);
@@ -106,12 +110,14 @@ namespace System.Xml.Schema
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public void Write(TextWriter writer)
         {
+            ArgumentNullException.ThrowIfNull(writer);
             Write(writer, null);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public void Write(TextWriter writer, XmlNamespaceManager? namespaceManager)
         {
+            ArgumentNullException.ThrowIfNull(writer);
             XmlTextWriter xmlWriter = new XmlTextWriter(writer);
             xmlWriter.Formatting = Formatting.Indented;
             Write(xmlWriter, namespaceManager);
@@ -120,6 +126,7 @@ namespace System.Xml.Schema
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public void Write(XmlWriter writer)
         {
+            ArgumentNullException.ThrowIfNull(writer);
             Write(writer, null);
         }
 
@@ -130,6 +137,7 @@ namespace System.Xml.Schema
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public void Write(XmlWriter writer, XmlNamespaceManager? namespaceManager)
         {
+            ArgumentNullException.ThrowIfNull(writer);
             XmlSerializer serializer = new XmlSerializer(typeof(XmlSchema));
             XmlSerializerNamespaces ns;
 
@@ -166,7 +174,7 @@ namespace System.Xml.Schema
             {
                 ns = new XmlSerializerNamespaces();
                 ns.Add("xs", XmlSchema.Namespace);
-                if (_targetNs != null && _targetNs.Length != 0)
+                if (!string.IsNullOrEmpty(_targetNs))
                 {
                     ns.Add("tns", _targetNs);
                 }
@@ -510,7 +518,7 @@ namespace System.Xml.Schema
 
         internal ArrayList ImportedNamespaces => _importedNamespaces ??= new ArrayList();
 
-        internal void GetExternalSchemasList(IList extList, XmlSchema schema)
+        internal static void GetExternalSchemasList(IList extList, XmlSchema schema)
         {
             Debug.Assert(extList != null && schema != null);
             if (extList.Contains(schema))

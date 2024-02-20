@@ -378,19 +378,19 @@ void LazyMachState::unwindLazyState(LazyMachState* baseState,
         }
     } while (true);
 
-#ifdef TARGET_UNIX
-    unwoundstate->captureX19_X29[0] = context.X19;
-    unwoundstate->captureX19_X29[1] = context.X20;
-    unwoundstate->captureX19_X29[2] = context.X21;
-    unwoundstate->captureX19_X29[3] = context.X22;
-    unwoundstate->captureX19_X29[4] = context.X23;
-    unwoundstate->captureX19_X29[5] = context.X24;
-    unwoundstate->captureX19_X29[6] = context.X25;
-    unwoundstate->captureX19_X29[7] = context.X26;
-    unwoundstate->captureX19_X29[8] = context.X27;
-    unwoundstate->captureX19_X29[9] = context.X28;
-    unwoundstate->captureX19_X29[10] = context.Fp;
-#endif
+#ifdef __APPLE__
+    unwoundstate->unwoundX19_X29[0] = context.X19;
+    unwoundstate->unwoundX19_X29[1] = context.X20;
+    unwoundstate->unwoundX19_X29[2] = context.X21;
+    unwoundstate->unwoundX19_X29[3] = context.X22;
+    unwoundstate->unwoundX19_X29[4] = context.X23;
+    unwoundstate->unwoundX19_X29[5] = context.X24;
+    unwoundstate->unwoundX19_X29[6] = context.X25;
+    unwoundstate->unwoundX19_X29[7] = context.X26;
+    unwoundstate->unwoundX19_X29[8] = context.X27;
+    unwoundstate->unwoundX19_X29[9] = context.X28;
+    unwoundstate->unwoundX19_X29[10] = context.Fp;
+#endif // __APPLE__
 
 #ifdef DACCESS_COMPILE
     // For DAC builds, we update the registers directly since we dont have context pointers
@@ -426,7 +426,7 @@ void LazyMachState::unwindLazyState(LazyMachState* baseState,
     unwoundstate->_isValid = TRUE;
 }
 
-void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACTL
     {
@@ -436,6 +436,14 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
         SUPPORTS_DAC;
     }
     CONTRACTL_END;
+
+#ifndef DACCESS_COMPILE
+    if (updateFloats)
+    {
+        UpdateFloatingPointRegisters(pRD);
+        _ASSERTE(pRD->pCurrentContext->Pc == GetReturnAddress());
+    }
+#endif // DACCESS_COMPILE
 
     pRD->IsCallerContextValid = FALSE;
     pRD->IsCallerSPValid      = FALSE;        // Don't add usage of this field.  This is only temporary.
@@ -472,18 +480,18 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
         pRD->pCurrentContext->Fp = (DWORD64)(pUnwoundState->captureX19_X29[10]);
         pRD->pCurrentContext->Lr = NULL; // Unwind again to get Caller's PC
 
-        pRD->pCurrentContextPointers->X19 = pUnwoundState->ptrX19_X29[0];
-        pRD->pCurrentContextPointers->X20 = pUnwoundState->ptrX19_X29[1];
-        pRD->pCurrentContextPointers->X21 = pUnwoundState->ptrX19_X29[2];
-        pRD->pCurrentContextPointers->X22 = pUnwoundState->ptrX19_X29[3];
-        pRD->pCurrentContextPointers->X23 = pUnwoundState->ptrX19_X29[4];
-        pRD->pCurrentContextPointers->X24 = pUnwoundState->ptrX19_X29[5];
-        pRD->pCurrentContextPointers->X25 = pUnwoundState->ptrX19_X29[6];
-        pRD->pCurrentContextPointers->X26 = pUnwoundState->ptrX19_X29[7];
-        pRD->pCurrentContextPointers->X27 = pUnwoundState->ptrX19_X29[8];
-        pRD->pCurrentContextPointers->X28 = pUnwoundState->ptrX19_X29[9];
-        pRD->pCurrentContextPointers->Fp = pUnwoundState->ptrX19_X29[10];
-        pRD->pCurrentContextPointers->Lr = NULL;
+        pRD->pCurrentContextPointers->X19 = &pRD->pCurrentContext->X19;
+        pRD->pCurrentContextPointers->X20 = &pRD->pCurrentContext->X20;
+        pRD->pCurrentContextPointers->X21 = &pRD->pCurrentContext->X21;
+        pRD->pCurrentContextPointers->X22 = &pRD->pCurrentContext->X22;
+        pRD->pCurrentContextPointers->X23 = &pRD->pCurrentContext->X23;
+        pRD->pCurrentContextPointers->X24 = &pRD->pCurrentContext->X24;
+        pRD->pCurrentContextPointers->X25 = &pRD->pCurrentContext->X25;
+        pRD->pCurrentContextPointers->X26 = &pRD->pCurrentContext->X26;
+        pRD->pCurrentContextPointers->X27 = &pRD->pCurrentContext->X27;
+        pRD->pCurrentContextPointers->X28 = &pRD->pCurrentContext->X28;
+        pRD->pCurrentContextPointers->Fp = &pRD->pCurrentContext->Fp;
+        pRD->pCurrentContextPointers->Lr = &pRD->pCurrentContext->Lr;
 
         return;
     }
@@ -497,20 +505,20 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     pRD->pCurrentContext->Pc = pRD->ControlPC;
     pRD->pCurrentContext->Sp = pRD->SP;
 
-#ifdef TARGET_UNIX
-    pRD->pCurrentContext->X19 = m_MachState.ptrX19_X29[0] ? *m_MachState.ptrX19_X29[0] : m_MachState.captureX19_X29[0];
-    pRD->pCurrentContext->X20 = m_MachState.ptrX19_X29[1] ? *m_MachState.ptrX19_X29[1] : m_MachState.captureX19_X29[1];
-    pRD->pCurrentContext->X21 = m_MachState.ptrX19_X29[2] ? *m_MachState.ptrX19_X29[2] : m_MachState.captureX19_X29[2];
-    pRD->pCurrentContext->X22 = m_MachState.ptrX19_X29[3] ? *m_MachState.ptrX19_X29[3] : m_MachState.captureX19_X29[3];
-    pRD->pCurrentContext->X23 = m_MachState.ptrX19_X29[4] ? *m_MachState.ptrX19_X29[4] : m_MachState.captureX19_X29[4];
-    pRD->pCurrentContext->X24 = m_MachState.ptrX19_X29[5] ? *m_MachState.ptrX19_X29[5] : m_MachState.captureX19_X29[5];
-    pRD->pCurrentContext->X25 = m_MachState.ptrX19_X29[6] ? *m_MachState.ptrX19_X29[6] : m_MachState.captureX19_X29[6];
-    pRD->pCurrentContext->X26 = m_MachState.ptrX19_X29[7] ? *m_MachState.ptrX19_X29[7] : m_MachState.captureX19_X29[7];
-    pRD->pCurrentContext->X27 = m_MachState.ptrX19_X29[8] ? *m_MachState.ptrX19_X29[8] : m_MachState.captureX19_X29[8];
-    pRD->pCurrentContext->X28 = m_MachState.ptrX19_X29[9] ? *m_MachState.ptrX19_X29[9] : m_MachState.captureX19_X29[9];
-    pRD->pCurrentContext->Fp = m_MachState.ptrX19_X29[10] ? *m_MachState.ptrX19_X29[10] : m_MachState.captureX19_X29[10];
+#ifdef __APPLE__
+    pRD->pCurrentContext->X19 = (DWORD64)(m_MachState.unwoundX19_X29[0]);
+    pRD->pCurrentContext->X20 = (DWORD64)(m_MachState.unwoundX19_X29[1]);
+    pRD->pCurrentContext->X21 = (DWORD64)(m_MachState.unwoundX19_X29[2]);
+    pRD->pCurrentContext->X22 = (DWORD64)(m_MachState.unwoundX19_X29[3]);
+    pRD->pCurrentContext->X23 = (DWORD64)(m_MachState.unwoundX19_X29[4]);
+    pRD->pCurrentContext->X24 = (DWORD64)(m_MachState.unwoundX19_X29[5]);
+    pRD->pCurrentContext->X25 = (DWORD64)(m_MachState.unwoundX19_X29[6]);
+    pRD->pCurrentContext->X26 = (DWORD64)(m_MachState.unwoundX19_X29[7]);
+    pRD->pCurrentContext->X27 = (DWORD64)(m_MachState.unwoundX19_X29[8]);
+    pRD->pCurrentContext->X28 = (DWORD64)(m_MachState.unwoundX19_X29[9]);
+    pRD->pCurrentContext->Fp = (DWORD64)(m_MachState.unwoundX19_X29[10]);
     pRD->pCurrentContext->Lr = NULL; // Unwind again to get Caller's PC
-#else // TARGET_UNIX
+#else // __APPLE__
     pRD->pCurrentContext->X19 = *m_MachState.ptrX19_X29[0];
     pRD->pCurrentContext->X20 = *m_MachState.ptrX19_X29[1];
     pRD->pCurrentContext->X21 = *m_MachState.ptrX19_X29[2];
@@ -523,7 +531,7 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     pRD->pCurrentContext->X28 = *m_MachState.ptrX19_X29[9];
     pRD->pCurrentContext->Fp  = *m_MachState.ptrX19_X29[10];
     pRD->pCurrentContext->Lr = NULL; // Unwind again to get Caller's PC
-#endif
+#endif // __APPLE__
 
 #if !defined(DACCESS_COMPILE)
     pRD->pCurrentContextPointers->X19 = m_MachState.ptrX19_X29[0];
@@ -601,8 +609,16 @@ void UpdateRegDisplayFromCalleeSavedRegisters(REGDISPLAY * pRD, CalleeSavedRegis
 }
 
 
-void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
+#ifndef DACCESS_COMPILE
+    if (updateFloats)
+    {
+        UpdateFloatingPointRegisters(pRD);
+        _ASSERTE(pRD->pCurrentContext->Pc == GetReturnAddress());
+    }
+#endif // DACCESS_COMPILE
+
     pRD->IsCallerContextValid = FALSE;
     pRD->IsCallerSPValid      = FALSE;        // Don't add usage of this field.  This is only temporary.
 
@@ -626,7 +642,7 @@ void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
 
 
 
-void FaultingExceptionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void FaultingExceptionFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     LIMITED_METHOD_DAC_CONTRACT;
 
@@ -659,7 +675,7 @@ void FaultingExceptionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     LOG((LF_GCROOTS, LL_INFO100000, "STACKWALK    FaultingExceptionFrame::UpdateRegDisplay(pc:%p, sp:%p)\n", pRD->ControlPC, pRD->SP));
 }
 
-void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACT_VOID
     {
@@ -680,6 +696,13 @@ void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
         return;
     }
 
+#ifndef DACCESS_COMPILE
+    if (updateFloats)
+    {
+        UpdateFloatingPointRegisters(pRD);
+    }
+#endif // DACCESS_COMPILE
+
     pRD->IsCallerContextValid = FALSE;
     pRD->IsCallerSPValid      = FALSE;
 
@@ -699,7 +722,7 @@ void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     pRD->pCurrentContextPointers->X28 = NULL;
 
     pRD->ControlPC = m_pCallerReturnAddress;
-    pRD->SP = (DWORD) dac_cast<TADDR>(m_pCallSiteSP);
+    pRD->SP = (DWORD64) dac_cast<TADDR>(m_pCallSiteSP);
 
     // reset pContext; it's only valid for active (top-most) frame
     pRD->pContext = NULL;
@@ -722,7 +745,7 @@ TADDR ResumableFrame::GetReturnAddressPtr(void)
     return dac_cast<TADDR>(m_Regs) + offsetof(T_CONTEXT, Pc);
 }
 
-void ResumableFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void ResumableFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACT_VOID
     {
@@ -762,7 +785,7 @@ void ResumableFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     RETURN;
 }
 
-void HijackFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void HijackFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     LIMITED_METHOD_CONTRACT;
 
@@ -918,12 +941,6 @@ PTR_CONTEXT GetCONTEXTFromRedirectedStubStackFrame(T_CONTEXT * pContext)
     return *ppContext;
 }
 
-void RedirectForThreadAbort()
-{
-    // ThreadAbort is not supported in .net core
-    throw "NYI";
-}
-
 #if !defined(DACCESS_COMPILE)
 FaultingExceptionFrame *GetFrameFromRedirectedStubStackFrame (DISPATCHER_CONTEXT *pDispatcherContext)
 {
@@ -951,10 +968,9 @@ AdjustContextForVirtualStub(
 
     PCODE f_IP = GetIP(pContext);
 
-    VirtualCallStubManager::StubKind sk;
-    VirtualCallStubManager::FindStubManager(f_IP, &sk);
+    StubCodeBlockKind sk = RangeSectionStubManager::GetStubKind(f_IP);
 
-    if (sk == VirtualCallStubManager::SK_DISPATCH)
+    if (sk == STUB_CODE_BLOCK_VSD_DISPATCH_STUB)
     {
         if (*PTR_DWORD(f_IP) != DISPATCH_STUB_FIRST_DWORD)
         {
@@ -963,7 +979,7 @@ AdjustContextForVirtualStub(
         }
     }
     else
-    if (sk == VirtualCallStubManager::SK_RESOLVE)
+    if (sk == STUB_CODE_BLOCK_VSD_RESOLVE_STUB)
     {
         if (*PTR_DWORD(f_IP) != RESOLVE_STUB_FIRST_DWORD)
         {
@@ -1185,7 +1201,7 @@ void StubLinkerCPU::EmitProlog(unsigned short cIntRegArgs, unsigned short cVecRe
 
 
 
-    // N.B Despite the range of a jump with a sub sp is 4KB, we're limiting to 504 to save from emiting right prolog that's
+    // N.B Despite the range of a jump with a sub sp is 4KB, we're limiting to 504 to save from emitting right prolog that's
     // expressable in unwind codes efficiently. The largest offset in typical unwindinfo encodings that we use is 504.
     // so allocations larger than 504 bytes would require setting the SP in multiple strides, which would complicate both
     // prolog and epilog generation as well as unwindinfo generation.
@@ -1436,7 +1452,7 @@ void StubLinkerCPU::EmitMovReg(IntReg Xd, IntReg Xm)
     else
     {
         //  MOV <Xd>, <Xm>
-        // which is eqivalent to
+        // which is equivalent to
         //  ORR <Xd>. XZR, <Xm>
         // Encoding: sf|0|1|0|1|0|1|0|shift(2)|0|Xm|imm(6)|Xn|Xd
         // where
@@ -2032,7 +2048,7 @@ PCODE DynamicHelpers::CreateDictionaryLookupHelper(LoaderAllocator * pAllocator,
                 *(DWORD*)p = 0xd280000a | ((UINT32)slotOffset << 5); p += 4;
                 dataOffset -= 4;
 
-                // cmp x9,x10
+                // cmp x11,x10
                 *(DWORD*)p = 0xeb0a017f; p += 4;
                 dataOffset -= 4;
 

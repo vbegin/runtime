@@ -4,10 +4,11 @@
 using System.Collections;
 using System.IO;
 using System.Xml.Schema;
+using System.Xml.Tests;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaValidatorApiTests
 {
     // ===================== XmlResolver =====================
 
@@ -177,7 +178,7 @@ namespace System.Xml.Tests
             try
             {
                 val.ValidateElement("bar", "", null, "t:type1", null, "uri:tempuri " + Path.Combine(TestData, XSDFILE_TARGET_NAMESPACE), null);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaValidationException e)
             {
@@ -185,7 +186,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 
@@ -226,7 +227,7 @@ namespace System.Xml.Tests
                     break;
 
                 default:
-                    Assert.True(false);
+                    Assert.Fail();
                     break;
             }
 
@@ -242,7 +243,7 @@ namespace System.Xml.Tests
             try
             {
                 val.ValidateElement("bar2", "", info);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaValidationException e)
             {
@@ -318,7 +319,7 @@ namespace System.Xml.Tests
             {
                 r.ReadStartElement("foo");
                 val.ValidateElement("bar", "", info);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaValidationException e)
             {
@@ -369,7 +370,7 @@ namespace System.Xml.Tests
             try
             {
                 val.ValidateElement("bar", "", info);
-                Assert.True(false, "Validation Error - XmlSchemaValidationException wasn't thrown!");
+                Assert.Fail("Validation Error - XmlSchemaValidationException wasn't thrown!");
             }
             catch (XmlSchemaValidationException e)
             {
@@ -405,7 +406,7 @@ namespace System.Xml.Tests
             try
             {
                 val.ValidateElement("bar2", "", info);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaValidationException e)
             {
@@ -470,7 +471,7 @@ namespace System.Xml.Tests
                     break;
 
                 default:
-                    Assert.True(false);
+                    Assert.Fail();
                     break;
             }
 

@@ -2,8 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace System.Data
@@ -693,7 +693,7 @@ namespace System.Data
             else
             {
                 iDest = destination.Tables.IndexOf(Table!.TableName, Table.Namespace, false); // pass false for last param
-                // to be backward compatable, otherwise meay cause new exception
+                // to be backward compatible, otherwise meay cause new exception
             }
 
             if (iDest < 0)

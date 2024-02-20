@@ -97,7 +97,7 @@
 //             pRS=pRS->pright;
 //         else
 //         {
-//             return pRS->pjit;
+//             return pRS->_pjit;
 //         }
 //     }
 //
@@ -108,7 +108,7 @@
 // In the assignment statement the compiler will automatically use
 // the implicit conversion from PTR_RangeSection to RangeSection*,
 // causing a host instance to be created.  Finally, if an appropriate
-// section is found the use of pRS->pjit will cause an implicit
+// section is found the use of pRS->_pjit will cause an implicit
 // conversion from PTR_IJitManager to IJitManager.  The VPTR code
 // will look at target memory to determine the actual derived class
 // for the JitManager and instantiate the right class in the host so
@@ -252,7 +252,7 @@
 // even though in target address terms one is embedded in the other.
 // The assumption of data stability means that this won't cause
 // a problem, but care must be taken with the address arithmetic,
-// as layed out in rules #2 and #3.
+// as laid out in rules #2 and #3.
 //
 // 4.  Global address references cannot be used.  Any reference to a
 //     global piece of code or data, such as a function address, global
@@ -558,6 +558,7 @@
 #ifndef __daccess_h__
 #define __daccess_h__
 
+#ifndef NATIVEAOT
 #include <stdint.h>
 
 #include "switches.h"
@@ -573,6 +574,8 @@
 #include "clr_std/type_traits"
 #include "crosscomp.h"
 #endif
+
+#include <dn-u16.h>
 
 // Information stored in the DAC table of interest to the DAC implementation
 // Note that this information is shared between all instantiations of ClrDataAccess, so initialize
@@ -659,6 +662,8 @@ public:
 #undef VPTR_CLASS
 } DacGlobals;
 
+#endif // !NATIVEAOT
+
 #ifdef DACCESS_COMPILE
 
 #ifdef __cplusplus
@@ -710,12 +715,15 @@ HRESULT DacWriteHostInstance(PVOID host, bool throwEx);
 // gathering cancelation for details see
 // code:ClrDataAccess.EnumMemoryRegionsWrapper
 
+extern void DacLogMessage(LPCSTR format, ...);
+
 // This is usable in EX_TRY exactly how RethrowTerminalExceptions et cetera
 #define RethrowCancelExceptions                                         \
     if (GET_EXCEPTION()->GetHR() == COR_E_OPERATIONCANCELED)            \
     {                                                                   \
         EX_RETHROW;                                                     \
-    }
+    }                                                                   \
+    DacLogMessage("DAC exception caught at %s:%d\n", __FILE__, __LINE__);
 
 // Occasionally it's necessary to allocate some host memory for
 // instance data that's created on the fly and so doesn't directly
@@ -1024,6 +1032,12 @@ public:
     {
         return DPtrType(DacTAddrOffset(m_addr, val, sizeof(type)));
     }
+#if defined(HOST_UNIX) && defined(HOST_64BIT)
+    DPtrType operator+(unsigned long long val)
+    {
+        return DPtrType(DacTAddrOffset(m_addr, val, sizeof(type)));
+    }
+#endif // HOST_UNIX && HOST_BIT64
     DPtrType operator+(short val)
     {
         return DPtrType(m_addr + val * sizeof(type));
@@ -1484,10 +1498,10 @@ public:
     }
     void EnumMem(void) const
     {
-        char* str = DacInstantiateStringW(m_addr, maxChars, false);
+        WCHAR* str = DacInstantiateStringW(m_addr, maxChars, false);
         if (str)
         {
-            DacEnumMemoryRegion(m_addr, strlen(str) + 1);
+            DacEnumMemoryRegion(m_addr, u16_strlen(str) + 1);
         }
     }
 };
@@ -1808,7 +1822,7 @@ typedef DPTR(PTR_VOID) PTR_PTR_VOID;
 // const-correctness. However, if we wanted to support true void* / const void*
 // behavior, we could probably build the follow functionality by templating
 // __VoidPtr:
-//  * A PTR_VOID would be implicitly convertable to PTR_CVOID
+//  * A PTR_VOID would be implicitly convertible to PTR_CVOID
 //  * An explicit coercion (ideally const_cast) would be required to convert a
 //      PTR_CVOID to a PTR_VOID
 //  * Similarily, an explicit coercion would be required to convert a cost PTR
@@ -2266,7 +2280,7 @@ public: name(int dummy) : base(dummy) {}
 //      TADDR <- ?PTR(Src)     - Get TADDR of PTR object (DPtr etc.)
 //      TADDR <- Src *         - Get TADDR of dac host object instance
 //
-// Note that there is no direct convertion to other host-pointer types (because we don't
+// Note that there is no direct conversion to other host-pointer types (because we don't
 // know if you want a DPTR or VPTR etc.).  However, due to the implicit DAC conversions,
 // you can just use dac_cast<PTR_Foo> and assign that to a Foo*.
 //
@@ -2292,7 +2306,7 @@ public: name(int dummy) : base(dummy) {}
 //             dac_cast<PTR_AppDomain>(pBD)
 //             dac_cast<PTR_BaseDomain>(pAD)
 //
-// Example comparsions of some old and new syntax, where
+// Example comparisons of some old and new syntax, where
 //    h is a host pointer, such as "Foo *h;"
 //    p is a DPTR, such as "PTR_Foo p;"
 //
@@ -2354,10 +2368,17 @@ inline type* DacUnsafeMarshalSingleElement( ArrayDPTR(type) arrayPtr )
 //
 //----------------------------------------------------------------------------
 
-typedef ArrayDPTR(BYTE)    PTR_BYTE;
+typedef DPTR(size_t)       PTR_size_t;
 typedef ArrayDPTR(uint8_t) PTR_uint8_t;
+typedef DPTR(PTR_uint8_t)  PTR_PTR_uint8_t;
+typedef DPTR(int32_t)      PTR_int32_t;
+typedef DPTR(uint32_t)     PTR_uint32_t;
+typedef DPTR(uint64_t)     PTR_uint64_t;
+typedef DPTR(uintptr_t)    PTR_uintptr_t;
+
+#ifndef NATIVEAOT
+typedef ArrayDPTR(BYTE)    PTR_BYTE;
 typedef DPTR(PTR_BYTE) PTR_PTR_BYTE;
-typedef DPTR(PTR_uint8_t) PTR_PTR_uint8_t;
 typedef DPTR(PTR_PTR_BYTE) PTR_PTR_PTR_BYTE;
 typedef ArrayDPTR(signed char) PTR_SBYTE;
 typedef ArrayDPTR(const BYTE) PTR_CBYTE;
@@ -2367,7 +2388,6 @@ typedef DPTR(UINT16)  PTR_UINT16;
 typedef DPTR(WORD)    PTR_WORD;
 typedef DPTR(USHORT)  PTR_USHORT;
 typedef DPTR(DWORD)   PTR_DWORD;
-typedef DPTR(uint32_t) PTR_uint32_t;
 typedef DPTR(LONG)    PTR_LONG;
 typedef DPTR(ULONG)   PTR_ULONG;
 typedef DPTR(INT32)   PTR_INT32;
@@ -2376,7 +2396,6 @@ typedef DPTR(ULONG64) PTR_ULONG64;
 typedef DPTR(INT64)   PTR_INT64;
 typedef DPTR(UINT64)  PTR_UINT64;
 typedef DPTR(SIZE_T)  PTR_SIZE_T;
-typedef DPTR(size_t)  PTR_size_t;
 typedef DPTR(TADDR)   PTR_TADDR;
 typedef DPTR(int)     PTR_int;
 typedef DPTR(BOOL)    PTR_BOOL;
@@ -2406,6 +2425,7 @@ typedef DPTR(IMAGE_NT_HEADERS64)    PTR_IMAGE_NT_HEADERS64;
 typedef DPTR(IMAGE_SECTION_HEADER)  PTR_IMAGE_SECTION_HEADER;
 typedef DPTR(IMAGE_EXPORT_DIRECTORY)  PTR_IMAGE_EXPORT_DIRECTORY;
 typedef DPTR(IMAGE_TLS_DIRECTORY)   PTR_IMAGE_TLS_DIRECTORY;
+#endif
 
 #if defined(DACCESS_COMPILE)
 #include <corhdr.h>
@@ -2413,6 +2433,7 @@ typedef DPTR(IMAGE_TLS_DIRECTORY)   PTR_IMAGE_TLS_DIRECTORY;
 #include <xclrdata.h>
 #endif
 
+#ifndef NATIVEAOT
 #if defined(TARGET_X86) && defined(TARGET_UNIX)
 typedef DPTR(struct _UNWIND_INFO)      PTR_UNWIND_INFO;
 #endif
@@ -2427,6 +2448,7 @@ typedef DPTR(union _UNWIND_CODE)       PTR_UNWIND_CODE;
 
 #ifdef TARGET_ARM
 typedef DPTR(T_RUNTIME_FUNCTION) PTR_RUNTIME_FUNCTION;
+#endif
 #endif
 
 //----------------------------------------------------------------------------
@@ -2463,7 +2485,7 @@ typedef DPTR(PTR_PCODE) PTR_PTR_PCODE;
 
 // Helper macro for tracking EnumMemoryRegions progress.
 #if 0
-#define EMEM_OUT(args) DacWarning args
+#define EMEM_OUT(args) DacLogMessage args
 #else
 #define EMEM_OUT(args)
 #endif

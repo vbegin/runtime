@@ -2,16 +2,16 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Principal;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Collections;
 
 namespace System.DirectoryServices.AccountManagement
 {
-    [System.Diagnostics.DebuggerDisplay("Name ( {Name} )")]
+    [System.Diagnostics.DebuggerDisplay("Name = {Name}")]
     public abstract class Principal : IDisposable
     {
         //
@@ -892,7 +892,7 @@ namespace System.DirectoryServices.AccountManagement
             if (_isDeleted)
             {
                 GlobalDebug.WriteLineIf(GlobalDebug.Warn, "Principal", "CheckDisposedOrDeleted: accessing deleted object");
-                throw new InvalidOperationException(SR.PrincipalDeleted);
+                throw new InvalidOperationException(SR.PrincipalAccessedAfterBeingDeleted);
             }
         }
 
@@ -1027,7 +1027,7 @@ namespace System.DirectoryServices.AccountManagement
             // Make sure we're not disposed or deleted.
             CheckDisposedOrDeleted();
 
-            // Check that we actually support this propery in our store
+            // Check that we actually support this property in our store
             //CheckSupportedProperty(name);
 
             if (state == LoadState.NotSet)
@@ -1047,7 +1047,7 @@ namespace System.DirectoryServices.AccountManagement
             // Make sure we're not disposed or deleted.
             CheckDisposedOrDeleted();
 
-            // Check that we actually support this propery in our store
+            // Check that we actually support this property in our store
             //CheckSupportedProperty(name);
 
             // Need to do this now so that newly-set value doesn't get overwritten by later load

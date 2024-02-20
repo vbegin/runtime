@@ -1,10 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-
 using Microsoft.Win32.SafeHandles;
 
 namespace System.DirectoryServices.AccountManagement
@@ -18,7 +17,7 @@ namespace System.DirectoryServices.AccountManagement
         internal SidList(List<byte[]> sidListByteFormat, string target, NetCred credentials)
         {
             GlobalDebug.WriteLineIf(GlobalDebug.Info, "SidList", "SidList: processing {0} ByteFormat SIDs", sidListByteFormat.Count);
-            GlobalDebug.WriteLineIf(GlobalDebug.Info, "SidList", "SidList: Targetting {0} ", target ?? "local store");
+            GlobalDebug.WriteLineIf(GlobalDebug.Info, "SidList", "SidList: Targeting {0} ", target ?? "local store");
 
             // Build the list of SIDs to resolve
             IntPtr hUser = IntPtr.Zero;

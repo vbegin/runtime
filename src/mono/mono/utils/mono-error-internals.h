@@ -9,6 +9,7 @@
 #include <mono/utils/mono-forward.h>
 #include "mono/utils/mono-compiler.h"
 
+MONO_DISABLE_WARNING(4201) // nonstandard extension used: nameless struct/union
 /*Keep in sync with MonoError*/
 typedef union _MonoErrorInternal {
 	// Merge two uint16 into one uint32 so it can be initialized
@@ -43,6 +44,7 @@ typedef union _MonoErrorInternal {
 		//void *padding [3];
 	};
 } MonoErrorInternal;
+MONO_RESTORE_WARNING
 
 /* Invariant: the error strings are allocated in the mempool of the given image */
 struct _MonoErrorBoxed {
@@ -161,7 +163,7 @@ do { 							\
 #define mono_error_assertf_ok(error, fmt, ...) g_assertf (is_ok (error), fmt ", due to %s", __VA_ARGS__, mono_error_get_message (error))
 
 /*
-* Returns a pointer to the error message, wihtout fields, empty string if no message is available.
+* Returns a pointer to the error message, without fields, empty string if no message is available.
 * Caller should NOT release returned pointer, owned by MonoError.
 */
 static inline
@@ -312,6 +314,9 @@ mono_error_set_from_boxed (MonoError *error, const MonoErrorBoxed *from);
 
 const char*
 mono_error_get_exception_name (MonoError *oerror);
+
+const char*
+mono_error_get_exception_name_space (MonoError *oerror);
 
 void
 mono_error_set_specific (MonoError *error, int error_code, const char *missing_method);

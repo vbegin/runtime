@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCWriteNode_XmlReader : ReaderParamTestCase
     {
@@ -29,7 +29,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -55,7 +55,7 @@ namespace System.Xml.Tests
                         CError.WriteLine("Reader positioned on {0}", xr.NodeType.ToString());
                         xr.Dispose();
                         w.Dispose();
-                        Assert.True(false);
+                        Assert.Fail();
                     }
                     w.WriteStartElement("Root");
                     w.WriteNode(xr, false);
@@ -474,7 +474,7 @@ namespace System.Xml.Tests
                 }
             }
             catch (ObjectDisposedException e) { CError.WriteLine(e.Message); return; }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -513,7 +513,7 @@ namespace System.Xml.Tests
                 }
             }
             catch (ObjectDisposedException e) { CError.WriteLine(e.Message); return; }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -554,7 +554,7 @@ namespace System.Xml.Tests
             {
                 CError.WriteLine("Reader positioned on {0}", xr.NodeType);
                 xr.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
             using (XmlWriter w = utils.CreateWriter())
             {
@@ -589,7 +589,7 @@ namespace System.Xml.Tests
             {
                 CError.WriteLine("Reader positioned on {0}", xr.NodeType);
                 xr.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
             using (XmlWriter w = utils.CreateWriter())
             {
@@ -619,7 +619,7 @@ namespace System.Xml.Tests
             {
                 CError.WriteLine("Reader positioned on {0}", xr.NodeType);
                 xr.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
             using (XmlWriter w = utils.CreateWriter())
             {
@@ -648,7 +648,7 @@ namespace System.Xml.Tests
             {
                 CError.WriteLine("Reader positioned on {0}", xr.NodeType);
                 xr.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
             using (XmlWriter w = utils.CreateWriter())
             {
@@ -921,7 +921,7 @@ namespace System.Xml.Tests
                 }
             }
             catch (XmlException e) { CError.WriteLine(e); return; }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]

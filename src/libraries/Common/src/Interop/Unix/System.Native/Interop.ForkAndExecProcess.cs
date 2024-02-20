@@ -27,11 +27,11 @@ internal static partial class Interop
                 {
                     result = ForkAndExecProcess(
                         filename, argvPtr, envpPtr, cwd,
-                        redirectStdin ? 1 : 0, redirectStdout ? 1 : 0, redirectStderr ? 1 :0,
+                        redirectStdin ? 1 : 0, redirectStdout ? 1 : 0, redirectStderr ? 1 : 0,
                         setUser ? 1 : 0, userId, groupId, pGroups, groups?.Length ?? 0,
                         out lpChildPid, out stdinFd, out stdoutFd, out stderrFd);
                 }
-                return result == 0 ? 0 : Marshal.GetLastWin32Error();
+                return result == 0 ? 0 : Marshal.GetLastPInvokeError();
             }
             finally
             {

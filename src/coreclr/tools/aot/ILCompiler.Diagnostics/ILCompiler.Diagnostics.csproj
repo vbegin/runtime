@@ -6,7 +6,7 @@
     <IsDotNetFrameworkProductAssembly>true</IsDotNetFrameworkProductAssembly>
     <TargetFramework>$(NetCoreAppToolCurrent)</TargetFramework>
     <DefineConstants>READYTORUN;$(DefineConstants)</DefineConstants>
-    <Platforms>x64;x86;arm;arm64</Platforms>
+    <Platforms>x64;x86;arm;arm64;</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 
@@ -16,6 +16,7 @@
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <Configurations>Debug;Release;Checked</Configurations>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RunAnalyzers>false</RunAnalyzers>
   </PropertyGroup>
 
   <ItemGroup>

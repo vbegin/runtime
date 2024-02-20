@@ -256,8 +256,10 @@ namespace System.Security.Cryptography
                 ht.Add("2.5.29.19", typeof(X509Certificates.X509BasicConstraintsExtension));
                 ht.Add("2.5.29.14", typeof(X509Certificates.X509SubjectKeyIdentifierExtension));
                 ht.Add("2.5.29.15", typeof(X509Certificates.X509KeyUsageExtension));
+                ht.Add("2.5.29.35", typeof(X509Certificates.X509AuthorityKeyIdentifierExtension));
                 ht.Add("2.5.29.37", typeof(X509Certificates.X509EnhancedKeyUsageExtension));
                 ht.Add(Oids.AuthorityInformationAccess, typeof(X509Certificates.X509AuthorityInformationAccessExtension));
+                ht.Add(Oids.SubjectAltName, typeof(X509Certificates.X509SubjectAlternativeNameExtension));
 
                 // X509Chain class can be overridden to use a different chain engine.
                 ht.Add("X509Chain", typeof(X509Certificates.X509Chain));
@@ -315,10 +317,7 @@ namespace System.Security.Cryptography
             // throw an exception if we find an invalid name partway through the list.
             foreach (string name in algorithmNames)
             {
-                if (string.IsNullOrEmpty(name))
-                {
-                    throw new ArgumentException(SR.Cryptography_AddNullOrEmptyName);
-                }
+                ArgumentException.ThrowIfNullOrEmpty(name, nameof(names));
             }
 
             // Everything looks valid, so we're safe to add the name mappings.
@@ -371,20 +370,6 @@ namespace System.Security.Cryptography
                 case "HMACSHA512":
                 case "System.Security.Cryptography.HMACSHA512":
                     return new HMACSHA512();
-
-#pragma warning disable SYSLIB0021 // Obsolete: derived cryptographic types
-                case "AES":
-                case "System.Security.Cryptography.AesCryptoServiceProvider":
-                    return new AesCryptoServiceProvider();
-                case "AesManaged":
-                case "System.Security.Cryptography.AesManaged":
-                    return new AesManaged();
-                case "Rijndael":
-                case "System.Security.Cryptography.Rijndael":
-#pragma warning disable SYSLIB0022 // Rijndael types are obsolete
-                    return new RijndaelManaged();
-#pragma warning restore SYSLIB0022
-#pragma warning restore SYSLIB0021
             }
 
             return null;
@@ -524,10 +509,7 @@ namespace System.Security.Cryptography
             // exception if an invalid name is found further down the array.
             foreach (string name in oidNames)
             {
-                if (string.IsNullOrEmpty(name))
-                {
-                    throw new ArgumentException(SR.Cryptography_AddNullOrEmptyName);
-                }
+                ArgumentException.ThrowIfNullOrEmpty(name, nameof(names));
             }
 
             // Everything is valid, so we're good to lock the hash table and add the application mappings

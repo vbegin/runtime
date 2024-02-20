@@ -11,6 +11,7 @@ namespace System.Runtime.InteropServices.JavaScript
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <param name="value">The value to be marshaled.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void ToManaged(out JSObject? value)
         {
@@ -19,29 +20,42 @@ namespace System.Runtime.InteropServices.JavaScript
                 value = null;
                 return;
             }
-            value = JavaScriptExports.CreateCSOwnedProxy(slot.JSHandle);
+            var ctx = ToManagedContext;
+            value = ctx.CreateCSOwnedProxy(slot.JSHandle);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <param name="value">The value to be marshaled.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ToJS(JSObject? value)
         {
             if (value == null)
             {
                 slot.Type = MarshalerType.None;
+                // Note: when null JSObject is passed as argument, it can't be used to capture the target thread in JSProxyContext.CapturedInstance
+                // in case there is no other argument to capture it from, the call will be dispatched according to JSProxyContext.Default
             }
             else
             {
-                if (value.IsDisposed)
+                value.AssertNotDisposed();
+#if FEATURE_WASM_MANAGED_THREADS
+                var ctx = value.ProxyContext;
+
+                if (JSProxyContext.CapturingState == JSProxyContext.JSImportOperationState.JSImportParams)
                 {
-                    throw new ObjectDisposedException(nameof(value));
+                    JSProxyContext.CaptureContextFromParameter(ctx);
+                    slot.ContextHandle = ctx.ContextHandle;
                 }
+                else if (slot.ContextHandle != ctx.ContextHandle)
+                {
+                    Environment.FailFast($"ContextHandle mismatch, ManagedThreadId: {Environment.CurrentManagedThreadId}. {Environment.NewLine} {Environment.StackTrace}");
+                }
+#endif
                 slot.Type = MarshalerType.JSObject;
                 slot.JSHandle = value.JSHandle;
-                if (slot.JSHandle == IntPtr.Zero) throw new ObjectDisposedException(nameof(value));
             }
         }
 
@@ -49,6 +63,7 @@ namespace System.Runtime.InteropServices.JavaScript
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <param name="value">The value to be marshaled.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void ToManaged(out JSObject?[]? value)
         {
@@ -74,6 +89,7 @@ namespace System.Runtime.InteropServices.JavaScript
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <param name="value">The value to be marshaled.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void ToJS(JSObject?[] value)
         {

@@ -4,10 +4,11 @@
 using System.Collections;
 using System.IO;
 using System.Xml.Schema;
+using System.Xml.Tests;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaValidatorApiTests
 {
     // ===================== ValidateAttribute =====================
 
@@ -41,7 +42,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -61,7 +62,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -193,7 +194,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 
@@ -221,7 +222,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -449,7 +450,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

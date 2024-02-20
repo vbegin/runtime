@@ -5,10 +5,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.IO
 {
-    /* This class is used by for reading from the stdin.
+    /* This class is used by for reading from the stdin when it is a terminal.
      * It is designed to read stdin in raw mode for interpreting
      * key press events and maintain its own buffer for the same.
      * which is then used for all the Read operations
@@ -21,7 +22,9 @@ namespace System.IO
         private readonly StringBuilder _readLineSB; // SB that holds readLine output.  This is a field simply to enable reuse; it's only used in ReadLine.
         private readonly Stack<ConsoleKeyInfo> _tmpKeys = new Stack<ConsoleKeyInfo>(); // temporary working stack; should be empty outside of ReadLine
         private readonly Stack<ConsoleKeyInfo> _availableKeys = new Stack<ConsoleKeyInfo>(); // a queue of already processed key infos available for reading
+        private readonly Decoder _decoder;
         private readonly Encoding _encoding;
+        private readonly Encoder _echoEncoder;
         private Encoder? _bufferReadEncoder;
 
         private char[] _unprocessedBufferToBeRead; // Buffer that might have already been read from stdin but not yet processed.
@@ -29,13 +32,17 @@ namespace System.IO
         private int _startIndex; // First unprocessed index in the buffer;
         private int _endIndex; // Index after last unprocessed index in the buffer;
 
-        internal StdInReader(Encoding encoding, int bufferSize)
+        internal StdInReader(Encoding encoding)
         {
+            Debug.Assert(!Console.IsInputRedirected); // stdin is a terminal.
+
             _encoding = encoding;
             _unprocessedBufferToBeRead = new char[encoding.GetMaxCharCount(BytesToBeRead)];
             _startIndex = 0;
             _endIndex = 0;
             _readLineSB = new StringBuilder();
+            _echoEncoder = _encoding.GetEncoder();
+            _decoder = _encoding.GetDecoder();
         }
 
         /// <summary> Checks whether the unprocessed buffer is empty. </summary>
@@ -55,7 +62,7 @@ namespace System.IO
             Span<char> chars = (uint)maxCharsCount <= MaxStackAllocation ?
                 stackalloc char[MaxStackAllocation] :
                 new char[maxCharsCount];
-            int charLen = _encoding.GetChars(buffer, chars);
+            int charLen = _decoder.GetChars(buffer, chars, flush: false);
             chars = chars.Slice(0, charLen);
 
             // Ensure our buffer is large enough to hold all of the data
@@ -148,7 +155,7 @@ namespace System.IO
             // or we need to read a new line from stdin.
             bool freshKeys = _availableKeys.Count == 0;
 
-           // Don't carry over chars from previous ReadLine call.
+            // Don't carry over chars from previous ReadLine call.
             _readLineSB.Clear();
 
             Interop.Sys.InitializeConsoleBeforeRead();
@@ -173,7 +180,7 @@ namespace System.IO
                     {
                         if (freshKeys)
                         {
-                            Console.WriteLine();
+                            EchoToTerminal('\n');
                         }
                         return true;
                     }
@@ -205,22 +212,22 @@ namespace System.IO
                             if (ConsolePal.TryGetCursorPosition(out int left, out int top, reinitializeForRead: true) &&
                                 left == 0 && top > 0)
                             {
-                                s_clearToEol ??= ConsolePal.TerminalFormatStrings.Instance.ClrEol ?? string.Empty;
+                                s_clearToEol ??= ConsolePal.TerminalFormatStringsInstance.ClrEol ?? string.Empty;
 
                                 // Move to end of previous line
-                                ConsolePal.SetCursorPosition(ConsolePal.WindowWidth - 1, top - 1);
+                                ConsolePal.SetTerminalCursorPosition(ConsolePal.WindowWidth - 1, top - 1);
                                 // Clear from cursor to end of the line
-                                ConsolePal.WriteStdoutAnsiString(s_clearToEol, mayChangeCursorPosition: false);
+                                ConsolePal.WriteTerminalAnsiString(s_clearToEol, mayChangeCursorPosition: false);
                             }
                             else
                             {
                                 if (s_moveLeftString == null)
                                 {
-                                    string? moveLeft = ConsolePal.TerminalFormatStrings.Instance.CursorLeft;
+                                    string? moveLeft = ConsolePal.TerminalFormatStringsInstance.CursorLeft;
                                     s_moveLeftString = !string.IsNullOrEmpty(moveLeft) ? moveLeft + " " + moveLeft : string.Empty;
                                 }
 
-                                Console.Write(s_moveLeftString);
+                                ConsolePal.WriteTerminalAnsiString(s_moveLeftString);
                             }
                         }
                     }
@@ -232,7 +239,7 @@ namespace System.IO
                         }
                         if (freshKeys)
                         {
-                            Console.Write(' ');
+                            EchoToTerminal(' ');
                         }
                     }
                     else if (keyInfo.Key == ConsoleKey.Clear)
@@ -240,7 +247,7 @@ namespace System.IO
                         _readLineSB.Clear();
                         if (freshKeys)
                         {
-                            Console.Clear();
+                            ConsolePal.WriteTerminalAnsiString(ConsolePal.TerminalFormatStringsInstance.Clear);
                         }
                     }
                     else if (keyInfo.KeyChar != '\0')
@@ -251,7 +258,7 @@ namespace System.IO
                         }
                         if (freshKeys)
                         {
-                            Console.Write(keyInfo.KeyChar);
+                            EchoToTerminal(keyInfo.KeyChar);
                         }
                     }
                 }
@@ -301,125 +308,6 @@ namespace System.IO
                 (c == ConsolePal.s_veolCharacter || c == ConsolePal.s_veol2Character || c == ConsolePal.s_veofCharacter);
         }
 
-        internal static ConsoleKey GetKeyFromCharValue(char x, out bool isShift, out bool isCtrl)
-        {
-            isShift = false;
-            isCtrl = false;
-
-            switch (x)
-            {
-                case '\b':
-                    return ConsoleKey.Backspace;
-
-                case '\t':
-                    return ConsoleKey.Tab;
-
-                case '\n':
-                case '\r':
-                    return ConsoleKey.Enter;
-
-                case (char)(0x1B):
-                    return ConsoleKey.Escape;
-
-                case '*':
-                    return ConsoleKey.Multiply;
-
-                case '+':
-                    return ConsoleKey.Add;
-
-                case '-':
-                    return ConsoleKey.Subtract;
-
-                case '/':
-                    return ConsoleKey.Divide;
-
-                case (char)(0x7F):
-                    return ConsoleKey.Delete;
-
-                case ' ':
-                    return ConsoleKey.Spacebar;
-
-                default:
-                    // 1. Ctrl A to Ctrl Z.
-                    if (char.IsBetween(x, (char)1, (char)26))
-                    {
-                        isCtrl = true;
-                        return ConsoleKey.A + x - 1;
-                    }
-
-                    // 2. Numbers from 0 to 9.
-                    if (char.IsAsciiDigit(x))
-                    {
-                        return ConsoleKey.D0 + x - '0';
-                    }
-
-                    //3. A to Z
-                    if (char.IsAsciiLetterUpper(x))
-                    {
-                        isShift = true;
-                        return ConsoleKey.A + (x - 'A');
-                    }
-
-                    // 4. a to z.
-                    if (char.IsAsciiLetterLower(x))
-                    {
-                        return ConsoleKey.A + (x - 'a');
-                    }
-
-                    break;
-            }
-
-            return default(ConsoleKey);
-        }
-
-        internal bool MapBufferToConsoleKey(out ConsoleKey key, out char ch, out bool isShift, out bool isAlt, out bool isCtrl)
-        {
-            Debug.Assert(!IsUnprocessedBufferEmpty());
-
-            // Try to get the special key match from the TermInfo static information.
-            ConsoleKeyInfo keyInfo;
-            int keyLength;
-            if (ConsolePal.TryGetSpecialConsoleKey(_unprocessedBufferToBeRead, _startIndex, _endIndex, out keyInfo, out keyLength))
-            {
-                key = keyInfo.Key;
-                isShift = (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0;
-                isAlt = (keyInfo.Modifiers & ConsoleModifiers.Alt) != 0;
-                isCtrl = (keyInfo.Modifiers & ConsoleModifiers.Control) != 0;
-
-                ch = ((keyLength == 1) ? _unprocessedBufferToBeRead[_startIndex] : '\0'); // ignore keyInfo.KeyChar
-                _startIndex += keyLength;
-                return true;
-            }
-
-            // Check if we can match Esc + combination and guess if alt was pressed.
-            if (_unprocessedBufferToBeRead[_startIndex] == (char)0x1B && // Alt is send as an escape character
-                _endIndex - _startIndex >= 2) // We have at least two characters to read
-            {
-                _startIndex++;
-                if (MapBufferToConsoleKey(out key, out ch, out isShift, out _, out isCtrl))
-                {
-                    isAlt = true;
-                    return true;
-                }
-                else
-                {
-                    // We could not find a matching key here so, Alt+ combination assumption is in-correct.
-                    // The current key needs to be marked as Esc key.
-                    // Also, we do not increment _startIndex as we already did it.
-                    key = ConsoleKey.Escape;
-                    ch = (char)0x1B;
-                    isAlt = false;
-                    return true;
-                }
-            }
-
-            // Try reading the first char in the buffer and interpret it as a key.
-            ch = _unprocessedBufferToBeRead[_startIndex++];
-            key = GetKeyFromCharValue(ch, out isShift, out isCtrl);
-            isAlt = false;
-            return key != default(ConsoleKey);
-        }
-
         /// <summary>
         /// Try to intercept the key pressed.
         ///
@@ -430,16 +318,21 @@ namespace System.IO
         /// not work, we simply return the char associated with that
         /// key with ConsoleKey set to default value.
         /// </summary>
-        public ConsoleKeyInfo ReadKey(out bool previouslyProcessed)
+        public ConsoleKeyInfo ReadKey(bool intercept)
         {
             if (_availableKeys.Count > 0)
             {
-                previouslyProcessed = true;
                 return _availableKeys.Pop();
             }
 
-            previouslyProcessed = false;
-            return ReadKey();
+            ConsoleKeyInfo keyInfo = ReadKey();
+
+            if (!intercept && keyInfo.KeyChar != '\0')
+            {
+                EchoToTerminal(keyInfo.KeyChar);
+            }
+
+            return keyInfo;
         }
 
         private unsafe ConsoleKeyInfo ReadKey()
@@ -449,10 +342,6 @@ namespace System.IO
             Interop.Sys.InitializeConsoleBeforeRead();
             try
             {
-                ConsoleKey key;
-                char ch;
-                bool isAlt, isCtrl, isShift;
-
                 if (IsUnprocessedBufferEmpty())
                 {
                     // Read in bytes
@@ -476,15 +365,7 @@ namespace System.IO
                     }
                 }
 
-                MapBufferToConsoleKey(out key, out ch, out isShift, out isAlt, out isCtrl);
-
-                // Replace the '\n' char for Enter by '\r' to match Windows behavior.
-                if (key == ConsoleKey.Enter && ch == '\n')
-                {
-                    ch = '\r';
-                }
-
-                return new ConsoleKeyInfo(ch, key, isShift, isAlt, isCtrl);
+                return KeyParser.Parse(_unprocessedBufferToBeRead, ConsolePal.TerminalFormatStringsInstance, ConsolePal.s_posixDisableValue, ConsolePal.s_veraseCharacter, ref _startIndex, _endIndex);
             }
             finally
             {
@@ -494,5 +375,26 @@ namespace System.IO
 
         /// <summary>Gets whether there's input waiting on stdin.</summary>
         internal static bool StdinReady => Interop.Sys.StdinReady();
+
+        private void EchoToTerminal(char c)
+        {
+            Span<byte> bytes = stackalloc byte[32]; // 32 bytes seems ample
+            int bytesWritten = 1;
+            if (Ascii.IsValid(c))
+            {
+                bytes[0] = (byte)c;
+            }
+            else
+            {
+                var chars = new ReadOnlySpan<char>(in c);
+                bytesWritten = _echoEncoder.GetBytes(chars, bytes, flush: false);
+                if (bytesWritten == 0)
+                {
+                    return;
+                }
+            }
+
+            ConsolePal.WriteToTerminal(bytes.Slice(0, bytesWritten));
+        }
     }
 }

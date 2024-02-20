@@ -243,7 +243,7 @@ static LONG CALLBACK seh_vectored_exception_handler(EXCEPTION_POINTERS* ep)
 	return res;
 }
 
-void win32_seh_init()
+void win32_seh_init(void)
 {
 	/* install restore stack helper */
 	if (!restore_stack)
@@ -253,7 +253,7 @@ void win32_seh_init()
 	mono_win_vectored_exception_handle = AddVectoredExceptionHandler (1, seh_vectored_exception_handler);
 }
 
-void win32_seh_cleanup()
+void win32_seh_cleanup(void)
 {
 	if (mono_old_win_toplevel_exception_filter)
 		SetUnhandledExceptionFilter(mono_old_win_toplevel_exception_filter);
@@ -352,7 +352,7 @@ mono_arch_get_restore_context (MonoTrampInfo **info, gboolean aot)
 	x86_ret (code);
 
 	if (info)
-		*info = mono_tramp_info_create ("restore_context", start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create ("restore_context", start, GPTRDIFF_TO_UINT32 (code - start), ji, unwind_ops);
 	else {
 		GSList *l;
 
@@ -363,7 +363,7 @@ mono_arch_get_restore_context (MonoTrampInfo **info, gboolean aot)
 
 	g_assertf ((code - start) <= size, "%d %d", (int)(code - start), size);
 
-	mono_arch_flush_icache (start, code - start);
+	mono_arch_flush_icache (start, GPTRDIFF_TO_INT (code - start));
 	MONO_PROFILER_RAISE (jit_code_buffer, (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL));
 
 	return start;
@@ -432,7 +432,7 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 	x86_ret (code);
 
 	if (info)
-		*info = mono_tramp_info_create ("call_filter", start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create ("call_filter", start, GPTRDIFF_TO_UINT32 (code - start), ji, unwind_ops);
 	else {
 		GSList *l;
 
@@ -441,7 +441,7 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 		g_slist_free (unwind_ops);
 	}
 
-	mono_arch_flush_icache (start, code - start);
+	mono_arch_flush_icache (start, GPTRDIFF_TO_INT (code - start));
 	MONO_PROFILER_RAISE (jit_code_buffer, (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL));
 
 	g_assertf ((code - start) <= kMaxCodeSize, "%d %d", (int)(code - start), kMaxCodeSize);
@@ -676,7 +676,7 @@ get_throw_trampoline (const char *name, gboolean rethrow, gboolean llvm, gboolea
 	g_assertf ((code - start) <= kMaxCodeSize, "%d %d", (int)(code - start), kMaxCodeSize);
 
 	if (info)
-		*info = mono_tramp_info_create (name, start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create (name, start, GPTRDIFF_TO_UINT32 (code - start), ji, unwind_ops);
 	else {
 		GSList *l;
 
@@ -685,7 +685,7 @@ get_throw_trampoline (const char *name, gboolean rethrow, gboolean llvm, gboolea
 		g_slist_free (unwind_ops);
 	}
 
-	mono_arch_flush_icache (start, code - start);
+	mono_arch_flush_icache (start, GPTRDIFF_TO_INT (code - start));
 	MONO_PROFILER_RAISE (jit_code_buffer, (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL));
 
 	return start;
@@ -725,7 +725,7 @@ mono_arch_get_rethrow_preserve_exception (MonoTrampInfo **info, gboolean aot)
  * \returns a function pointer which can be used to raise
  * corlib exceptions. The returned function has the following
  * signature: void (*func) (guint32 ex_token, guint32 offset);
- * Here, offset is the offset which needs to be substracted from the caller IP
+ * Here, offset is the offset which needs to be subtracted from the caller IP
  * to get the IP of the throw. Passing the offset has the advantage that it
  * needs no relocations in the caller.
  */
@@ -935,7 +935,11 @@ handle_signal_exception (gpointer obj)
 
 	memcpy (&ctx, &jit_tls->ex_ctx, sizeof (MonoContext));
 
+	MONO_ENTER_GC_UNSAFE_UNBALANCED;
+
 	mono_handle_exception (&ctx, (MonoObject*)obj);
+
+	MONO_EXIT_GC_UNSAFE_UNBALANCED;
 
 	mono_restore_context (&ctx);
 }
@@ -978,7 +982,7 @@ mono_x86_get_signal_exception_trampoline (MonoTrampInfo **info, gboolean aot)
 	g_assertf ((code - start) <= size, "%d %d", (int)(code - start), size);
 
 	if (info)
-		*info = mono_tramp_info_create ("x86_signal_exception_trampoline", start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create ("x86_signal_exception_trampoline", start, GPTRDIFF_TO_UINT32 (code - start), ji, unwind_ops);
 	else {
 		GSList *l;
 
@@ -989,7 +993,7 @@ mono_x86_get_signal_exception_trampoline (MonoTrampInfo **info, gboolean aot)
 
 	g_assertf ((code - start) <= size, "%d %d", (int)(code - start), size);
 
-	mono_arch_flush_icache (start, code - start);
+	mono_arch_flush_icache (start, GPTRDIFF_TO_INT (code - start));
 	MONO_PROFILER_RAISE (jit_code_buffer, (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL));
 
 	return start;

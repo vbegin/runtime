@@ -1,16 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
-using System.Security.Cryptography.X509Certificates;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using System.Collections;
-using System.Text;
-using System.Diagnostics;
-using System.Security.Authentication;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
 
 namespace System.DirectoryServices.Protocols
 {
@@ -553,24 +553,21 @@ namespace System.DirectoryServices.Protocols
 
             try
             {
-                IntPtr tempPtr = IntPtr.Zero;
-
                 // build server control
                 managedServerControls = LdapConnection.BuildControlArray(controls, true);
                 int structSize = Marshal.SizeOf(typeof(LdapControl));
                 if (managedServerControls != null)
                 {
                     serverControlArray = Utility.AllocHGlobalIntPtrArray(managedServerControls.Length + 1);
+                    void** pServerControlArray = (void**)serverControlArray;
                     for (int i = 0; i < managedServerControls.Length; i++)
                     {
                         IntPtr controlPtr = Marshal.AllocHGlobal(structSize);
                         Marshal.StructureToPtr(managedServerControls[i], controlPtr, false);
-                        tempPtr = (IntPtr)((long)serverControlArray + IntPtr.Size * i);
-                        Marshal.WriteIntPtr(tempPtr, controlPtr);
+                        pServerControlArray[i] = (void*)controlPtr;
                     }
 
-                    tempPtr = (IntPtr)((long)serverControlArray + IntPtr.Size * managedServerControls.Length);
-                    Marshal.WriteIntPtr(tempPtr, IntPtr.Zero);
+                    pServerControlArray[managedServerControls.Length] = null;
                 }
 
                 // Build client control.
@@ -578,16 +575,15 @@ namespace System.DirectoryServices.Protocols
                 if (managedClientControls != null)
                 {
                     clientControlArray = Utility.AllocHGlobalIntPtrArray(managedClientControls.Length + 1);
+                    void** pClientControlArray = (void**)clientControlArray;
                     for (int i = 0; i < managedClientControls.Length; i++)
                     {
                         IntPtr controlPtr = Marshal.AllocHGlobal(structSize);
                         Marshal.StructureToPtr(managedClientControls[i], controlPtr, false);
-                        tempPtr = (IntPtr)((long)clientControlArray + IntPtr.Size * i);
-                        Marshal.WriteIntPtr(tempPtr, controlPtr);
+                        pClientControlArray[i] = (void*)controlPtr;
                     }
 
-                    tempPtr = (IntPtr)((long)clientControlArray + IntPtr.Size * managedClientControls.Length);
-                    Marshal.WriteIntPtr(tempPtr, IntPtr.Zero);
+                    pClientControlArray[managedClientControls.Length] = null;
                 }
 
                 int error = LdapPal.StartTls(_connection._ldapHandle, ref serverError, ref ldapResult, serverControlArray, clientControlArray);

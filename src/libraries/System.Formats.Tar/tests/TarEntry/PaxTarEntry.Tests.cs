@@ -1,8 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.IO;
-using System.Linq;
+using System.Collections.Generic;
 using Xunit;
 
 namespace System.Formats.Tar.Tests
@@ -19,21 +18,45 @@ namespace System.Formats.Tar.Tests
         [Fact]
         public void Constructor_UnsupportedEntryTypes()
         {
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry((TarEntryType)byte.MaxValue, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry((TarEntryType)byte.MaxValue, InitialEntryName));
 
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.ContiguousFile, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.DirectoryList, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.LongLink, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.LongPath, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.MultiVolume, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.V7RegularFile, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.RenamedOrSymlinked, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.SparseFile, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.TapeVolume, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.ContiguousFile, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.DirectoryList, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.LongLink, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.LongPath, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.MultiVolume, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.V7RegularFile, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.RenamedOrSymlinked, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.SparseFile, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.TapeVolume, InitialEntryName));
 
             // The user should not be creating these entries manually in pax
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.ExtendedAttributes, InitialEntryName));
-            Assert.Throws<InvalidOperationException>(() => new PaxTarEntry(TarEntryType.GlobalExtendedAttributes, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.ExtendedAttributes, InitialEntryName));
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.GlobalExtendedAttributes, InitialEntryName));
+        }
+
+
+        [Theory]
+        [InlineData("\n", "value")]
+        [InlineData("=", "value")]
+        [InlineData("key", "\n")]
+        [InlineData("\nkey", "value")]
+        [InlineData("k\ney", "value")]
+        [InlineData("key\n", "value")]
+        [InlineData("=key", "value")]
+        [InlineData("ke=y", "value")]
+        [InlineData("key=", "value")]
+        [InlineData("key", "\nvalue")]
+        [InlineData("key", "val\nue")]
+        [InlineData("key", "value\n")]
+        [InlineData("key=", "value\n")]
+        [InlineData("key\n", "value\n")]
+        public void Disallowed_ExtendedAttributes_SeparatorCharacters(string key, string value)
+        {
+            Dictionary<string, string> extendedAttribute = new Dictionary<string, string>() { { key, value } };
+
+            Assert.Throws<ArgumentException>(() => new PaxTarEntry(TarEntryType.RegularFile, InitialEntryName, extendedAttribute));
+            Assert.Throws<ArgumentException>(() => new PaxGlobalExtendedAttributesTarEntry(extendedAttribute));
         }
 
         [Fact]

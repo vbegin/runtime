@@ -2,26 +2,21 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace System.Text.RegularExpressions
 {
     /// <summary>A <see cref="RegexRunnerFactory"/> for creating <see cref="RegexInterpreter"/>s.</summary>
-    internal sealed class RegexInterpreterFactory : RegexRunnerFactory
+    internal sealed class RegexInterpreterFactory(RegexTree tree) : RegexRunnerFactory
     {
-        private readonly RegexInterpreterCode _code;
-        private readonly CultureInfo? _culture;
-
-        public RegexInterpreterFactory(RegexTree tree)
-        {
-            // We use the CultureInfo field from the tree's culture which will only be set to an actual culture if the
-            // tree contains IgnoreCase backreferences. If the tree doesn't have IgnoreCase backreferences, then we keep _culture as null.
-            _culture = tree.Culture;
-            // Generate and store the RegexInterpretedCode for the RegexTree and the specified culture
-            _code = RegexWriter.Write(tree);
-        }
+        /// <summary>The RegexInterpretedCode for the RegexTree and the specified culture.</summary>
+        private readonly RegexInterpreterCode _code = RegexWriter.Write(tree);
+        /// <summary>
+        /// CultureInfo field from the tree's culture which will only be set to an actual culture if the
+        /// tree contains IgnoreCase backreferences. If the tree doesn't have IgnoreCase backreferences, then we keep _culture as null.
+        /// </summary>
+        private readonly CultureInfo? _culture = tree.Culture;
 
         protected internal override RegexRunner CreateInstance() =>
             // Create a new interpreter instance.
@@ -339,31 +334,41 @@ namespace System.Text.RegularExpressions
             Debug.Assert(runstack is not null);
             Debug.Assert(runcrawl is not null);
 
-            // Configure the additional value to "bump" the position along each time we loop around
-            // to call TryFindNextStartingPosition again, as well as the stopping position for the loop.  We generally
-            // bump by 1 and stop at textend, but if we're examining right-to-left, we instead bump
-            // by -1 and stop at textbeg.
-            int bump = 1, stoppos = text.Length;
             if (runregex.RightToLeft)
             {
-                bump = -1;
-                stoppos = 0;
-            }
-
-            while (_code.FindOptimizations.TryFindNextStartingPosition(text, ref runtextpos, runtextstart))
-            {
-                CheckTimeout();
-
-                if (TryMatchAtCurrentPosition(text) || runtextpos == stoppos)
+                while (_code.FindOptimizations.TryFindNextStartingPositionRightToLeft(text, ref runtextpos, runtextstart))
                 {
-                    return;
-                }
+                    CheckTimeout();
 
-                // Reset state for another iteration.
-                runtrackpos = runtrack.Length;
-                runstackpos = runstack.Length;
-                runcrawlpos = runcrawl.Length;
-                runtextpos += bump;
+                    if (TryMatchAtCurrentPosition(text) || runtextpos == 0)
+                    {
+                        return;
+                    }
+
+                    // Reset state for another iteration.
+                    runtrackpos = runtrack.Length;
+                    runstackpos = runstack.Length;
+                    runcrawlpos = runcrawl.Length;
+                    runtextpos--;
+                }
+            }
+            else
+            {
+                while (_code.FindOptimizations.TryFindNextStartingPositionLeftToRight(text, ref runtextpos, runtextstart))
+                {
+                    CheckTimeout();
+
+                    if (TryMatchAtCurrentPosition(text) || runtextpos == text.Length)
+                    {
+                        return;
+                    }
+
+                    // Reset state for another iteration.
+                    runtrackpos = runtrack.Length;
+                    runstackpos = runstack.Length;
+                    runcrawlpos = runcrawl.Length;
+                    runtextpos++;
+                }
             }
         }
 

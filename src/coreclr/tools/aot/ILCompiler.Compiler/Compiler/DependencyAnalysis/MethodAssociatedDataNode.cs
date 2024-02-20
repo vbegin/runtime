@@ -6,7 +6,6 @@ using System.Diagnostics;
 
 using Internal.Text;
 using Internal.TypeSystem;
-using Internal.TypeSystem.Interop;
 
 namespace ILCompiler.DependencyAnalysis
 {
@@ -35,7 +34,7 @@ namespace ILCompiler.DependencyAnalysis
 
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
 
-        public override ObjectNodeSection Section => ObjectNodeSection.ReadOnlyDataSection;
+        public override ObjectNodeSection GetSection(NodeFactory factory) => ObjectNodeSection.ReadOnlyDataSection;
         public override bool StaticDependenciesAreComputed => true;
         public int Offset => 0;
         public override bool IsShareable => _methodNode.Method is InstantiatedMethod || EETypeNode.IsTypeNodeShareable(_methodNode.Method.OwningType);
@@ -52,7 +51,7 @@ namespace ILCompiler.DependencyAnalysis
             sb.Append("_associatedData_").Append(nameMangler.GetMangledMethodName(_methodNode.Method));
         }
 
-        public static bool MethodHasAssociatedData(NodeFactory factory, IMethodNode methodNode)
+        public static bool MethodHasAssociatedData(IMethodNode methodNode)
         {
             // Instantiating unboxing stubs. We need to store their non-unboxing target pointer (looked up by runtime)
             ISpecialUnboxThunkNode unboxThunk = methodNode as ISpecialUnboxThunkNode;
@@ -64,7 +63,7 @@ namespace ILCompiler.DependencyAnalysis
 
         public override ObjectData GetData(NodeFactory factory, bool relocsOnly)
         {
-            Debug.Assert(MethodHasAssociatedData(factory, _methodNode));
+            Debug.Assert(MethodHasAssociatedData(_methodNode));
 
             ObjectDataBuilder objData = new ObjectDataBuilder(factory, relocsOnly);
             objData.RequireInitialAlignment(1);

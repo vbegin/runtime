@@ -316,6 +316,50 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [Fact]
+        public async Task ReadAsStreamShouldRewindOffset()
+        {
+            using (MemoryStream textMemoryStream = new MemoryStream(Encoding.UTF8.GetBytes("Hello World")))
+            using (StreamContent streamContent = new StreamContent(textMemoryStream))
+            {
+                using (MemoryStream copyToDestinationMemoryStream = new MemoryStream())
+                {
+                    await streamContent.CopyToAsync(copyToDestinationMemoryStream);
+                    using (StreamReader streamReader = new StreamReader(copyToDestinationMemoryStream))
+                    {
+                        streamReader.ReadToEnd();
+
+                        using (Stream resultStream = streamContent.ReadAsStream())
+                        {
+                            Assert.Equal(0, resultStream.Position);
+                        }
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ReadAsStreamAsyncShouldRewindOffset()
+        {
+            using (MemoryStream textMemoryStream = new MemoryStream(Encoding.UTF8.GetBytes("Hello World")))
+            using (StreamContent streamContent = new StreamContent(textMemoryStream))
+            {
+                using (MemoryStream copyToDestinationMemoryStream = new MemoryStream())
+                {
+                    await streamContent.CopyToAsync(copyToDestinationMemoryStream);
+                    using (StreamReader streamReader = new StreamReader(copyToDestinationMemoryStream))
+                    {
+                        streamReader.ReadToEnd();
+
+                        using (Stream resultStream = await streamContent.ReadAsStreamAsync())
+                        {
+                            Assert.Equal(0, resultStream.Position);
+                        }
+                    }
+                }
+            }
+        }
+
+        [Fact]
         public async Task LoadIntoBufferAsync_BufferSizeSmallerThanContentSizeWithCalculatedContentLength_ThrowsHttpRequestException()
         {
             var content = new MockContent(MockOptions.CanCalculateLength);
@@ -606,7 +650,7 @@ namespace System.Net.Http.Functional.Tests
 
             // Note that we don't throw when users access the Headers property. This is useful e.g. to be able to
             // read the headers of a content, even though the content is already disposed. Note that the .NET guidelines
-            // only require members to throw ObjectDisposedExcpetion for members "that cannot be used after the object
+            // only require members to throw ObjectDisposedException for members "that cannot be used after the object
             // has been disposed of".
             _output.WriteLine(content.Headers.ToString());
         }
@@ -639,6 +683,7 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/86317", typeof(PlatformDetection), nameof(PlatformDetection.IsNodeJS))]
         public async Task ReadAsStringAsync_Unbuffered_CanBeCanceled_AlreadyCanceledCts()
         {
             await LoopbackServer.CreateClientAndServerAsync(
@@ -733,6 +778,7 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/86317", typeof(PlatformDetection), nameof(PlatformDetection.IsNodeJS))]
         public async Task ReadAsByteArrayAsync_Unbuffered_CanBeCanceled_AlreadyCanceledCts()
         {
             await LoopbackServer.CreateClientAndServerAsync(

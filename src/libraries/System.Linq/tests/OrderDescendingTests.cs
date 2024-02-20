@@ -104,6 +104,48 @@ namespace System.Linq.Tests
         }
 
         [Fact]
+        public void OrderedDescendingToArray()
+        {
+            var source = new[]
+            {
+                5, 9, 6, 7, 8, 5, 20
+            };
+            var expected = new[]
+            {
+                20, 9, 8, 7, 6, 5, 5
+            };
+
+            Assert.Equal(expected, source.OrderDescending().ToArray());
+        }
+
+        [Fact]
+        public void EmptyOrderedDescendingToArray()
+        {
+            Assert.Empty(Enumerable.Empty<int>().OrderDescending().ToArray());
+        }
+
+        [Fact]
+        public void OrderedDescendingToList()
+        {
+            var source = new[]
+            {
+                5, 9, 6, 7, 8, 5, 20
+            };
+            var expected = new[]
+            {
+                20, 9, 8, 7, 6, 5, 5
+            };
+
+            Assert.Equal(expected, source.OrderDescending().ToList());
+        }
+
+        [Fact]
+        public void EmptyOrderedDescendingToList()
+        {
+            Assert.Empty(Enumerable.Empty<int>().OrderDescending().ToList());
+        }
+
+        [Fact]
         public void SameKeysVerifySortStable()
         {
             var source = new[]
@@ -192,6 +234,25 @@ namespace System.Linq.Tests
             Array.Sort(randomized, (a, b) => a - b);
             Array.Reverse(randomized);
             Assert.Equal(randomized, ordered);
+        }
+
+        [Fact]
+        public void OrderDescending_FirstLast_MatchesArray()
+        {
+            object[][] arrays =
+            [
+                [1],
+                [1, 1],
+                [1, 2, 1],
+                [1, 2, 1, 3],
+                [2, 1, 3, 1, 4],
+            ];
+
+            foreach (object[] objects in arrays)
+            {
+                Assert.Same(objects.OrderDescending().First(), objects.OrderDescending().ToArray().First());
+                Assert.Same(objects.OrderDescending().Last(), objects.OrderDescending().ToArray().Last());
+            }
         }
     }
 }

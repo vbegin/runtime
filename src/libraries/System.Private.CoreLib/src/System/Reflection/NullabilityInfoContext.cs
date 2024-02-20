@@ -86,35 +86,47 @@ namespace System.Reflection
 
         private void CheckParameterMetadataType(ParameterInfo parameter, NullabilityInfo nullability)
         {
-            if (parameter.Member is MethodInfo method)
-            {
-                MethodInfo metaMethod = GetMethodMetadataDefinition(method);
-                ParameterInfo? metaParameter = null;
-                if (string.IsNullOrEmpty(parameter.Name))
-                {
-                    metaParameter = metaMethod.ReturnParameter;
-                }
-                else
-                {
-                    ParameterInfo[] parameters = metaMethod.GetParameters();
-                    for (int i = 0; i < parameters.Length; i++)
-                    {
-                        if (parameter.Position == i &&
-                            parameter.Name == parameters[i].Name)
-                        {
-                            metaParameter = parameters[i];
-                            break;
-                        }
-                    }
-                }
+            ParameterInfo? metaParameter;
+            MemberInfo metaMember;
 
-                if (metaParameter != null)
-                {
-                    CheckGenericParameters(nullability, metaMethod, metaParameter.ParameterType, parameter.Member.ReflectedType);
-                }
+            switch (parameter.Member)
+            {
+                case ConstructorInfo ctor:
+                    var metaCtor = (ConstructorInfo)GetMemberMetadataDefinition(ctor);
+                    metaMember = metaCtor;
+                    metaParameter = GetMetaParameter(metaCtor, parameter);
+                    break;
+
+                case MethodInfo method:
+                    MethodInfo metaMethod = GetMethodMetadataDefinition(method);
+                    metaMember = metaMethod;
+                    metaParameter = string.IsNullOrEmpty(parameter.Name) ? metaMethod.ReturnParameter : GetMetaParameter(metaMethod, parameter);
+                    break;
+
+                default:
+                    return;
+            }
+
+            if (metaParameter != null)
+            {
+                CheckGenericParameters(nullability, metaMember, metaParameter.ParameterType, parameter.Member.ReflectedType);
             }
         }
 
+        private static ParameterInfo? GetMetaParameter(MethodBase metaMethod, ParameterInfo parameter)
+        {
+            ReadOnlySpan<ParameterInfo> parameters = metaMethod.GetParametersAsSpan();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                if (parameter.Position == i &&
+                    parameter.Name == parameters[i].Name)
+                {
+                    return parameters[i];
+                }
+            }
+
+            return null;
+        }
         private static MethodInfo GetMethodMetadataDefinition(MethodInfo method)
         {
             if (method.IsGenericMethod && !method.IsGenericMethodDefinition)
@@ -141,7 +153,7 @@ namespace System.Reflection
                     else if ((attribute.AttributeType.Name == "MaybeNullAttribute" ||
                             attribute.AttributeType.Name == "MaybeNullWhenAttribute") &&
                             codeAnalysisReadState == NullabilityState.Unknown &&
-                            !nullability.Type.IsValueType)
+                            !IsValueTypeOrValueTypeByRef(nullability.Type))
                     {
                         codeAnalysisReadState = NullabilityState.Nullable;
                     }
@@ -151,7 +163,7 @@ namespace System.Reflection
                     }
                     else if (attribute.AttributeType.Name == "AllowNullAttribute" &&
                         codeAnalysisWriteState == NullabilityState.Unknown &&
-                        !nullability.Type.IsValueType)
+                        !IsValueTypeOrValueTypeByRef(nullability.Type))
                     {
                         codeAnalysisWriteState = NullabilityState.Nullable;
                     }
@@ -200,7 +212,7 @@ namespace System.Reflection
 
             if (setter != null)
             {
-                CheckNullabilityAttributes(nullability, setter.GetParameters()[^1].GetCustomAttributesData());
+                CheckNullabilityAttributes(nullability, setter.GetParametersAsSpan()[^1].GetCustomAttributesData());
             }
             else
             {
@@ -327,7 +339,7 @@ namespace System.Reflection
             int index = 0;
             NullabilityInfo nullability = GetNullabilityInfo(memberInfo, type, parser, ref index);
 
-            if (!type.IsValueType && nullability.ReadState != NullabilityState.Unknown)
+            if (nullability.ReadState != NullabilityState.Unknown)
             {
                 TryLoadGenericMetaTypeNullability(memberInfo, nullability);
             }
@@ -340,19 +352,22 @@ namespace System.Reflection
             NullabilityState state = NullabilityState.Unknown;
             NullabilityInfo? elementState = null;
             NullabilityInfo[] genericArgumentsState = Array.Empty<NullabilityInfo>();
-            Type? underlyingType = type;
+            Type underlyingType = type;
 
-            if (type.IsValueType)
+            if (underlyingType.IsByRef || underlyingType.IsPointer)
             {
-                underlyingType = Nullable.GetUnderlyingType(type);
+                underlyingType = underlyingType.GetElementType()!;
+            }
 
-                if (underlyingType != null)
+            if (underlyingType.IsValueType)
+            {
+                if (Nullable.GetUnderlyingType(underlyingType) is { } nullableUnderlyingType)
                 {
+                    underlyingType = nullableUnderlyingType;
                     state = NullabilityState.Nullable;
                 }
                 else
                 {
-                    underlyingType = type;
                     state = NullabilityState.NotNull;
                 }
 
@@ -369,9 +384,9 @@ namespace System.Reflection
                     state = contextState;
                 }
 
-                if (type.IsArray)
+                if (underlyingType.IsArray)
                 {
-                    elementState = GetNullabilityInfo(memberInfo, type.GetElementType()!, parser, ref index);
+                    elementState = GetNullabilityInfo(memberInfo, underlyingType.GetElementType()!, parser, ref index);
                 }
             }
 
@@ -441,7 +456,7 @@ namespace System.Reflection
                 return method.ReturnType;
             }
 
-            return property.GetSetMethod(true)!.GetParameters()[0].ParameterType;
+            return property.GetSetMethod(true)!.GetParametersAsSpan()[0].ParameterType;
         }
 
         private void CheckGenericParameters(NullabilityInfo nullability, MemberInfo metaMember, Type metaType, Type? reflectedType)
@@ -468,6 +483,12 @@ namespace System.Reflection
                 {
                     CheckGenericParameters(elementNullability, metaMember, metaType.GetElementType()!, reflectedType);
                 }
+                // We could also follow this branch for metaType.IsPointer, but since pointers must be unmanaged this
+                // will be a no-op regardless
+                else if (metaType.IsByRef)
+                {
+                    CheckGenericParameters(nullability, metaMember, metaType.GetElementType()!, reflectedType);
+                }
             }
         }
 
@@ -478,6 +499,11 @@ namespace System.Reflection
             if (reflectedType is not null
                 && !genericParameter.IsGenericMethodParameter
                 && TryUpdateGenericTypeParameterNullabilityFromReflectedType(nullability, genericParameter, reflectedType, reflectedType))
+            {
+                return true;
+            }
+
+            if (IsValueTypeOrValueTypeByRef(nullability.Type))
             {
                 return true;
             }
@@ -549,18 +575,19 @@ namespace System.Reflection
                     }
                     return count;
                 }
-                if (underlyingType.IsArray)
+
+                if (underlyingType.HasElementType)
                 {
-                    return 1 + CountNullabilityStates(underlyingType.GetElementType()!);
+                    return (underlyingType.IsArray ? 1 : 0) + CountNullabilityStates(underlyingType.GetElementType()!);
                 }
 
                 return type.IsValueType ? 0 : 1;
             }
         }
 
-        private bool TryPopulateNullabilityInfo(NullabilityInfo nullability, NullableAttributeStateParser parser, ref int index)
+        private static bool TryPopulateNullabilityInfo(NullabilityInfo nullability, NullableAttributeStateParser parser, ref int index)
         {
-            bool isValueType = nullability.Type.IsValueType;
+            bool isValueType = IsValueTypeOrValueTypeByRef(nullability.Type);
             if (!isValueType)
             {
                 var state = NullabilityState.Unknown;
@@ -605,6 +632,9 @@ namespace System.Reflection
                 2 => NullabilityState.Nullable,
                 _ => NullabilityState.Unknown
             };
+
+        private static bool IsValueTypeOrValueTypeByRef(Type type) =>
+            type.IsValueType || ((type.IsByRef || type.IsPointer) && type.GetElementType()!.IsValueType);
 
         private readonly struct NullableAttributeStateParser
         {

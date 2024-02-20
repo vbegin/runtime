@@ -244,7 +244,7 @@ mono_liveness_handle_exception_clauses (MonoCompile *cfg)
 	mono_ptrset_init (&visited);
 	/*
 	 * Variables in exception handler register cannot be allocated to registers
-	 * so make them volatile. See bug #42136. This will not be neccessary when
+	 * so make them volatile. See bug #42136. This will not be necessary when
 	 * the back ends could guarantee that the variables will be in the
 	 * correct registers when a handler is called.
 	 * This includes try blocks too, since a variable in a try block might be
@@ -678,7 +678,7 @@ optimize_initlocals (MonoCompile *cfg)
 				//printf ("DEAD: "); mono_print_ins (ins);
 				if (cfg->disable_initlocals_opt_refs && var->type == STACK_OBJ)
 					continue;
-				if ((ins->opcode == OP_ICONST) || (ins->opcode == OP_I8CONST) || (ins->opcode == OP_R8CONST) || (ins->opcode == OP_R4CONST)) {
+				if ((ins->opcode == OP_ICONST) || (ins->opcode == OP_I8CONST) || (ins->opcode == OP_R8CONST) || (ins->opcode == OP_R4CONST) || (ins->opcode == OP_XCONST)) {
 					NULLIFY_INS (ins);
 					MONO_VARINFO (cfg, var->inst_c0)->spill_costs -= 1;
 					/*
@@ -874,7 +874,7 @@ update_liveness2 (MonoCompile *cfg, MonoInst *ins, gboolean set_volatile, int in
 			}
 			else {
 				/* Try dead code elimination */
-				if (!cfg->disable_deadce_vars && (var != cfg->ret) && !(var->flags & (MONO_INST_VOLATILE|MONO_INST_INDIRECT)) && ((ins->opcode == OP_ICONST) || (ins->opcode == OP_I8CONST) || (ins->opcode == OP_R8CONST)) && !(var->flags & MONO_INST_VOLATILE)) {
+				if (!cfg->disable_deadce_vars && (var != cfg->ret) && !(var->flags & (MONO_INST_VOLATILE|MONO_INST_INDIRECT)) && ((ins->opcode == OP_ICONST) || (ins->opcode == OP_I8CONST) || (ins->opcode == OP_R8CONST) || (ins->opcode == OP_XCONST)) && !(var->flags & MONO_INST_VOLATILE)) {
 					LIVENESS_DEBUG (printf ("\tdead def of R%d, eliminated\n", ins->dreg));
 					NULLIFY_INS (ins);
 					return;

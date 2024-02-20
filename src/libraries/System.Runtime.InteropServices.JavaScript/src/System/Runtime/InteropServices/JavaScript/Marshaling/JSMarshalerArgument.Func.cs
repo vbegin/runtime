@@ -9,9 +9,9 @@ namespace System.Runtime.InteropServices.JavaScript
         {
             private JSObject JSObject;
 
-            public ActionJS(IntPtr jsHandle)
+            public ActionJS(JSObject holder)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
             }
 
             public void InvokeJS()
@@ -19,13 +19,20 @@ namespace System.Runtime.InteropServices.JavaScript
                 // JSObject (held by this lambda) would be collected by GC after the lambda is collected
                 // and would also allow the JS function to be collected
 
-                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[4];
+
+                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[2];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
             }
 
         }
@@ -35,24 +42,33 @@ namespace System.Runtime.InteropServices.JavaScript
             private ArgumentToJSCallback<T> Arg1Marshaler;
             private JSObject JSObject;
 
-            public ActionJS(IntPtr jsHandle, ArgumentToJSCallback<T> arg1Marshaler)
+            public ActionJS(JSObject holder, ArgumentToJSCallback<T> arg1Marshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 Arg1Marshaler = arg1Marshaler;
             }
 
             public void InvokeJS(T arg1)
             {
-                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[4];
+
+                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[3];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
                 ref JSMarshalerArgument args_arg1 = ref arguments[2];
 
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                args_arg1.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
                 Arg1Marshaler(ref args_arg1, arg1);
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
             }
         }
 
@@ -62,27 +78,37 @@ namespace System.Runtime.InteropServices.JavaScript
             private ArgumentToJSCallback<T2> Arg2Marshaler;
             private JSObject JSObject;
 
-            public ActionJS(IntPtr jsHandle, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler)
+            public ActionJS(JSObject holder, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 Arg1Marshaler = arg1Marshaler;
                 Arg2Marshaler = arg2Marshaler;
             }
 
             public void InvokeJS(T1 arg1, T2 arg2)
             {
+
                 Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[4];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
                 ref JSMarshalerArgument args_arg1 = ref arguments[2];
                 ref JSMarshalerArgument args_arg2 = ref arguments[3];
 
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                args_arg1.InitializeWithContext(JSObject.ProxyContext);
+                args_arg2.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
                 Arg1Marshaler(ref args_arg1, arg1);
                 Arg2Marshaler(ref args_arg2, arg2);
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
             }
         }
 
@@ -93,9 +119,9 @@ namespace System.Runtime.InteropServices.JavaScript
             private ArgumentToJSCallback<T3> Arg3Marshaler;
             private JSObject JSObject;
 
-            public ActionJS(IntPtr jsHandle, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToJSCallback<T3> arg3Marshaler)
+            public ActionJS(JSObject holder, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToJSCallback<T3> arg3Marshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 Arg1Marshaler = arg1Marshaler;
                 Arg2Marshaler = arg2Marshaler;
                 Arg3Marshaler = arg3Marshaler;
@@ -103,6 +129,7 @@ namespace System.Runtime.InteropServices.JavaScript
 
             public void InvokeJS(T1 arg1, T2 arg2, T3 arg3)
             {
+
                 Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[5];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
@@ -110,13 +137,23 @@ namespace System.Runtime.InteropServices.JavaScript
                 ref JSMarshalerArgument args_arg2 = ref arguments[3];
                 ref JSMarshalerArgument args_arg3 = ref arguments[4];
 
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                args_arg1.InitializeWithContext(JSObject.ProxyContext);
+                args_arg2.InitializeWithContext(JSObject.ProxyContext);
+                args_arg3.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
                 Arg1Marshaler(ref args_arg1, arg1);
                 Arg2Marshaler(ref args_arg2, arg2);
                 Arg3Marshaler(ref args_arg3, arg3);
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
             }
         }
 
@@ -124,6 +161,7 @@ namespace System.Runtime.InteropServices.JavaScript
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <param name="value">The value to be marshaled.</param>
         public unsafe void ToManaged(out Action? value)
         {
             if (slot.Type == MarshalerType.None)
@@ -132,13 +170,18 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new ActionJS(slot.JSHandle).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new ActionJS(holder).InvokeJS;
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T">The type of the marshaled argument of the Action.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Action.</param>
         public unsafe void ToManaged<T>(out Action<T>? value, ArgumentToJSCallback<T> arg1Marshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -147,13 +190,20 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new ActionJS<T>(slot.JSHandle, arg1Marshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new ActionJS<T>(holder, arg1Marshaler).InvokeJS;
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Action.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Action.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Action.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Action.</param>
         public unsafe void ToManaged<T1, T2>(out Action<T1, T2>? value, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -162,13 +212,22 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new ActionJS<T1, T2>(slot.JSHandle, arg1Marshaler, arg2Marshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new ActionJS<T1, T2>(holder, arg1Marshaler, arg2Marshaler).InvokeJS;
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Action.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Action.</typeparam>
+        /// <typeparam name="T3">The type of the marshaled argument of the Action.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Action.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Action.</param>
+        /// <param name="arg3Marshaler">The generated callback which marshals the argument of the Action.</param>
         public unsafe void ToManaged<T1, T2, T3>(out Action<T1, T2, T3>? value, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToJSCallback<T3> arg3Marshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -177,7 +236,9 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new ActionJS<T1, T2, T3>(slot.JSHandle, arg1Marshaler, arg2Marshaler, arg3Marshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new ActionJS<T1, T2, T3>(holder, arg1Marshaler, arg2Marshaler, arg3Marshaler).InvokeJS;
         }
 
         private sealed class FuncJS<TResult>
@@ -185,26 +246,34 @@ namespace System.Runtime.InteropServices.JavaScript
             private JSObject JSObject;
             private ArgumentToManagedCallback<TResult> ResMarshaler;
 
-            public FuncJS(IntPtr jsHandle, ArgumentToManagedCallback<TResult> resMarshaler)
+            public FuncJS(JSObject holder, ArgumentToManagedCallback<TResult> resMarshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 ResMarshaler = resMarshaler;
             }
 
             public TResult InvokeJS()
             {
+
                 // JSObject (held by this lambda) would be collected by GC after the lambda is collected
                 // and would also allow the JS function to be collected
 
-                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[4];
+                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[2];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
 
                 ResMarshaler(ref args_return, out TResult res);
+
                 return res;
             }
 
@@ -216,25 +285,33 @@ namespace System.Runtime.InteropServices.JavaScript
             private ArgumentToManagedCallback<TResult> ResMarshaler;
             private JSObject JSObject;
 
-            public FuncJS(IntPtr jsHandle, ArgumentToJSCallback<T> arg1Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
+            public FuncJS(JSObject holder, ArgumentToJSCallback<T> arg1Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 Arg1Marshaler = arg1Marshaler;
                 ResMarshaler = resMarshaler;
             }
 
             public TResult InvokeJS(T arg1)
             {
-                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[4];
+
+                Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[3];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
                 ref JSMarshalerArgument args_arg1 = ref arguments[2];
 
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                args_arg1.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
                 Arg1Marshaler(ref args_arg1, arg1);
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
 
                 ResMarshaler(ref args_return, out TResult res);
                 return res;
@@ -248,9 +325,9 @@ namespace System.Runtime.InteropServices.JavaScript
             private ArgumentToManagedCallback<TResult> ResMarshaler;
             private JSObject JSObject;
 
-            public FuncJS(IntPtr jsHandle, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
+            public FuncJS(JSObject holder, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 Arg1Marshaler = arg1Marshaler;
                 Arg2Marshaler = arg2Marshaler;
                 ResMarshaler = resMarshaler;
@@ -258,18 +335,27 @@ namespace System.Runtime.InteropServices.JavaScript
 
             public TResult InvokeJS(T1 arg1, T2 arg2)
             {
+
                 Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[4];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
                 ref JSMarshalerArgument args_arg1 = ref arguments[2];
                 ref JSMarshalerArgument args_arg2 = ref arguments[3];
 
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                args_arg1.InitializeWithContext(JSObject.ProxyContext);
+                args_arg2.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
                 Arg1Marshaler(ref args_arg1, arg1);
                 Arg2Marshaler(ref args_arg2, arg2);
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
 
                 ResMarshaler(ref args_return, out TResult res);
                 return res;
@@ -284,9 +370,9 @@ namespace System.Runtime.InteropServices.JavaScript
             private ArgumentToManagedCallback<TResult> ResMarshaler;
             private JSObject JSObject;
 
-            public FuncJS(IntPtr jsHandle, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToJSCallback<T3> arg3Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
+            public FuncJS(JSObject holder, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToJSCallback<T3> arg3Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
             {
-                JSObject = JavaScriptExports.CreateCSOwnedProxy(jsHandle);
+                JSObject = holder;
                 Arg1Marshaler = arg1Marshaler;
                 Arg2Marshaler = arg2Marshaler;
                 Arg3Marshaler = arg3Marshaler;
@@ -295,6 +381,7 @@ namespace System.Runtime.InteropServices.JavaScript
 
             public TResult InvokeJS(T1 arg1, T2 arg2, T3 arg3)
             {
+
                 Span<JSMarshalerArgument> arguments = stackalloc JSMarshalerArgument[5];
                 ref JSMarshalerArgument args_exception = ref arguments[0];
                 ref JSMarshalerArgument args_return = ref arguments[1];
@@ -302,15 +389,24 @@ namespace System.Runtime.InteropServices.JavaScript
                 ref JSMarshalerArgument args_arg2 = ref arguments[3];
                 ref JSMarshalerArgument args_arg3 = ref arguments[4];
 
+#if FEATURE_WASM_MANAGED_THREADS
+                args_exception.InitializeWithContext(JSObject.ProxyContext);
+                args_return.InitializeWithContext(JSObject.ProxyContext);
+                args_arg1.InitializeWithContext(JSObject.ProxyContext);
+                args_arg2.InitializeWithContext(JSObject.ProxyContext);
+                args_arg3.InitializeWithContext(JSObject.ProxyContext);
+                JSProxyContext.JSImportNoCapture();
+#else
                 args_exception.Initialize();
                 args_return.Initialize();
+#endif
                 Arg1Marshaler(ref args_arg1, arg1);
                 Arg2Marshaler(ref args_arg2, arg2);
                 Arg3Marshaler(ref args_arg3, arg3);
 
-                JSFunctionBinding.InvokeJSImpl(JSObject, arguments);
-
+                JSFunctionBinding.InvokeJSFunction(JSObject, arguments);
                 ResMarshaler(ref args_return, out TResult res);
+
                 return res;
             }
         }
@@ -319,6 +415,9 @@ namespace System.Runtime.InteropServices.JavaScript
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
         public unsafe void ToManaged<TResult>(out Func<TResult>? value, ArgumentToManagedCallback<TResult> resMarshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -327,13 +426,20 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new FuncJS<TResult>(slot.JSHandle, resMarshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new FuncJS<TResult>(holder, resMarshaler).InvokeJS;
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
         public unsafe void ToManaged<T, TResult>(out Func<T, TResult>? value, ArgumentToJSCallback<T> arg1Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -342,7 +448,9 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new FuncJS<T, TResult>(slot.JSHandle, arg1Marshaler, resMarshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new FuncJS<T, TResult>(holder, arg1Marshaler, resMarshaler).InvokeJS;
 
         }
 
@@ -350,6 +458,13 @@ namespace System.Runtime.InteropServices.JavaScript
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
         public unsafe void ToManaged<T1, T2, TResult>(out Func<T1, T2, TResult>? value, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -358,13 +473,24 @@ namespace System.Runtime.InteropServices.JavaScript
                 return;
             }
 
-            value = new FuncJS<T1, T2, TResult>(slot.JSHandle, arg1Marshaler, arg2Marshaler, resMarshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new FuncJS<T1, T2, TResult>(holder, arg1Marshaler, arg2Marshaler, resMarshaler).InvokeJS;
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="T3">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="arg3Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
         public unsafe void ToManaged<T1, T2, T3, TResult>(out Func<T1, T2, T3, TResult>? value, ArgumentToJSCallback<T1> arg1Marshaler, ArgumentToJSCallback<T2> arg2Marshaler, ArgumentToJSCallback<T3> arg3Marshaler, ArgumentToManagedCallback<TResult> resMarshaler)
         {
             if (slot.Type == MarshalerType.None)
@@ -372,229 +498,218 @@ namespace System.Runtime.InteropServices.JavaScript
                 value = null;
                 return;
             }
-
-            value = new FuncJS<T1, T2, T3, TResult>(slot.JSHandle, arg1Marshaler, arg2Marshaler, arg3Marshaler, resMarshaler).InvokeJS;
+            var ctx = ToManagedContext;
+            var holder = ctx.CreateCSOwnedProxy(slot.JSHandle);
+            value = new FuncJS<T1, T2, T3, TResult>(holder, arg1Marshaler, arg2Marshaler, arg3Marshaler, resMarshaler).InvokeJS;
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <param name="value">The value to be marshaled.</param>
         public unsafe void ToJS(Action value)
         {
             Action cpy = value;
-            // TODO: we could try to cache value -> exising GCHandle
+            // TODO: we could try to cache value -> existing GCHandle
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
-                try
-                {
-                    cpy.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                cpy.Invoke();
+                // eventual exception is handled by C# caller
             };
             slot.Type = MarshalerType.Function;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T">The type of the marshaled argument of the Action.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Action.</param>
         public unsafe void ToJS<T>(Action<T> value, ArgumentToManagedCallback<T> arg1Marshaler)
         {
             Action<T> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
-                ref JSMarshalerArgument arg1 = ref arguments[2];
-                try
-                {
-                    arg1Marshaler(ref arg1, out T arg1cs);
-                    cpy.Invoke(arg1cs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                ref JSMarshalerArgument arg2 = ref arguments[3]; // set by JS caller
+                arg1Marshaler(ref arg2, out T arg1cs);
+                cpy.Invoke(arg1cs);
+                // eventual exception is handled by C# caller
             };
             slot.Type = MarshalerType.Action;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Action.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Action.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Action.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Action.</param>
         public unsafe void ToJS<T1, T2>(Action<T1, T2> value, ArgumentToManagedCallback<T1> arg1Marshaler, ArgumentToManagedCallback<T2> arg2Marshaler)
         {
             Action<T1, T2> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
-                ref JSMarshalerArgument arg1 = ref arguments[2];
-                ref JSMarshalerArgument arg2 = ref arguments[3];
-                try
-                {
-                    arg1Marshaler(ref arg1, out T1 arg1cs);
-                    arg2Marshaler(ref arg2, out T2 arg2cs);
-                    cpy.Invoke(arg1cs, arg2cs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                ref JSMarshalerArgument arg2 = ref arguments[3];// set by JS caller
+                ref JSMarshalerArgument arg3 = ref arguments[4];// set by JS caller
+                arg1Marshaler(ref arg2, out T1 arg1cs);
+                arg2Marshaler(ref arg3, out T2 arg2cs);
+                cpy.Invoke(arg1cs, arg2cs);
+                // eventual exception is handled by C# caller
             };
             slot.Type = MarshalerType.Action;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Action.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Action.</typeparam>
+        /// <typeparam name="T3">The type of the marshaled argument of the Action.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Action.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Action.</param>
+        /// <param name="arg3Marshaler">The generated callback which marshals the argument of the Action.</param>
         public unsafe void ToJS<T1, T2, T3>(Action<T1, T2, T3> value, ArgumentToManagedCallback<T1> arg1Marshaler, ArgumentToManagedCallback<T2> arg2Marshaler, ArgumentToManagedCallback<T3> arg3Marshaler)
         {
             Action<T1, T2, T3> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
-                ref JSMarshalerArgument arg1 = ref arguments[2];
-                ref JSMarshalerArgument arg2 = ref arguments[3];
-                ref JSMarshalerArgument arg3 = ref arguments[4];
-                try
-                {
-                    arg1Marshaler(ref arg1, out T1 arg1cs);
-                    arg2Marshaler(ref arg2, out T2 arg2cs);
-                    arg3Marshaler(ref arg3, out T3 arg3cs);
-                    cpy.Invoke(arg1cs, arg2cs, arg3cs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                ref JSMarshalerArgument arg2 = ref arguments[3];// set by JS caller
+                ref JSMarshalerArgument arg3 = ref arguments[4];// set by JS caller
+                ref JSMarshalerArgument arg4 = ref arguments[5];// set by JS caller
+                arg1Marshaler(ref arg2, out T1 arg1cs);
+                arg2Marshaler(ref arg3, out T2 arg2cs);
+                arg3Marshaler(ref arg4, out T3 arg3cs);
+                cpy.Invoke(arg1cs, arg2cs, arg3cs);
+                // eventual exception is handled by C# caller
             };
             slot.Type = MarshalerType.Action;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
         public unsafe void ToJS<TResult>(Func<TResult> value, ArgumentToJSCallback<TResult> resMarshaler)
         {
             Func<TResult> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
                 ref JSMarshalerArgument res = ref arguments[1];
-                try
-                {
-                    TResult resCs = cpy.Invoke();
-                    resMarshaler(ref res, resCs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                TResult resCs = cpy.Invoke();
+                resMarshaler(ref res, resCs);
+                // eventual exception is handled by C# caller
             };
             slot.Type = MarshalerType.Function;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Func.</param>
         public unsafe void ToJS<T, TResult>(Func<T, TResult> value, ArgumentToManagedCallback<T> arg1Marshaler, ArgumentToJSCallback<TResult> resMarshaler)
         {
             Func<T, TResult> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
                 ref JSMarshalerArgument res = ref arguments[1];
-                ref JSMarshalerArgument arg1 = ref arguments[2];
-                try
-                {
-                    arg1Marshaler(ref arg1, out T arg1cs);
-                    TResult resCs = cpy.Invoke(arg1cs);
-                    resMarshaler(ref res, resCs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                ref JSMarshalerArgument arg2 = ref arguments[3];// set by JS caller
+                arg1Marshaler(ref arg2, out T arg1cs);
+                TResult resCs = cpy.Invoke(arg1cs);
+                resMarshaler(ref res, resCs);
+                // eventual exception is handled by C# caller
             };
             slot.Type = MarshalerType.Function;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Func.</param>
         public unsafe void ToJS<T1, T2, TResult>(Func<T1, T2, TResult> value, ArgumentToManagedCallback<T1> arg1Marshaler, ArgumentToManagedCallback<T2> arg2Marshaler, ArgumentToJSCallback<TResult> resMarshaler)
         {
             Func<T1, T2, TResult> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
                 ref JSMarshalerArgument res = ref arguments[1];
-                ref JSMarshalerArgument arg1 = ref arguments[2];
-                ref JSMarshalerArgument arg2 = ref arguments[3];
-                try
-                {
-                    arg1Marshaler(ref arg1, out T1 arg1cs);
-                    arg2Marshaler(ref arg2, out T2 arg2cs);
-                    TResult resCs = cpy.Invoke(arg1cs, arg2cs);
-                    resMarshaler(ref res, resCs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                ref JSMarshalerArgument arg2 = ref arguments[3];// set by JS caller
+                ref JSMarshalerArgument arg3 = ref arguments[4];// set by JS caller
+                arg1Marshaler(ref arg2, out T1 arg1cs);
+                arg2Marshaler(ref arg3, out T2 arg2cs);
+                TResult resCs = cpy.Invoke(arg1cs, arg2cs);
+                resMarshaler(ref res, resCs);
+                // eventual exception is handled by C# caller
             };
-
-
             slot.Type = MarshalerType.Function;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
 
         /// <summary>
         /// Implementation of the argument marshaling.
         /// It's used by JSImport code generator and should not be used by developers in source code.
         /// </summary>
+        /// <typeparam name="T1">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="T2">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="T3">The type of the marshaled argument of the Func.</typeparam>
+        /// <typeparam name="TResult">Type of marshaled result of the Func.</typeparam>
+        /// <param name="value">The value to be marshaled.</param>
+        /// <param name="resMarshaler">The generated callback which marshals the result of the Func.</param>
+        /// <param name="arg1Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="arg2Marshaler">The generated callback which marshals the argument of the Func.</param>
+        /// <param name="arg3Marshaler">The generated callback which marshals the argument of the Func.</param>
         public unsafe void ToJS<T1, T2, T3, TResult>(Func<T1, T2, T3, TResult> value, ArgumentToManagedCallback<T1> arg1Marshaler, ArgumentToManagedCallback<T2> arg2Marshaler, ArgumentToManagedCallback<T3> arg3Marshaler, ArgumentToJSCallback<TResult> resMarshaler)
         {
             Func<T1, T2, T3, TResult> cpy = value;
             JSHostImplementation.ToManagedCallback cb = (JSMarshalerArgument* arguments) =>
             {
-                ref JSMarshalerArgument exc = ref arguments[0];
                 ref JSMarshalerArgument res = ref arguments[1];
-                ref JSMarshalerArgument arg1 = ref arguments[2];
-                ref JSMarshalerArgument arg2 = ref arguments[3];
-                ref JSMarshalerArgument arg3 = ref arguments[4];
-                try
-                {
-                    arg1Marshaler(ref arg1, out T1 arg1cs);
-                    arg2Marshaler(ref arg2, out T2 arg2cs);
-                    arg3Marshaler(ref arg3, out T3 arg3cs);
-                    TResult resCs = cpy.Invoke(arg1cs, arg2cs, arg3cs);
-                    resMarshaler(ref res, resCs);
-                }
-                catch (Exception ex)
-                {
-                    exc.ToJS(ex);
-                }
+                ref JSMarshalerArgument arg2 = ref arguments[3];// set by JS caller
+                ref JSMarshalerArgument arg3 = ref arguments[4];// set by JS caller
+                ref JSMarshalerArgument arg4 = ref arguments[5];// set by JS caller
+                arg1Marshaler(ref arg2, out T1 arg1cs);
+                arg2Marshaler(ref arg3, out T2 arg2cs);
+                arg3Marshaler(ref arg4, out T3 arg3cs);
+                TResult resCs = cpy.Invoke(arg1cs, arg2cs, arg3cs);
+                resMarshaler(ref res, resCs);
+                // eventual exception is handled by C# caller
             };
-
-
             slot.Type = MarshalerType.Function;
-            slot.GCHandle = JavaScriptExports.GetJSOwnedObjectGCHandleRef(cb);
+            var ctx = ToJSContext;
+            slot.GCHandle = ctx.GetJSOwnedObjectGCHandle(cb);
         }
     }
 }

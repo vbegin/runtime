@@ -252,7 +252,7 @@ namespace System.Xml.Xsl.Xslt
                 }
             }
 
-            return _f.XsltInvokeEarlyBound(name, scrFunc.Method, scrFunc.XmlReturnType, args);
+            return _f.XsltInvokeEarlyBound(name, scrFunc.Method!, scrFunc.XmlReturnType!, args);
         }
 
         private string ResolvePrefixThrow(bool ignoreDefaultNs, string prefix)
@@ -658,13 +658,13 @@ namespace System.Xml.Xsl.Xslt
                 if (EvaluateFuncCalls)
                 {
                     XPathItem propValue = XsltFunctions.SystemProperty(qname);
-                    if (propValue.ValueType == XsltConvert.StringType)
+                    if (propValue.ValueType == typeof(string))
                     {
                         return _f.String(propValue.Value);
                     }
                     else
                     {
-                        Debug.Assert(propValue.ValueType == XsltConvert.DoubleType);
+                        Debug.Assert(propValue.ValueType == typeof(double));
                         return _f.Double((double)propValue.ValueAsDouble);
                     }
                 }

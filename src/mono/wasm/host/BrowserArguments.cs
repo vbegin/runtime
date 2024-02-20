@@ -4,6 +4,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Mono.Options;
 
@@ -13,7 +14,6 @@ internal sealed class BrowserArguments
 {
     public string? HTMLPath { get; private set; }
     public bool? ForwardConsoleOutput { get; private set; }
-    public bool UseQueryStringToPassArguments { get; private set; }
     public string[] AppArgs { get; init; }
     public CommonConfiguration CommonConfig { get; init; }
 
@@ -27,8 +27,7 @@ internal sealed class BrowserArguments
 
     private OptionSet GetOptions() => new OptionSet
     {
-        { "forward-console", "Forward JS console output", v => ForwardConsoleOutput = true },
-        { "use-query-string-for-args", "Use query string to pass arguments (Default: false)", v => UseQueryStringToPassArguments = true }
+        { "forward-console", "Forward JS console output", v => ForwardConsoleOutput = true }
     };
 
     public void ParseJsonProperties(IDictionary<string, JsonElement>? properties)
@@ -37,12 +36,10 @@ internal sealed class BrowserArguments
             HTMLPath = htmlPathElement.GetString();
         if (properties?.TryGetValue("forward-console", out JsonElement forwardConsoleElement) == true)
             ForwardConsoleOutput = forwardConsoleElement.GetBoolean();
-        if (properties?.TryGetValue("use-query-string-for-args", out JsonElement useQueryElement) == true)
-            UseQueryStringToPassArguments = useQueryElement.GetBoolean();
     }
 
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Needs to validate instance members")]
     public void Validate()
     {
-        CommonConfiguration.CheckPathOrInAppPath(CommonConfig.AppPath, HTMLPath, "html-path");
     }
 }

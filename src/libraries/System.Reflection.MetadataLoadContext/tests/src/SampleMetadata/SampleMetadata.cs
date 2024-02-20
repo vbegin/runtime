@@ -84,6 +84,9 @@ namespace SampleMetadata
     public enum EU8 : ulong { }
     public enum EI8 : long { }
 
+    public enum E_2_I4 : int { min=int.MinValue, zero=0, one=1, max=int.MaxValue}
+    public enum E_2_U4 : uint { min = uint.MinValue, zero = 0, one = 1, max = uint.MaxValue }
+
     public class GenericEnumContainer<T>
     {
         public enum GenericEnum : short { }
@@ -374,13 +377,13 @@ namespace SampleMetadata
         [MarshalAs(UnmanagedType.IDispatch, IidParameterIndex = 42)]
         public int F4;
 
-        [MarshalAs(UnmanagedType.ByValArray)]
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1)]
         public int F5;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 5)]
         public int F6;
 
-        [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.FunctionPtr)]
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1, ArraySubType = UnmanagedType.FunctionPtr)]
         public int F7;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 87, ArraySubType = UnmanagedType.FunctionPtr)]

@@ -22,6 +22,8 @@
 #include "eventtrace.h"
 #include "threadsuspend.h"
 
+#include <minipal/cpuid.h>
+
 #if defined(_DEBUG) && !defined (WRITE_BARRIER_CHECK)
 #define WRITE_BARRIER_CHECK 1
 #endif
@@ -962,18 +964,11 @@ void InitJITHelpers1()
     // Get CPU features and check for SSE2 support.
     // This code should eventually probably be moved into codeman.cpp,
     // where we set the cpu feature flags for the JIT based on CPU type and features.
-    DWORD dwCPUFeaturesECX;
-    DWORD dwCPUFeaturesEDX;
+    int cpuFeatures[4];
+    __cpuid(cpuFeatures, 1);
 
-    __asm
-    {
-        pushad
-        mov eax, 1
-        cpuid
-	mov dwCPUFeaturesECX, ecx
-        mov dwCPUFeaturesEDX, edx
-        popad
-    }
+    DWORD dwCPUFeaturesECX = cpuFeatures[2];
+    DWORD dwCPUFeaturesEDX = cpuFeatures[3];
 
     //  If bit 26 (SSE2) is set, then we can use the SSE2 flavors
     //  and faster x87 implementation for the P4 of Dbl2Lng.
@@ -1034,8 +1029,8 @@ void InitJITHelpers1()
 
     // All write barrier helpers should fit into one page.
     // If you hit this assert on retail build, there is most likely problem with BBT script.
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_WriteBarrierGroup_End - (BYTE*)JIT_WriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
+    _ASSERTE_ALL_BUILDS((BYTE*)JIT_WriteBarrierGroup_End - (BYTE*)JIT_WriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
+    _ASSERTE_ALL_BUILDS((BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
 
     // Copy the write barriers to their final resting place.
     for (int iBarrier = 0; iBarrier < NUM_WRITE_BARRIERS; iBarrier++)
@@ -1136,35 +1131,35 @@ void ValidateWriteBarrierHelpers()
 
     // ephemeral region
     DWORD* pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[AnyGrow_EphemeralLowerBound]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
 
     // card table
     pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[PreGrow_CardTableFirstLocation]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
     pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[PreGrow_CardTableSecondLocation]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
 
     // now validate the PostGrow helper
     pWriteBarrierFunc = reinterpret_cast<BYTE*>(JIT_WriteBarrierReg_PostGrow);
 
     // ephemeral region
     pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[AnyGrow_EphemeralLowerBound]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
     pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[PostGrow_EphemeralUpperBound]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
 
     // card table
     pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[PostGrow_CardTableFirstLocation]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
     pLocation = reinterpret_cast<DWORD*>(&pWriteBarrierFunc[PostGrow_CardTableSecondLocation]);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", *pLocation == 0xf0f0f0f0);
+    _ASSERTE_ALL_BUILDS((reinterpret_cast<DWORD>(pLocation) & 0x3) == 0);
+    _ASSERTE_ALL_BUILDS(*pLocation == 0xf0f0f0f0);
 }
 
 #endif //CODECOVERAGE
@@ -1326,7 +1321,11 @@ int StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
                 // cmp offset[edx], 0ffh instruction
                 _ASSERTE(pBuf[22] == 0x80);
                 pfunc = (size_t *) &pBufRW[PostGrow_CardTableFirstLocation];
-               *pfunc = (size_t) g_card_table;
+                if (*pfunc != (size_t) g_card_table)
+                {
+                    stompWBCompleteActions |= SWB_ICACHE_FLUSH;
+                    *pfunc = (size_t) g_card_table;
+                }
 
                 // What we're trying to update is the offset field of a
                 // mov offset[edx], 0ffh instruction
@@ -1341,7 +1340,11 @@ int StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
                 // cmp offset[edx], 0ffh instruction
                 _ASSERTE(pBuf[14] == 0x80);
                 pfunc = (size_t *) &pBufRW[PreGrow_CardTableFirstLocation];
-               *pfunc = (size_t) g_card_table;
+                if (*pfunc != (size_t) g_card_table)
+                {
+                    stompWBCompleteActions |= SWB_ICACHE_FLUSH;
+                    *pfunc = (size_t) g_card_table;
+                }
 
                 // What we're trying to update is the offset field of a
 
@@ -1357,7 +1360,11 @@ int StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
             // cmp offset[edx], 0ffh instruction
             _ASSERTE(pBuf[22] == 0x80);
             pfunc = (size_t *) &pBufRW[PostGrow_CardTableFirstLocation];
-           *pfunc = (size_t) g_card_table;
+            if (*pfunc != (size_t) g_card_table)
+            {
+                stompWBCompleteActions |= SWB_ICACHE_FLUSH;
+                *pfunc = (size_t) g_card_table;
+            }
 
             // What we're trying to update is the offset field of a
             // mov offset[edx], 0ffh instruction
@@ -1366,7 +1373,11 @@ int StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
         }
 
         // Stick in the adjustment value.
-        *pfunc = (size_t) g_card_table;
+        if (*pfunc != (size_t) g_card_table)
+        {
+            stompWBCompleteActions |= SWB_ICACHE_FLUSH;
+            *pfunc = (size_t) g_card_table;
+        }
     }
 
     if (bStompWriteBarrierEphemeral)
@@ -1379,7 +1390,7 @@ int StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
 
 void FlushWriteBarrierInstructionCache()
 {
-    FlushInstructionCache(GetCurrentProcess(), (void *)JIT_PatchedWriteBarrierGroup,
-        (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup);
+    ClrFlushInstructionCache(GetWriteBarrierCodeLocation((BYTE*)JIT_PatchedWriteBarrierGroup),
+        (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup, /* hasCodeExecutedBefore */ true);
 }
 

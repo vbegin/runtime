@@ -544,7 +544,7 @@ namespace ILCompiler.Reflection.ReadyToRun
 
         /// <summary>
         /// Read a single unsigned 32-bit in from the signature stream. Adapted from CorSigUncompressData,
-        /// <a href="">https://github.com/dotnet/coreclr/blob/master/src/inc/cor.h</a>.
+        /// <a href="">https://github.com/dotnet/runtime/blob/main/src/coreclr/inc/cor.h</a>.
         /// </summary>
         /// <param name="data"></param>
         public uint ReadUInt()
@@ -574,7 +574,7 @@ namespace ILCompiler.Reflection.ReadyToRun
         /// <summary>
         /// Read a signed integer from the signature stream. Signed integer is basically encoded
         /// as an unsigned integer after converting it to the unsigned number 2 * abs(x) + (x &gt;= 0 ? 0 : 1).
-        /// Adapted from CorSigUncompressSignedInt, <a href="">https://github.com/dotnet/coreclr/blob/master/src/inc/cor.h</a>.
+        /// Adapted from CorSigUncompressSignedInt, <a href="">https://github.com/dotnet/runtime/blob/main/src/coreclr/inc/cor.h</a>.
         /// </summary>
         public int ReadInt()
         {
@@ -619,7 +619,7 @@ namespace ILCompiler.Reflection.ReadyToRun
 
         /// <summary>
         /// Read a single element type from the signature stream. Adapted from CorSigUncompressElementType,
-        /// <a href="">https://github.com/dotnet/coreclr/blob/master/src/inc/cor.h</a>.
+        /// <a href="">https://github.com/dotnet/runtime/blob/main/src/coreclr/inc/cor.h</a>.
         /// </summary>
         /// <returns></returns>
         public CorElementType ReadElementType()
@@ -1393,14 +1393,14 @@ namespace ILCompiler.Reflection.ReadyToRun
                     ParseMethod(builder);
                     builder.Append($" ImplType :");
                     ParseType(builder);
-                    if (flags.HasFlag(ReadyToRunVirtualFunctionOverrideFlags.VirtualFunctionOverriden))
+                    if (flags.HasFlag(ReadyToRunVirtualFunctionOverrideFlags.VirtualFunctionOverridden))
                     {
                         builder.Append($" ImplMethod :");
                         ParseMethod(builder);
                     }
                     else
                     {
-                        builder.Append("Not Overriden");
+                        builder.Append("Not Overridden");
                     }
 
                     if (fixupType == ReadyToRunFixupKind.Check_TypeLayout)
@@ -1774,12 +1774,24 @@ namespace ILCompiler.Reflection.ReadyToRun
                     builder.Append("NEW_ARRAY");
                     break;
 
+                case ReadyToRunHelper.NewMaybeFrozenArray:
+                    builder.Append("NEW_MAYBEFROZEN_ARRAY");
+                    break;
+
+                case ReadyToRunHelper.NewMaybeFrozenObject:
+                    builder.Append("NEW_MAYBEFROZEN_OBJECT");
+                    break;
+
                 case ReadyToRunHelper.CheckCastAny:
                     builder.Append("CHECK_CAST_ANY");
                     break;
 
                 case ReadyToRunHelper.CheckInstanceAny:
                     builder.Append("CHECK_INSTANCE_ANY");
+                    break;
+
+                case ReadyToRunHelper.IsInstanceOfException:
+                    builder.Append("SIMPLE_ISINSTANCE_OF");
                     break;
 
                 case ReadyToRunHelper.GenericGcStaticBase:
@@ -1915,7 +1927,7 @@ namespace ILCompiler.Reflection.ReadyToRun
                     builder.Append("FLT_ROUND");
                     break;
 
-                // Personality rountines
+                // Personality routines
                 case ReadyToRunHelper.PersonalityRoutine:
                     builder.Append("PERSONALITY_ROUTINE");
                     break;

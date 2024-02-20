@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Net.Http;
-using System.Net;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
 
 namespace System.Net.Http
 {
@@ -125,14 +125,44 @@ namespace System.Net.Http
             {
                 return null;
             }
+
+            int hostIndex = 0;
+            string protocol = "http";
+            ushort port = 80;
+
             if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
             {
-                value = value.Substring(7);
+                hostIndex = 7;
+            }
+            else if (value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                hostIndex = 8;
+                protocol = "https";
+                port = 443;
+            }
+            else if (value.StartsWith("socks4://", StringComparison.OrdinalIgnoreCase))
+            {
+                hostIndex = 9;
+                protocol = "socks4";
+            }
+            else if (value.StartsWith("socks5://", StringComparison.OrdinalIgnoreCase))
+            {
+                hostIndex = 9;
+                protocol = "socks5";
+            }
+            else if (value.StartsWith("socks4a://", StringComparison.OrdinalIgnoreCase))
+            {
+                hostIndex = 10;
+                protocol = "socks4a";
+            }
+
+            if (hostIndex > 0)
+            {
+                value = value.Substring(hostIndex);
             }
 
             string? user = null;
             string? password = null;
-            ushort port = 80;
             string host;
 
             // Check if there is authentication part with user and possibly password.
@@ -140,16 +170,9 @@ namespace System.Net.Http
             int separatorIndex = value.LastIndexOf('@');
             if (separatorIndex != -1)
             {
-                string auth = value.Substring(0, separatorIndex);
-
                 // The User and password may or may not be URL encoded.
-                // Curl seems to accept both. To match that,
-                // we do opportunistic decode and we use original string if it fails.
-                try
-                {
-                    auth = Uri.UnescapeDataString(auth);
-                }
-                catch { };
+                // Curl seems to accept both. To match that, we also decode the value.
+                string auth = Uri.UnescapeDataString(value.AsSpan(0, separatorIndex));
 
                 value = value.Substring(separatorIndex + 1);
                 separatorIndex = auth.IndexOf(':');
@@ -193,7 +216,7 @@ namespace System.Net.Http
 
             try
             {
-                UriBuilder ub = new UriBuilder("http", host, port);
+                UriBuilder ub = new UriBuilder(protocol, host, port);
                 if (user != null)
                 {
                     ub.UserName = Uri.EscapeDataString(user);
@@ -210,10 +233,11 @@ namespace System.Net.Http
                 // UriBuilder does not handle that now e.g. does not distinguish between empty and missing.
                 if (user == "" && password == "")
                 {
-                    string[] tokens = uri.ToString().Split('/', 3);
-                    if (tokens.Length == 3)
+                    Span<Range> tokens = stackalloc Range[3];
+                    ReadOnlySpan<char> uriSpan = uri.ToString();
+                    if (uriSpan.Split(tokens, '/') == 3)
                     {
-                        uri = new Uri($"{tokens[0]}//:@{tokens[2]}");
+                        uri = new Uri($"{uriSpan[tokens[0]]}//:@{uriSpan[tokens[2]]}");
                     }
                 }
 

@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Reflection;
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace System.Reflection.Runtime.ParameterInfos
 {
@@ -72,12 +72,8 @@ namespace System.Reflection.Runtime.ParameterInfos
 
         public sealed override string ToString()
         {
-            return this.ParameterTypeString + " " + this.Name;
+            return this.ParameterType.FormatTypeNameForReflection() + " " + this.Name;
         }
-
-        // Gets the ToString() output of ParameterType in a pay-to-play-safe way: Other Reflection ToString() methods should always use this rather than
-        // "ParameterType.ToString()".
-        internal abstract string ParameterTypeString { get; }
 
         private readonly MemberInfo _member;
         private readonly int _position;

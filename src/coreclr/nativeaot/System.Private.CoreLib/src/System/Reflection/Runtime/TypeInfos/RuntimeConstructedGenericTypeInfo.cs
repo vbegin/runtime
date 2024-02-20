@@ -2,13 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Text;
-using System.Reflection;
-using System.Diagnostics;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Reflection;
 using System.Reflection.Runtime.General;
 using System.Reflection.Runtime.TypeInfos;
+using System.Text;
 
 using Internal.Reflection.Core.Execution;
 
@@ -27,39 +27,14 @@ namespace System.Reflection.Runtime.TypeInfos
             _key = key;
         }
 
-        public sealed override bool IsTypeDefinition => false;
-        public sealed override bool IsGenericTypeDefinition => false;
-        protected sealed override bool HasElementTypeImpl() => false;
-        protected sealed override bool IsArrayImpl() => false;
-        public sealed override bool IsSZArray => false;
-        public sealed override bool IsVariableBoundArray => false;
-        protected sealed override bool IsByRefImpl() => false;
-        protected sealed override bool IsPointerImpl() => false;
-        public sealed override bool IsConstructedGenericType => true;
-        public sealed override bool IsGenericParameter => false;
-        public sealed override bool IsGenericTypeParameter => false;
-        public sealed override bool IsGenericMethodParameter => false;
-        public sealed override bool IsByRefLike => GenericTypeDefinitionTypeInfo.IsByRefLike;
-
-        //
-        // Implements IKeyedItem.PrepareKey.
-        //
-        // This method is the keyed item's chance to do any lazy evaluation needed to produce the key quickly.
-        // Concurrent unifiers are guaranteed to invoke this method at least once and wait for it
-        // to complete before invoking the Key property. The unifier lock is NOT held across the call.
-        //
-        // PrepareKey() must be idempodent and thread-safe. It may be invoked multiple times and concurrently.
-        //
-        public void PrepareKey()
-        {
-        }
+        public override bool IsConstructedGenericType => true;
+        public override bool IsByRefLike => GenericTypeDefinitionTypeInfo.IsByRefLike;
 
         //
         // Implements IKeyedItem.Key.
         //
         // Produce the key. This is a high-traffic property and is called while the hash table's lock is held. Thus, it should
-        // return a precomputed stored value and refrain from invoking other methods. If the keyed item wishes to
-        // do lazy evaluation of the key, it should do so in the PrepareKey() method.
+        // return a precomputed stored value and refrain from invoking other methods.
         //
         public UnificationKey Key
         {
@@ -107,7 +82,7 @@ namespace System.Reflection.Runtime.TypeInfos
 
         public sealed override Type GetGenericTypeDefinition()
         {
-            return GenericTypeDefinitionTypeInfo;
+            return GenericTypeDefinitionTypeInfo.ToType();
         }
 
         public sealed override Guid GUID
@@ -170,26 +145,9 @@ namespace System.Reflection.Runtime.TypeInfos
 
         public sealed override string ToString()
         {
-            // Get the FullName of the generic type definition in a pay-for-play safe way.
-            RuntimeTypeInfo genericTypeDefinition = GenericTypeDefinitionTypeInfo;
-            string? genericTypeDefinitionString = null;
-            if (genericTypeDefinition.InternalNameIfAvailable != null)   // Want to avoid "cry-wolf" exceptions: if we can't even get the simple name, don't bother getting the FullName.
-            {
-                // Given our current pay for play policy, it should now be safe to attempt getting the FullName. (But guard with a try-catch in case this assumption is wrong.)
-                try
-                {
-                    genericTypeDefinitionString = genericTypeDefinition.FullName;
-                }
-                catch (Exception)
-                {
-                }
-            }
-            // If all else fails, use the ToString() - it won't match the legacy CLR but with no metadata, we can't match it anyway.
-            genericTypeDefinitionString ??= genericTypeDefinition.ToString();
-
             // Now, append the generic type arguments.
             StringBuilder sb = new StringBuilder();
-            sb.Append(genericTypeDefinitionString);
+            sb.Append(GenericTypeDefinitionTypeInfo.FullName);
             sb.Append('[');
             RuntimeTypeInfo[] genericTypeArguments = _key.GenericTypeArguments;
             for (int i = 0; i < genericTypeArguments.Length; i++)
@@ -202,12 +160,9 @@ namespace System.Reflection.Runtime.TypeInfos
             return sb.ToString();
         }
 
-        protected sealed override TypeAttributes GetAttributeFlagsImpl()
-        {
-            return GenericTypeDefinitionTypeInfo.Attributes;
-        }
+        public sealed override TypeAttributes Attributes => GenericTypeDefinitionTypeInfo.Attributes;
 
-        protected sealed override int InternalGetHashCode()
+        public sealed override int GetHashCode()
         {
             return _key.GetHashCode();
         }
@@ -230,22 +185,14 @@ namespace System.Reflection.Runtime.TypeInfos
         {
             get
             {
-                RuntimeTypeInfo genericTypeDefinition = this.GenericTypeDefinitionTypeInfo;
-                if (!(genericTypeDefinition is RuntimeNamedTypeInfo genericTypeDefinitionNamedTypeInfo))
-                    throw ReflectionCoreExecution.ExecutionDomain.CreateMissingMetadataException(genericTypeDefinition);
-                return genericTypeDefinitionNamedTypeInfo;
+                return (RuntimeNamedTypeInfo)GenericTypeDefinitionTypeInfo;
             }
         }
 
-        internal sealed override bool CanBrowseWithoutMissingMetadataExceptions => GenericTypeDefinitionTypeInfo.CanBrowseWithoutMissingMetadataExceptions;
-
-        internal sealed override Type InternalDeclaringType
+        internal sealed override RuntimeTypeInfo InternalDeclaringType
         {
             get
             {
-                RuntimeTypeHandle typeHandle = InternalTypeHandleIfAvailable;
-                if ((!typeHandle.IsNull()) && ReflectionCoreExecution.ExecutionEnvironment.IsReflectionBlocked(typeHandle))
-                    return null;
                 return GenericTypeDefinitionTypeInfo.InternalDeclaringType;
             }
         }
@@ -258,9 +205,12 @@ namespace System.Reflection.Runtime.TypeInfos
             }
         }
 
-        internal sealed override string? InternalGetNameIfAvailable(ref Type? rootCauseForFailure)
+        public sealed override string Name
         {
-            return GenericTypeDefinitionTypeInfo.InternalGetNameIfAvailable(ref rootCauseForFailure);
+            get
+            {
+                return GenericTypeDefinitionTypeInfo.Name;
+            }
         }
 
         internal sealed override RuntimeTypeInfo[] InternalRuntimeGenericTypeArguments

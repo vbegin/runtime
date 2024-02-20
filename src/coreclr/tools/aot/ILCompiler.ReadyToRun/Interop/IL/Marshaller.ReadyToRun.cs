@@ -70,7 +70,6 @@ namespace Internal.TypeSystem.Interop
                 {
                     marshallers[i] = CreateDisabledMarshaller(
                         parameterType,
-                        parameterIndex,
                         MarshallerType.Argument,
                         MarshalDirection.Forward,
                         marshallers,
@@ -122,6 +121,18 @@ namespace Internal.TypeSystem.Interop
                 return true;
 
             var marshallers = GetMarshallersForMethod(targetMethod);
+            for (int i = 0; i < marshallers.Length; i++)
+            {
+                if (marshallers[i].IsMarshallingRequired())
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static bool IsMarshallingRequired(MethodSignature methodSig, ModuleDesc moduleContext, UnmanagedCallingConventions callingConvention)
+        {
+            Marshaller[] marshallers = GetMarshallersForSignature(methodSig, System.Array.Empty<ParameterMetadata>(), moduleContext);
             for (int i = 0; i < marshallers.Length; i++)
             {
                 if (marshallers[i].IsMarshallingRequired())

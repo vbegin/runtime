@@ -3,7 +3,7 @@ Param(
     [string] $CoreRootDirectory,
     [string] $BaselineCoreRootDirectory,
     [string] $Architecture="x64",
-    [string] $Framework="net5.0",
+    [string] $Framework,
     [string] $CompilationMode="Tiered",
     [string] $Repository=$env:BUILD_REPOSITORY_NAME,
     [string] $Branch=$env:BUILD_SOURCEBRANCH,
@@ -14,7 +14,7 @@ Param(
     [string] $Kind="micro",
     [switch] $LLVM,
     [switch] $MonoInterpreter,
-    [switch] $MonoAOT, 
+    [switch] $MonoAOT,
     [switch] $Internal,
     [switch] $Compare,
     [string] $MonoDotnet="",
@@ -22,11 +22,16 @@ Param(
     [string] $LogicalMachine="",
     [switch] $AndroidMono,
     [switch] $iOSMono,
-    [switch] $NoPGO,
-    [switch] $DynamicPGO,
-    [switch] $FullPGO,
+    [switch] $iOSNativeAOT,
+    [switch] $NoDynamicPGO,
+    [switch] $PhysicalPromotion,
+    [switch] $NoR2R,
+    [string] $ExperimentName,
     [switch] $iOSLlvmBuild,
-    [string] $MauiVersion
+    [switch] $iOSStripSymbols,
+    [switch] $HybridGlobalization,
+    [string] $MauiVersion,
+    [switch] $UseLocalCommitTime
 )
 
 $RunFromPerformanceRepo = ($Repository -eq "dotnet/performance") -or ($Repository -eq "dotnet-performance")
@@ -45,11 +50,13 @@ $Queue = ""
 
 if ($Internal) {
     switch ($LogicalMachine) {
-        "perftiger" { $Queue = "Windows.10.Amd64.19H1.Tiger.Perf"  }
-        "perfowl" { $Queue = "Windows.10.Amd64.20H2.Owl.Perf"  }
-        "perfsurf" { $Queue = "Windows.10.Arm64.Perf.Surf"  }
-        "perfpixel4a" { $Queue = "Windows.10.Amd64.Pixel.Perf" }
+        "perftiger" { $Queue = "Windows.10.Amd64.19H1.Tiger.Perf" }
+        "perftiger_crossgen" { $Queue = "Windows.10.Amd64.19H1.Tiger.Perf" }
+        "perfowl" { $Queue = "Windows.11.Amd64.Owl.Perf" }
+        "perfsurf" { $Queue = "Windows.10.Arm64.Perf.Surf" }
+        "perfpixel4a" { $Queue = "Windows.11.Amd64.Pixel.Perf" }
         "perfampere" { $Queue = "Windows.Server.Arm64.Perf" }
+        "cloudvm" { $Queue = "Windows.10.Amd64" }
         Default { $Queue = "Windows.10.Amd64.19H1.Tiger.Perf" }
     }
     $PerfLabArguments = "--upload-to-perflab-container"
@@ -61,13 +68,11 @@ else {
     $Queue = "Windows.10.Amd64.ClientRS4.DevEx.15.8.Open"
 }
 
-if($MonoInterpreter)
-{
+if ($MonoInterpreter) {
     $ExtraBenchmarkDotNetArguments = "--category-exclusion-filter NoInterpreter"
 }
 
-if($MonoDotnet -ne "")
-{
+if ($MonoDotnet -ne "") {
     $Configurations += " LLVM=$LLVM MonoInterpreter=$MonoInterpreter MonoAOT=$MonoAOT"
     if($ExtraBenchmarkDotNetArguments -eq "")
     {
@@ -81,21 +86,36 @@ if($MonoDotnet -ne "")
     }
 }
 
-if($NoPGO)
-{
-    $Configurations += " PGOType=nopgo"
+if ($NoDynamicPGO) {
+    $Configurations += " PGOType=nodynamicpgo"
 }
-elseif($DynamicPGO)
-{
-    $Configurations += " PGOType=dynamicpgo"
+
+if ($PhysicalPromotion) {
+    $Configurations += " PhysicalPromotionType=physicalpromotion"
 }
-elseif($FullPGO)
-{
-    $Configurations += " PGOType=fullpgo"
+
+if ($NoR2R) {
+    $Configurations += " R2RType=nor2r"
+}
+
+if ($ExperimentName) {
+    $Configurations += " ExperimentName=$ExperimentName"
+    if ($ExperimentName -eq "memoryRandomization") {
+        $ExtraBenchmarkDotNetArguments += " --memoryRandomization true"
+    }
 }
 
 if ($iOSMono) {
     $Configurations += " iOSLlvmBuild=$iOSLlvmBuild"
+    $Configurations += " iOSStripSymbols=$iOSStripSymbols"
+}
+
+if ($iOSNativeAOT) {
+    $Configurations += " iOSStripSymbols=$iOSStripSymbols"
+}
+
+if ($HybridGlobalization -eq "True") {
+    $Configurations += " HybridGlobalization=True"
 }
 
 # FIX ME: This is a workaround until we get this from the actual pipeline
@@ -107,30 +127,37 @@ if($Branch.Contains("refs/heads/release"))
 $CommonSetupArguments="--channel $CleanedBranchName --queue $Queue --build-number $BuildNumber --build-configs $Configurations --architecture $Architecture"
 $SetupArguments = "--repository https://github.com/$Repository --branch $Branch --get-perf-hash --commit-sha $CommitSha $CommonSetupArguments"
 
-if($NoPGO)
-{
-    $SetupArguments = "$SetupArguments --no-pgo"
+if ($NoDynamicPGO) {
+    $SetupArguments = "$SetupArguments --no-dynamic-pgo"
 }
-elseif($DynamicPGO)
-{
-    $SetupArguments = "$SetupArguments --dynamic-pgo"
+
+if ($PhysicalPromotion) {
+    $SetupArguments = "$SetupArguments --physical-promotion"
 }
-elseif($FullPGO)
-{
-    $SetupArguments = "$SetupArguments --full-pgo"
+
+if ($NoR2R) {
+    $SetupArguments = "$SetupArguments --no-r2r"
+}
+
+if ($ExperimentName) {
+    $SetupArguments = "$SetupArguments --experiment-name '$ExperimentName'"
+}
+
+if ($UseLocalCommitTime) {
+    $LocalCommitTime = (git show -s --format=%ci $CommitSha)
+    $SetupArguments = "$SetupArguments --commit-time `"$LocalCommitTime`""
 }
 
 if ($RunFromPerformanceRepo) {
     $SetupArguments = "--perf-hash $CommitSha $CommonSetupArguments"
-    
+
     robocopy $SourceDirectory $PerformanceDirectory /E /XD $PayloadDirectory $SourceDirectory\artifacts $SourceDirectory\.git
 }
 else {
     git clone --branch main --depth 1 --quiet https://github.com/dotnet/performance $PerformanceDirectory
 }
 
-if($MonoDotnet -ne "")
-{
+if ($MonoDotnet -ne "") {
     $UsingMono = "true"
     $MonoDotnetPath = (Join-Path $PayloadDirectory "dotnet-mono")
     Move-Item -Path $MonoDotnet -Destination $MonoDotnetPath
@@ -145,8 +172,7 @@ if ($UseBaselineCoreRun) {
     Move-Item -Path $BaselineCoreRootDirectory -Destination $NewBaselineCoreRoot
 }
 
-if($MauiVersion -ne "")
-{
+if ($MauiVersion -ne "") {
     $SetupArguments = "$SetupArguments --maui-version $MauiVersion"
 }
 
@@ -155,30 +181,8 @@ if ($AndroidMono) {
     {
         mkdir $WorkItemDirectory
     }
-
+    Copy-Item -path "$SourceDirectory\MonoBenchmarksDroid.apk" $PayloadDirectory -Verbose
     Copy-Item -path "$SourceDirectory\androidHelloWorld\HelloAndroid.apk" $PayloadDirectory -Verbose
-    Copy-Item -path "$SourceDirectory\MauiAndroidDefault.apk" $PayloadDirectory -Verbose
-    Copy-Item -path "$SourceDirectory\MauiBlazorAndroidDefault.apk" $PayloadDirectory -Verbose
-    Copy-Item -path "$SourceDirectory\MauiAndroidPodcast.apk" $PayloadDirectory -Verbose
-    $SetupArguments = $SetupArguments -replace $Architecture, 'arm64'
-}
-
-if ($iOSMono) {
-    if(!(Test-Path $WorkItemDirectory))
-    {
-        mkdir $WorkItemDirectory
-    }
-    if($iOSLlvmBuild) {
-        Copy-Item -path "$SourceDirectory\iosHelloWorld\llvm" $PayloadDirectory\iosHelloWorld\llvm -Recurse
-    } else {
-        Copy-Item -path "$SourceDirectory\iosHelloWorld\nollvm" $PayloadDirectory\iosHelloWorld\nollvm -Recurse
-        Copy-Item -path "$SourceDirectory\MauiiOSDefaultIPA" $PayloadDirectory\MauiiOSDefaultIPA -Recurse
-        Copy-Item -path "$SourceDirectory\MauiMacCatalystDefault\MauiMacCatalystDefault.app" $PayloadDirectory\MauiMacCatalystDefault -Recurse
-        Copy-Item -path "$SourceDirectory\MauiBlazoriOSDefaultIPA" $PayloadDirectory\MauiBlazoriOSDefaultIPA -Recurse
-        Copy-Item -path "$SourceDirectory\MauiBlazorMacCatalystDefault\MauiBlazorMacCatalystDefault.app" $PayloadDirectory\MauiBlazorMacCatalystDefault -Recurse
-        Copy-Item -path "$SourceDirectory\MauiiOSPodcastIPA" $PayloadDirectory\MauiiOSPodcastIPA -Recurse
-    }
-
     $SetupArguments = $SetupArguments -replace $Architecture, 'arm64'
 }
 
@@ -209,7 +213,10 @@ Write-PipelineSetVariable -Name 'UseBaselineCoreRun' -Value "$UseBaselineCoreRun
 Write-PipelineSetVariable -Name 'RunFromPerfRepo' -Value "$RunFromPerformanceRepo" -IsMultiJobVariable $false
 Write-PipelineSetVariable -Name 'Compare' -Value "$Compare" -IsMultiJobVariable $false
 Write-PipelineSetVariable -Name 'MonoDotnet' -Value "$UsingMono" -IsMultiJobVariable $false
+Write-PipelineSetVariable -Name 'MonoAOT' -Value "$MonoAOT" -IsMultiJobVariable $false
 Write-PipelineSetVariable -Name 'iOSLlvmBuild' -Value "$iOSLlvmBuild" -IsMultiJobVariable $false
+Write-PipelineSetVariable -Name 'iOSStripSymbols' -Value "$iOSStripSymbols" -IsMultiJobVariable $false
+Write-PipelineSetVariable -Name 'hybridGlobalization' -Value "$HybridGlobalization" -IsMultiJobVariable $false
 
 # Helix Arguments
 Write-PipelineSetVariable -Name 'Creator' -Value "$Creator" -IsMultiJobVariable $false

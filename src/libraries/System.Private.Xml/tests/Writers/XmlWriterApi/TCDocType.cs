@@ -5,7 +5,7 @@ using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     //[TestCase(Name = "WriteDocType")]
     public class TCDocType
@@ -65,7 +65,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -98,7 +98,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // WriteDocType with DocType end tag in the value
@@ -139,7 +139,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // Call WriteDocType following root element
@@ -163,7 +163,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

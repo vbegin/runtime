@@ -420,11 +420,11 @@ namespace System.Data.OleDb
         //[MarshalAs(UnmanagedType.Interface)]
         internal IntPtr pTypeInfo = (IntPtr)0;
 
-        internal IntPtr iOrdinal = (IntPtr)0;
+        internal nint iOrdinal = 0;
 
         internal int dwFlags;
 
-        internal IntPtr ulColumnSize = (IntPtr)0;
+        internal nint ulColumnSize = 0;
 
         internal short wType;
 
@@ -442,7 +442,7 @@ namespace System.Data.OleDb
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine($"tagDBCOLUMNINFO: {Convert.ToString(pwszName, CultureInfo.InvariantCulture)}");
-            builder.AppendLine($"\t{iOrdinal.ToInt64().ToString(CultureInfo.InvariantCulture)}");
+            builder.AppendLine($"\t{((long)iOrdinal).ToString(CultureInfo.InvariantCulture)}");
             builder.AppendLine($"\t0x{dwFlags:X8}");
             builder.AppendLine($"\t{ulColumnSize}");
             builder.AppendLine($"\t0x{wType:X2}");
@@ -574,10 +574,10 @@ namespace System.Data.OleDb
             ODB.IsRunningOnX86 ? (ItagDBPROPINFO)new tagDBPROPINFO_x86() : new tagDBPROPINFO();
 
         internal static ItagDBPROP CreateTagDbProp(int propertyID, bool required, object value) =>
-            ODB.IsRunningOnX86 ? (ItagDBPROP) new tagDBPROP_x86(propertyID, required, value) :
+            ODB.IsRunningOnX86 ? (ItagDBPROP)new tagDBPROP_x86(propertyID, required, value) :
                     new tagDBPROP(propertyID, required, value);
 
         internal static ItagDBPROP CreateTagDbProp() =>
-            ODB.IsRunningOnX86 ? (ItagDBPROP) new tagDBPROP_x86() : new tagDBPROP();
+            ODB.IsRunningOnX86 ? (ItagDBPROP)new tagDBPROP_x86() : new tagDBPROP();
     }
 }

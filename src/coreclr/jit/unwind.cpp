@@ -102,7 +102,15 @@ void Compiler::unwindGetFuncLocations(FuncInfoDsc*             func,
             assert(fgFirstColdBlock != nullptr); // There better be a cold section!
 
             *ppStartLoc = new (this, CMK_UnwindInfo) emitLocation(ehEmitCookie(fgFirstColdBlock));
-            *ppEndLoc   = nullptr; // nullptr end location means the end of the code
+
+            if (fgFirstFuncletBB != nullptr)
+            {
+                *ppEndLoc = new (this, CMK_UnwindInfo) emitLocation(ehEmitCookie(fgFirstFuncletBB));
+            }
+            else
+            {
+                *ppEndLoc = nullptr; // nullptr end location means the end of the code
+            }
         }
     }
     else
@@ -119,9 +127,9 @@ void Compiler::unwindGetFuncLocations(FuncInfoDsc*             func,
         {
             assert(func->funKind == FUNC_HANDLER);
             *ppStartLoc = new (this, CMK_UnwindInfo) emitLocation(ehEmitCookie(HBtab->ebdHndBeg));
-            *ppEndLoc   = (HBtab->ebdHndLast->bbNext == nullptr)
-                            ? nullptr
-                            : new (this, CMK_UnwindInfo) emitLocation(ehEmitCookie(HBtab->ebdHndLast->bbNext));
+            *ppEndLoc   = HBtab->ebdHndLast->IsLast() ? nullptr
+                                                    : new (this, CMK_UnwindInfo)
+                                                          emitLocation(ehEmitCookie(HBtab->ebdHndLast->Next()));
         }
     }
 }
@@ -157,16 +165,16 @@ void Compiler::unwindPushPopCFI(regNumber reg)
 #endif
         ;
 
+#if defined(TARGET_ARM)
+    createCfiCode(func, cbProlog, CFI_ADJUST_CFA_OFFSET, DWARF_REG_ILLEGAL,
+                  reg >= REG_FP_FIRST ? 2 * REGSIZE_BYTES : REGSIZE_BYTES);
+#else
+    assert(reg < REG_FP_FIRST);
+    createCfiCode(func, cbProlog, CFI_ADJUST_CFA_OFFSET, DWARF_REG_ILLEGAL, REGSIZE_BYTES);
+#endif
     if (relOffsetMask & genRegMask(reg))
     {
-#ifndef TARGET_ARM
-        createCfiCode(func, cbProlog, CFI_ADJUST_CFA_OFFSET, DWARF_REG_ILLEGAL, REGSIZE_BYTES);
-#endif
         createCfiCode(func, cbProlog, CFI_REL_OFFSET, mapRegNumToDwarfReg(reg));
-    }
-    else
-    {
-        createCfiCode(func, cbProlog, CFI_ADJUST_CFA_OFFSET, DWARF_REG_ILLEGAL, REGSIZE_BYTES);
     }
 }
 
@@ -195,19 +203,20 @@ void Compiler::unwindBegPrologCFI()
 
 void Compiler::unwindPushPopMaskCFI(regMaskTP regMask, bool isFloat)
 {
-    regMaskTP regBit = isFloat ? genRegMask(REG_FP_FIRST) : 1;
+#if TARGET_ARM
+    regNumber regNum = isFloat ? REG_PREV(REG_FP_LAST) : REG_INT_LAST;
+    regMaskTP regBit = isFloat ? genRegMask(regNum) | genRegMask(REG_NEXT(regNum)) : genRegMask(regNum);
+#else
+    regNumber regNum = isFloat ? REG_FP_LAST : REG_INT_LAST;
+    regMaskTP regBit = genRegMask(regNum);
+#endif
 
-    regNumber regNum = isFloat ? REG_FP_FIRST : REG_FIRST;
-    for (; regNum < REG_COUNT;)
+    for (; regMask != 0 && regBit != RBM_NONE;)
     {
-        if (regBit > regMask)
-        {
-            break;
-        }
-
         if (regBit & regMask)
         {
             unwindPushPopCFI(regNum);
+            regMask &= ~regBit;
         }
 
 #if TARGET_ARM
@@ -216,11 +225,11 @@ void Compiler::unwindPushPopMaskCFI(regMaskTP regMask, bool isFloat)
         // because LLVM only know about D0-D31.
         // As such pairs Sx,Sx+1 are referenced as D0-D15 registers in DWARF
         // For that we process registers in pairs.
-        regNum = isFloat ? REG_NEXT(REG_NEXT(regNum)) : REG_NEXT(regNum);
-        regBit <<= isFloat ? 2 : 1;
+        regBit >>= isFloat ? 2 : 1;
+        regNum = isFloat ? REG_PREV(REG_PREV(regNum)) : REG_PREV(regNum);
 #else
-        regNum = REG_NEXT(regNum);
-        regBit <<= 1;
+        regBit >>= 1;
+        regNum = REG_PREV(regNum);
 #endif
     }
 }
@@ -392,7 +401,7 @@ void Compiler::DumpCfiInfo(bool                  isHotCode,
                 printf("    CodeOffset: 0x%02X Op: AdjustCfaOffset Offset:0x%X\n", codeOffset, offset);
                 break;
             default:
-                printf("    Unrecognized CFI_CODE: 0x%IX\n", *(UINT64*)pCode);
+                printf("    Unrecognized CFI_CODE: 0x%llX\n", *(UINT64*)pCode);
                 break;
         }
     }
@@ -456,6 +465,10 @@ UNATIVE_OFFSET Compiler::unwindGetCurrentOffset(FuncInfoDsc* func)
 #elif defined(TARGET_LOONGARCH64)
 
 // See unwindLoongarch64.cpp
+
+#elif defined(TARGET_RISCV64)
+
+// See unwindRiscv64.cpp
 
 #else // TARGET*
 

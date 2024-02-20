@@ -6,10 +6,11 @@
     <NoWarn>$(NoWarn),CA2007</NoWarn>
     <Nullable>enable</Nullable>
     <UseAppHost>false</UseAppHost>
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(MonoProjectRoot)wasm\debugger\BrowserDebugHost\BrowserDebugHost.csproj" />
+    <ProjectReference Include="$(BrowserProjectRoot)debugger\BrowserDebugHost\BrowserDebugHost.csproj" />
 
     <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\BrowserDebugHost.dll" />
     <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\BrowserDebugHost.runtimeconfig.json" />
@@ -17,6 +18,8 @@
     <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\Microsoft.CodeAnalysis.CSharp.dll" />
     <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\Microsoft.CodeAnalysis.dll" />
     <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\Newtonsoft.Json.dll" />
+    <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\Microsoft.CodeAnalysis.CSharp.Scripting.dll" />
+    <_browserDebugHostFiles Include="$(ArtifactsDir)bin\BrowserDebugHost\$(TargetArchitecture)\$(Configuration)\Microsoft.CodeAnalysis.Scripting.dll" />
 
     <PackageFile Include="@(_browserDebugHostFiles)" TargetPath="tools\$(NetCoreAppCurrent)\" />
   </ItemGroup>

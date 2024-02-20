@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
 using System.Text;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCCloseOutput
     {
@@ -49,7 +49,7 @@ namespace System.Xml.Tests
                 return;
             }
             CError.WriteLine("Error: XmlWriter closed the stream when CloseOutput = false");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -84,7 +84,7 @@ namespace System.Xml.Tests
             {
                 CError.WriteLineIgnore("Exception: " + e.ToString());
                 CError.WriteLine("Uri stream is not closed by writer");
-                Assert.True(false);
+                Assert.Fail();
             }
             finally
             {
@@ -131,7 +131,7 @@ namespace System.Xml.Tests
             if (writerStream.CanWrite)
             {
                 writerStream.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
         }
 

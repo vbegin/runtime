@@ -1,7 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-class WriterGen : CsWriter
+namespace NativeFormatGen;
+
+internal sealed class WriterGen : CsWriter
 {
     public WriterGen(string fileName)
         : base(fileName)
@@ -10,7 +12,7 @@ class WriterGen : CsWriter
 
     public void EmitSource()
     {
-        WriteLine("#pragma warning disable 649");
+        WriteLine("#pragma warning disable 649, SA1121, IDE0036, SA1129");
         WriteLine();
 
         WriteLine("using System;");
@@ -128,7 +130,7 @@ class WriterGen : CsWriter
 
         // Compute hash seed using stable hashcode
         byte[] nameBytes = System.Text.Encoding.UTF8.GetBytes(record.Name);
-        byte[] hashBytes = System.Security.Cryptography.SHA256.Create().ComputeHash(nameBytes);
+        byte[] hashBytes = System.Security.Cryptography.SHA256.HashData(nameBytes);
         int hashSeed = System.BitConverter.ToInt32(hashBytes, 0);
         WriteLine($"int hash = {hashSeed};");
 
@@ -147,12 +149,9 @@ class WriterGen : CsWriter
             else
             if ((member.Flags & MemberDefFlags.Array) != 0)
             {
-                WriteLine($"if ({member.Name} != null)");
+                WriteLine($"for (int i = 0; i < {member.Name}.Length; i++)");
                 WriteLine("{");
-                WriteLine($"    for (int i = 0; i < {member.Name}.Length; i++)");
-                WriteLine("    {");
-                WriteLine($"        hash = ((hash << 13) - (hash >> 19)) ^ {member.Name}[i].GetHashCode();");
-                WriteLine("    }");
+                WriteLine($"    hash = ((hash << 13) - (hash >> 19)) ^ {member.Name}[i].GetHashCode();");
                 WriteLine("}");
             }
             else
@@ -161,12 +160,9 @@ class WriterGen : CsWriter
                 if ((member.Flags & MemberDefFlags.EnumerateForHashCode) == 0)
                     continue;
 
-                WriteLine($"if ({member.Name} != null)");
-                WriteLine("{");
                 WriteLine($"for (int i = 0; i < {member.Name}.Count; i++)");
-                WriteLine("    {");
-                WriteLine($"        hash = ((hash << 13) - (hash >> 19)) ^ ({member.Name}[i] == null ? 0 : {member.Name}[i].GetHashCode());");
-                WriteLine("    }");
+                WriteLine("{");
+                WriteLine($"    hash = ((hash << 13) - (hash >> 19)) ^ ({member.Name}[i] == null ? 0 : {member.Name}[i].GetHashCode());");
                 WriteLine("}");
             }
             else

@@ -1,16 +1,17 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Xunit;
-using Xunit.Abstractions;
 using System.IO;
 using System.Text;
+using System.Xml.Tests;
 using System.Xml.XmlDiff;
 using System.Xml.XPath;
 using System.Xml.Xsl;
 using XmlCoreTest.Common;
+using Xunit;
+using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XslCompiledTransformApiTests
 {
     public enum OutputType
     {
@@ -36,6 +37,7 @@ namespace System.Xml.Tests
     // Base class for test cases
     //
     ////////////////////////////////////////////////////////////////
+    [ConditionalClass(typeof(PlatformDetection), nameof(PlatformDetection.IsReflectionEmitSupported))]
     public class XsltApiTestCaseBase2
     {
         // Generic data for all derived test cases
@@ -208,11 +210,11 @@ namespace System.Xml.Tests
             {
                 _output.WriteLine("Expected Exception : {0}", _expectedErrorCode);
                 _output.WriteLine("Actual Exception : {0}", handler.res);
-                Assert.True(false);
+                Assert.Fail();
             }
             if (!result)
             {
-                Assert.True(false);
+                Assert.Fail();
             }
             return;
         }
@@ -225,7 +227,7 @@ namespace System.Xml.Tests
             CExceptionHandler handler = new CExceptionHandler(Path.Combine(_strPath, "Exceptions.xml"), assembly, _output);
             if (!handler.VerifyException(ex, res, strParams))
             {
-                Assert.True(false);
+                Assert.Fail();
             }
             return;
         }

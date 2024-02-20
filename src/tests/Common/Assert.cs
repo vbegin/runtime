@@ -29,7 +29,7 @@ namespace Xunit
         ///     Asserts that the given delegate throws an <see cref="Exception"/> of type <typeparam name="T" />.
         /// </summary>
         /// <param name="action">
-        ///     The delagate of type <see cref="Action"/> to execute.
+        ///     The delegate of type <see cref="Action"/> to execute.
         /// </param>
         /// <param name="message">
         ///     A <see cref="String"/> containing additional information for when the assertion fails.
@@ -45,10 +45,10 @@ namespace Xunit
             Exception exception = RunWithCatch(action);
 
             if (exception == null)
-                Assert.True(false, $"Expected '{typeof(T)}' to be thrown.");
+                Assert.Fail($"Expected '{typeof(T)}' to be thrown.");
 
             if (exception is not T)
-                Assert.True(false, $"Expected '{typeof(T)}' to be thrown, however '{exception.GetType()}' was thrown.");
+                Assert.Fail($"Expected '{typeof(T)}' to be thrown, however '{exception.GetType()}' was thrown.");
 
             return (T)exception;
         }
@@ -208,7 +208,7 @@ namespace Xunit
         [Obsolete("Did you mean to call Assert.Equal()")]
         public static new bool Equals(Object o1, Object o2)
         {
-            Assert.True(false, "Don't call this.");
+            Assert.Fail("Don't call this.");
             throw new Exception();
         }
 

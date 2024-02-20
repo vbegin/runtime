@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Xml.XPath;
 using System.Diagnostics;
 using System.Globalization;
+using System.Xml.XPath;
 
 namespace System.Xml
 {
@@ -426,7 +426,7 @@ namespace System.Xml
         /// specified by the Flags.
         /// NOTE: Namespaces should be passed using a prefix, ns pair.  "localName" is always string.Empty.
         /// </summary>
-        internal static void ValidateNameThrow(string prefix, string localName, string ns, XPathNodeType nodeKind, Flags flags)
+        internal static void ValidateNameThrow(string? prefix, string localName, string? ns, XPathNodeType nodeKind, Flags flags)
         {
             // throwOnError = true
             ValidateNameInternal(prefix, localName, ns, nodeKind, flags, true);
@@ -437,7 +437,7 @@ namespace System.Xml
         /// specified by the Flags.
         /// NOTE: Namespaces should be passed using a prefix, ns pair.  "localName" is always string.Empty.
         /// </summary>
-        internal static bool ValidateName(string prefix, string localName, string ns, XPathNodeType nodeKind, Flags flags)
+        internal static bool ValidateName(string? prefix, string localName, string? ns, XPathNodeType nodeKind, Flags flags)
         {
             // throwOnError = false
             return ValidateNameInternal(prefix, localName, ns, nodeKind, flags, false);
@@ -448,7 +448,7 @@ namespace System.Xml
         /// that are specified by the Flags.
         /// NOTE: Namespaces should be passed using a prefix, ns pair.  "localName" is always string.Empty.
         /// </summary>
-        private static bool ValidateNameInternal(string prefix, string localName, string ns, XPathNodeType nodeKind, Flags flags, bool throwOnError)
+        private static bool ValidateNameInternal(string? prefix, string localName, string? ns, XPathNodeType nodeKind, Flags flags, bool throwOnError)
         {
             Debug.Assert(prefix != null && localName != null && ns != null);
 

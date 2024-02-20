@@ -31,8 +31,15 @@ namespace System.Runtime.Loader
         [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "AssemblyNative_LoadFromPath", StringMarshalling = StringMarshalling.Utf16)]
         private static partial void LoadFromPath(IntPtr ptrNativeAssemblyBinder, string? ilPath, string? niPath, ObjectHandleOnStack retAssembly);
 
-        [MethodImpl(MethodImplOptions.InternalCall)]
-        internal static extern Assembly[] GetLoadedAssemblies();
+        internal static Assembly[] GetLoadedAssemblies()
+        {
+            Assembly[]? assemblies = null;
+            GetLoadedAssemblies(ObjectHandleOnStack.Create(ref assemblies));
+            return assemblies!;
+        }
+
+        [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "AssemblyNative_GetLoadedAssemblies")]
+        private static partial void GetLoadedAssemblies(ObjectHandleOnStack retAssemblies);
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         internal static extern bool IsTracingEnabled();
@@ -54,7 +61,7 @@ namespace System.Runtime.Loader
         internal static partial bool TraceSatelliteSubdirectoryPathProbed(string filePath, int hResult);
 
         [RequiresUnreferencedCode("Types and members the loaded assembly depends on might be removed")]
-        private Assembly InternalLoadFromPath(string? assemblyPath, string? nativeImagePath)
+        private RuntimeAssembly InternalLoadFromPath(string? assemblyPath, string? nativeImagePath)
         {
             RuntimeAssembly? loadedAssembly = null;
             LoadFromPath(_nativeAssemblyLoadContext, assemblyPath, nativeImagePath, ObjectHandleOnStack.Create(ref loadedAssembly));
@@ -156,7 +163,7 @@ namespace System.Runtime.Loader
                 {
                     // If the load context is returned null, then the assembly was bound using the TPA binder
                     // and we shall return reference to the "Default" binder.
-                    loadContextForAssembly = AssemblyLoadContext.Default;
+                    loadContextForAssembly = Default;
                 }
                 else
                 {
@@ -184,7 +191,7 @@ namespace System.Runtime.Loader
             return
                 asm == null ? null :
                 asm is RuntimeAssembly rtAssembly ? rtAssembly :
-                asm is System.Reflection.Emit.AssemblyBuilder ab ? ab.InternalAssembly :
+                asm is System.Reflection.Emit.RuntimeAssemblyBuilder ab ? ab.InternalAssembly :
                 null;
         }
 
@@ -217,7 +224,7 @@ namespace System.Runtime.Loader
         /// </summary>
         private static void InitializeDefaultContext()
         {
-            _ = AssemblyLoadContext.Default;
+            _ = Default;
         }
     }
 }

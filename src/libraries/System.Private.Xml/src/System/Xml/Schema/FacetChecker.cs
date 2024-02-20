@@ -2,16 +2,16 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.ComponentModel;
-using System.Xml.Serialization;
-using System.Xml.Schema;
-using System.Xml.XPath;
-using System.Diagnostics;
 using System.Collections;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Globalization;
+using System.Xml.Schema;
+using System.Xml.Serialization;
+using System.Xml.XPath;
 
 namespace System.Xml.Schema
 {
@@ -700,27 +700,26 @@ namespace System.Xml.Schema
                 StringBuilder bufBld = new StringBuilder();
                 bufBld.Append('^');
 
-                char[] source = pattern.ToCharArray();
                 int length = pattern.Length;
                 int copyPosition = 0;
                 for (int position = 0; position < length - 2; position++)
                 {
-                    if (source[position] == '\\')
+                    if (pattern[position] == '\\')
                     {
-                        if (source[position + 1] == '\\')
+                        if (pattern[position + 1] == '\\')
                         {
                             position++; // skip it
                         }
                         else
                         {
-                            char ch = source[position + 1];
+                            char ch = pattern[position + 1];
                             for (int i = 0; i < s_map.Length; i++)
                             {
                                 if (s_map[i].match == ch)
                                 {
                                     if (copyPosition < position)
                                     {
-                                        bufBld.Append(source, copyPosition, position - copyPosition);
+                                        bufBld.Append(pattern, copyPosition, position - copyPosition);
                                     }
                                     bufBld.Append(s_map[i].replacement);
                                     position++;
@@ -733,7 +732,7 @@ namespace System.Xml.Schema
                 }
                 if (copyPosition < length)
                 {
-                    bufBld.Append(source, copyPosition, length - copyPosition);
+                    bufBld.Append(pattern, copyPosition, length - copyPosition);
                 }
 
                 bufBld.Append('$');
@@ -1342,7 +1341,7 @@ namespace System.Xml.Schema
     internal sealed partial class StringFacetsChecker : FacetsChecker
     { //All types derived from string & anyURI
 
-        [RegexGenerator("^([a-zA-Z]{1,8})(-[a-zA-Z0-9]{1,8})*$", RegexOptions.ExplicitCapture)]
+        [GeneratedRegex("^([a-zA-Z]{1,8})(-[a-zA-Z0-9]{1,8})*$", RegexOptions.ExplicitCapture)]
         private static partial Regex LanguageRegex();
 
         internal override Exception? CheckValueFacets(object value, XmlSchemaDatatype datatype)
@@ -1453,7 +1452,7 @@ namespace System.Xml.Schema
                     break;
 
                 case XmlTypeCode.Language:
-                    if (s == null || s.Length == 0)
+                    if (string.IsNullOrEmpty(s))
                     {
                         return new XmlSchemaException(SR.Sch_EmptyAttributeValue, string.Empty);
                     }

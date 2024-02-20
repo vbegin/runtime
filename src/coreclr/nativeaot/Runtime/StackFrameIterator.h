@@ -1,6 +1,15 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
+
+#ifndef __StackFrameIterator_h__
+#define __StackFrameIterator_h__
+
+#include "CommonMacros.h"
 #include "ICodeManager.h"
+#include "PalRedhawk.h" // NATIVE_CONTEXT
+#include "regdisplay.h"
+
+#include "forward_declarations.h"
 
 struct ExInfo;
 typedef DPTR(ExInfo) PTR_ExInfo;
@@ -18,8 +27,9 @@ struct EHEnum
     EHEnumState m_state;
 };
 
-EXTERN_C FC_BOOL_RET FASTCALL RhpSfiInit(StackFrameIterator* pThis, PAL_LIMITED_CONTEXT* pStackwalkCtx, CLR_BOOL instructionFault);
-EXTERN_C FC_BOOL_RET FASTCALL RhpSfiNext(StackFrameIterator* pThis, uint32_t* puExCollideClauseIdx, CLR_BOOL* pfUnwoundReversePInvoke);
+class StackFrameIterator;
+EXTERN_C FC_BOOL_RET FASTCALL RhpSfiInit(StackFrameIterator* pThis, PAL_LIMITED_CONTEXT* pStackwalkCtx, CLR_BOOL instructionFault, CLR_BOOL* pfIsExceptionIntercepted);
+EXTERN_C FC_BOOL_RET FASTCALL RhpSfiNext(StackFrameIterator* pThis, uint32_t* puExCollideClauseIdx, CLR_BOOL* pfUnwoundReversePInvoke, CLR_BOOL* pfIsExceptionIntercepted);
 
 struct PInvokeTransitionFrame;
 typedef DPTR(PInvokeTransitionFrame) PTR_PInvokeTransitionFrame;
@@ -28,12 +38,13 @@ typedef DPTR(PAL_LIMITED_CONTEXT) PTR_PAL_LIMITED_CONTEXT;
 class StackFrameIterator
 {
     friend class AsmOffsets;
-    friend FC_BOOL_RET FASTCALL RhpSfiInit(StackFrameIterator* pThis, PAL_LIMITED_CONTEXT* pStackwalkCtx, CLR_BOOL instructionFault);
-    friend FC_BOOL_RET FASTCALL RhpSfiNext(StackFrameIterator* pThis, uint32_t* puExCollideClauseIdx, CLR_BOOL* pfUnwoundReversePInvoke);
+    friend FC_BOOL_RET FASTCALL RhpSfiInit(StackFrameIterator* pThis, PAL_LIMITED_CONTEXT* pStackwalkCtx, CLR_BOOL instructionFault, CLR_BOOL* pfIsExceptionIntercepted);
+    friend FC_BOOL_RET FASTCALL RhpSfiNext(StackFrameIterator* pThis, uint32_t* puExCollideClauseIdx, CLR_BOOL* pfUnwoundReversePInvoke, CLR_BOOL* pfIsExceptionIntercepted);
 
 public:
     StackFrameIterator() {}
     StackFrameIterator(Thread * pThreadToWalk, PInvokeTransitionFrame* pInitialTransitionFrame);
+    StackFrameIterator(Thread* pThreadToWalk, NATIVE_CONTEXT* pCtx);
     StackFrameIterator(Thread * pThreadToWalk, PTR_PAL_LIMITED_CONTEXT pCtx);
 
     bool             IsValid();
@@ -44,7 +55,7 @@ public:
     PTR_ICodeManager GetCodeManager();
     MethodInfo *     GetMethodInfo();
     bool             IsActiveStackFrame();
-    bool             GetHijackedReturnValueLocation(PTR_RtuObjectRef * pLocation, GCRefKind * pKind);
+    bool             GetHijackedReturnValueLocation(PTR_OBJECTREF * pLocation, GCRefKind * pKind);
     void             SetControlPC(PTR_VOID controlPC);
 
     static bool     IsValidReturnAddress(PTR_VOID pvAddress);
@@ -56,11 +67,7 @@ public:
     // stack that might contain outgoing arguments. We then report every pointer that looks like it might
     // refer to the GC heap as a fixed interior reference.
     bool HasStackRangeToReportConservatively();
-    void GetStackRangeToReportConservatively(PTR_RtuObjectRef * ppLowerBound, PTR_RtuObjectRef * ppUpperBound);
-
-    // Debugger Hijacked frame looks very much like a usual managed frame except when the
-    // frame must be reported conservatively, and when that happens, regular GC reporting should be skipped
-    bool ShouldSkipRegularGcReporting();
+    void GetStackRangeToReportConservatively(PTR_OBJECTREF * ppLowerBound, PTR_OBJECTREF * ppUpperBound);
 
 private:
     // The invoke of a funclet is a bit special and requires an assembly thunk, but we don't want to break the
@@ -74,15 +81,11 @@ private:
     // NOTE: This function always publishes a non-NULL conservative stack range lower bound.
     void UnwindUniversalTransitionThunk();
 
-    // If our control PC indicates that we're in the call descr thunk that we use to call an arbitrary managed
-    // function with an arbitrary signature from a normal managed function handle the stack walk specially.
-    void UnwindCallDescrThunk();
-
     void EnterInitialInvalidState(Thread * pThreadToWalk);
 
     void InternalInit(Thread * pThreadToWalk, PTR_PInvokeTransitionFrame pFrame, uint32_t dwFlags); // GC stackwalk
     void InternalInit(Thread * pThreadToWalk, PTR_PAL_LIMITED_CONTEXT pCtx, uint32_t dwFlags);  // EH and hijack stackwalk, and collided unwind
-    void InternalInit(Thread * pThreadToWalk, CONTEXT* pCtx, uint32_t dwFlags);  // GC stackwalk of redirected thread
+    void InternalInit(Thread * pThreadToWalk, NATIVE_CONTEXT* pCtx, uint32_t dwFlags);  // GC stackwalk of redirected thread
 
     void InternalInitForEH(Thread * pThreadToWalk, PAL_LIMITED_CONTEXT * pCtx, bool instructionFault); // EH stackwalk
     void InternalInitForStackTrace();  // Environment.StackTrace
@@ -109,7 +112,7 @@ private:
         InManagedCode,
         InThrowSiteThunk,
         InFuncletInvokeThunk,
-        InCallDescrThunk,
+        InFilterFuncletInvokeThunk,
         InUniversalTransitionThunk,
     };
 
@@ -142,7 +145,10 @@ private:
         // The thread was interrupted in the current frame at the current IP by a signal, SuspendThread or similar.
         ActiveStackFrame = 0x40,
 
-        GcStackWalkFlags = (CollapseFunclets | RemapHardwareFaultsToSafePoint),
+        // When encountering a reverse P/Invoke, unwind directly to the P/Invoke frame using the saved transition frame.
+        SkipNativeFrames = 0x80,
+
+        GcStackWalkFlags = (CollapseFunclets | RemapHardwareFaultsToSafePoint | SkipNativeFrames),
         EHStackWalkFlags = ApplyReturnAddressAdjustment,
         StackTraceStackWalkFlags = GcStackWalkFlags
     };
@@ -150,43 +156,43 @@ private:
     struct PreservedRegPtrs
     {
 #ifdef TARGET_ARM
-        PTR_UIntNative pR4;
-        PTR_UIntNative pR5;
-        PTR_UIntNative pR6;
-        PTR_UIntNative pR7;
-        PTR_UIntNative pR8;
-        PTR_UIntNative pR9;
-        PTR_UIntNative pR10;
-        PTR_UIntNative pR11;
+        PTR_uintptr_t pR4;
+        PTR_uintptr_t pR5;
+        PTR_uintptr_t pR6;
+        PTR_uintptr_t pR7;
+        PTR_uintptr_t pR8;
+        PTR_uintptr_t pR9;
+        PTR_uintptr_t pR10;
+        PTR_uintptr_t pR11;
 #elif defined(TARGET_ARM64)
-        PTR_UIntNative pX19;
-        PTR_UIntNative pX20;
-        PTR_UIntNative pX21;
-        PTR_UIntNative pX22;
-        PTR_UIntNative pX23;
-        PTR_UIntNative pX24;
-        PTR_UIntNative pX25;
-        PTR_UIntNative pX26;
-        PTR_UIntNative pX27;
-        PTR_UIntNative pX28;
-        PTR_UIntNative pFP;
+        PTR_uintptr_t pX19;
+        PTR_uintptr_t pX20;
+        PTR_uintptr_t pX21;
+        PTR_uintptr_t pX22;
+        PTR_uintptr_t pX23;
+        PTR_uintptr_t pX24;
+        PTR_uintptr_t pX25;
+        PTR_uintptr_t pX26;
+        PTR_uintptr_t pX27;
+        PTR_uintptr_t pX28;
+        PTR_uintptr_t pFP;
 #elif defined(UNIX_AMD64_ABI)
-        PTR_UIntNative pRbp;
-        PTR_UIntNative pRbx;
-        PTR_UIntNative pR12;
-        PTR_UIntNative pR13;
-        PTR_UIntNative pR14;
-        PTR_UIntNative pR15;
+        PTR_uintptr_t pRbp;
+        PTR_uintptr_t pRbx;
+        PTR_uintptr_t pR12;
+        PTR_uintptr_t pR13;
+        PTR_uintptr_t pR14;
+        PTR_uintptr_t pR15;
 #else // TARGET_ARM
-        PTR_UIntNative pRbp;
-        PTR_UIntNative pRdi;
-        PTR_UIntNative pRsi;
-        PTR_UIntNative pRbx;
+        PTR_uintptr_t pRbp;
+        PTR_uintptr_t pRdi;
+        PTR_uintptr_t pRsi;
+        PTR_uintptr_t pRbx;
 #ifdef TARGET_AMD64
-        PTR_UIntNative pR12;
-        PTR_UIntNative pR13;
-        PTR_UIntNative pR14;
-        PTR_UIntNative pR15;
+        PTR_uintptr_t pR12;
+        PTR_uintptr_t pR13;
+        PTR_uintptr_t pR14;
+        PTR_uintptr_t pR15;
 #endif // TARGET_AMD64
 #endif // TARGET_ARM
     };
@@ -200,17 +206,18 @@ protected:
     PTR_ICodeManager    m_pCodeManager;
     MethodInfo          m_methodInfo;
     PTR_VOID            m_effectiveSafePointAddress;
-    PTR_RtuObjectRef    m_pHijackedReturnValue;
+    PTR_OBJECTREF       m_pHijackedReturnValue;
     GCRefKind           m_HijackedReturnValueKind;
-    PTR_UIntNative      m_pConservativeStackRangeLowerBound;
-    PTR_UIntNative      m_pConservativeStackRangeUpperBound;
-    uint32_t              m_dwFlags;
+    PTR_uintptr_t      m_pConservativeStackRangeLowerBound;
+    PTR_uintptr_t      m_pConservativeStackRangeUpperBound;
+    uint32_t            m_dwFlags;
     PTR_ExInfo          m_pNextExInfo;
     PTR_VOID            m_pendingFuncletFramePointer;
     PreservedRegPtrs    m_funcletPtrs;  // @TODO: Placing the 'scratch space' in the StackFrameIterator is not
                                         // preferred because not all StackFrameIterators require this storage
                                         // space.  However, the implementation simpler by doing it this way.
-    bool                m_ShouldSkipRegularGcReporting;
     PTR_VOID            m_OriginalControlPC;
+    PTR_PInvokeTransitionFrame m_pPreviousTransitionFrame;
 };
 
+#endif // __StackFrameIterator_h__

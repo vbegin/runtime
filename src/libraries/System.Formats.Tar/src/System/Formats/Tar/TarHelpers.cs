@@ -3,8 +3,11 @@
 
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,21 +15,33 @@ using System.Threading.Tasks;
 namespace System.Formats.Tar
 {
     // Static class containing a variety of helper methods.
-    internal static class TarHelpers
+    internal static partial class TarHelpers
     {
         internal const short RecordSize = 512;
         internal const int MaxBufferLength = 4096;
+        internal const long MaxSizeLength = (1L << 33) - 1; // Max value of 11 octal digits = 2^33 - 1 or 8 Gb.
 
-        internal const int ZeroChar = 0x30;
-        internal const byte SpaceChar = 0x20;
-        internal const byte EqualsChar = 0x3d;
-        internal const byte NewLineChar = 0xa;
+        internal const UnixFileMode ValidUnixFileModes =
+            UnixFileMode.UserRead |
+            UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead |
+            UnixFileMode.GroupWrite |
+            UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead |
+            UnixFileMode.OtherWrite |
+            UnixFileMode.OtherExecute |
+            UnixFileMode.StickyBit |
+            UnixFileMode.SetGroup |
+            UnixFileMode.SetUser;
 
+        // Default mode for TarEntry created for a file-type.
         private const UnixFileMode DefaultFileMode =
             UnixFileMode.UserRead | UnixFileMode.UserWrite |
             UnixFileMode.GroupRead |
             UnixFileMode.OtherRead;
 
+        // Default mode for TarEntry created for a directory-type.
         private const UnixFileMode DefaultDirectoryMode =
             DefaultFileMode |
             UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
@@ -115,39 +130,9 @@ namespace System.Formats.Tar
             return padding;
         }
 
-        // Returns the specified 8-base number as a 10-base number.
-        internal static int ConvertDecimalToOctal(int value)
-        {
-            int multiplier = 1;
-            int accum = value;
-            int actual = 0;
-            while (accum != 0)
-            {
-                actual += (accum % 8) * multiplier;
-                accum /= 8;
-                multiplier *= 10;
-            }
-            return actual;
-        }
-
-        // Returns the specified 10-base number as an 8-base number.
-        internal static long ConvertDecimalToOctal(long value)
-        {
-            long multiplier = 1;
-            long accum = value;
-            long actual = 0;
-            while (accum != 0)
-            {
-                actual += (accum % 8) * multiplier;
-                accum /= 8;
-                multiplier *= 10;
-            }
-            return actual;
-        }
-
         // Returns true if all the bytes in the specified array are nulls, false otherwise.
         internal static bool IsAllNullBytes(Span<byte> buffer) =>
-            buffer.IndexOfAnyExcept((byte)0) < 0;
+            !buffer.ContainsAnyExcept((byte)0);
 
         // Converts the specified number of seconds that have passed since the Unix Epoch to a DateTimeOffset.
         internal static DateTimeOffset GetDateTimeOffsetFromSecondsSinceEpoch(long secondsSinceUnixEpoch) =>
@@ -189,9 +174,10 @@ namespace System.Formats.Tar
         {
             if (dict.TryGetValue(fieldName, out string? strNumber) && !string.IsNullOrEmpty(strNumber))
             {
-                baseTenInteger = Convert.ToInt32(strNumber);
+                baseTenInteger = int.Parse(strNumber, CultureInfo.InvariantCulture);
                 return true;
             }
+
             baseTenInteger = 0;
             return false;
         }
@@ -201,42 +187,93 @@ namespace System.Formats.Tar
         {
             if (dict.TryGetValue(fieldName, out string? strNumber) && !string.IsNullOrEmpty(strNumber))
             {
-                baseTenLong = Convert.ToInt64(strNumber);
+                baseTenLong = long.Parse(strNumber, CultureInfo.InvariantCulture);
                 return true;
             }
+
             baseTenLong = 0;
             return false;
         }
 
-        // Receives a byte array that represents an ASCII string containing a number in octal base.
-        // Converts the array to an octal base number, then transforms it to ten base and returns it.
-        internal static int GetTenBaseNumberFromOctalAsciiChars(Span<byte> buffer)
+        // When writing an entry that came from an archive of a different format, if its entry type happens to
+        // be an incompatible regular file entry type, convert it to the compatible one.
+        // No change for all other entry types.
+        internal static TarEntryType GetCorrectTypeFlagForFormat(TarEntryFormat format, TarEntryType entryType)
         {
-            string str = GetTrimmedAsciiString(buffer);
-            return string.IsNullOrEmpty(str) ? 0 : Convert.ToInt32(str, fromBase: 8);
+            if (format is TarEntryFormat.V7)
+            {
+                if (entryType is TarEntryType.RegularFile)
+                {
+                    return TarEntryType.V7RegularFile;
+                }
+            }
+            else if (entryType is TarEntryType.V7RegularFile)
+            {
+                return TarEntryType.RegularFile;
+            }
+
+            return entryType;
         }
 
-        // Receives a byte array that represents an ASCII string containing a number in octal base.
-        // Converts the array to an octal base number, then transforms it to ten base and returns it.
-        internal static long GetTenBaseLongFromOctalAsciiChars(Span<byte> buffer)
+        /// <summary>Parses a byte span that represents an ASCII string containing a number in octal base.</summary>
+        internal static T ParseOctal<T>(ReadOnlySpan<byte> buffer) where T : struct, INumber<T>
         {
-            string str = GetTrimmedAsciiString(buffer);
-            return string.IsNullOrEmpty(str) ? 0 : Convert.ToInt64(str, fromBase: 8);
+            buffer = TrimEndingNullsAndSpaces(buffer);
+            buffer = TrimLeadingNullsAndSpaces(buffer);
+
+            if (buffer.Length == 0)
+            {
+                return T.Zero;
+            }
+
+            T octalFactor = T.CreateTruncating(8u);
+            T value = T.Zero;
+            foreach (byte b in buffer)
+            {
+                uint digit = (uint)(b - '0');
+                if (digit >= 8)
+                {
+                    ThrowInvalidNumber();
+                }
+
+                value = checked((value * octalFactor) + T.CreateTruncating(digit));
+            }
+
+            return value;
         }
+
+        [DoesNotReturn]
+        private static void ThrowInvalidNumber() =>
+            throw new InvalidDataException(SR.Format(SR.TarInvalidNumber));
 
         // Returns the string contained in the specified buffer of bytes,
         // in the specified encoding, removing the trailing null or space chars.
         private static string GetTrimmedString(ReadOnlySpan<byte> buffer, Encoding encoding)
         {
+            buffer = TrimEndingNullsAndSpaces(buffer);
+            return buffer.IsEmpty ? string.Empty : encoding.GetString(buffer);
+        }
+
+        internal static ReadOnlySpan<byte> TrimEndingNullsAndSpaces(ReadOnlySpan<byte> buffer)
+        {
             int trimmedLength = buffer.Length;
-            while (trimmedLength > 0 && IsByteNullOrSpace(buffer[trimmedLength - 1]))
+            while (trimmedLength > 0 && buffer[trimmedLength - 1] is 0 or 32)
             {
                 trimmedLength--;
             }
 
-            return trimmedLength == 0 ? string.Empty : encoding.GetString(buffer.Slice(0, trimmedLength));
+            return buffer.Slice(0, trimmedLength);
+        }
 
-            static bool IsByteNullOrSpace(byte c) => c is 0 or 32;
+        private static ReadOnlySpan<byte> TrimLeadingNullsAndSpaces(ReadOnlySpan<byte> buffer)
+        {
+            int newStart = 0;
+            while (newStart < buffer.Length && buffer[newStart] is 0 or 32)
+            {
+                newStart++;
+            }
+
+            return buffer.Slice(newStart);
         }
 
         // Returns the ASCII string contained in the specified buffer of bytes,
@@ -270,7 +307,7 @@ namespace System.Formats.Tar
         }
 
         // Throws if the specified entry type is not supported for the specified format.
-        internal static void ThrowIfEntryTypeNotSupported(TarEntryType entryType, TarEntryFormat archiveFormat)
+        internal static void ThrowIfEntryTypeNotSupported(TarEntryType entryType, TarEntryFormat archiveFormat, [CallerArgumentExpression(nameof(entryType))] string? paramName = null)
         {
             switch (archiveFormat)
             {
@@ -344,10 +381,82 @@ namespace System.Formats.Tar
 
                 case TarEntryFormat.Unknown:
                 default:
-                    throw new FormatException(string.Format(SR.TarInvalidFormat, archiveFormat));
+                    throw new InvalidDataException(SR.Format(SR.TarInvalidFormat, archiveFormat));
             }
 
-            throw new InvalidOperationException(string.Format(SR.TarEntryTypeNotSupported, entryType, archiveFormat));
+            throw new ArgumentException(SR.Format(SR.TarEntryTypeNotSupportedInFormat, entryType, archiveFormat), paramName);
+        }
+
+        public static void SetPendingModificationTimes(Stack<(string, DateTimeOffset)> directoryModificationTimes)
+        {
+            // note: these are ordered child to parent.
+            while (directoryModificationTimes.TryPop(out (string Path, DateTimeOffset Modified) item))
+            {
+                AttemptDirectorySetLastWriteTime(item.Path, item.Modified);
+            }
+        }
+
+        public static void UpdatePendingModificationTimes(Stack<(string, DateTimeOffset)> directoryModificationTimes, string fullPath, DateTimeOffset modified)
+        {
+            // We can't set the modification time when we create the directory because extracting entries into it
+            // will cause that time to change. Instead, we track the times to set them later.
+
+            // We take into account that regular tar files are ordered:
+            // when we see a new directory which is not a child of the previous directory
+            // we can set the parent directory timestamps, and stop tracking them.
+            // This avoids having to track all directory entries until we've finished extracting the entire archive.
+            while (directoryModificationTimes.TryPeek(out (string Path, DateTimeOffset Modified) previous) &&
+                   !IsChildPath(previous.Path, fullPath))
+            {
+                directoryModificationTimes.TryPop(out previous);
+                AttemptDirectorySetLastWriteTime(previous.Path, previous.Modified);
+            }
+
+            directoryModificationTimes.Push((fullPath, modified));
+        }
+
+        private static bool IsChildPath(string parentFullPath, string childFullPath)
+        {
+            // Both paths may end with an additional separator.
+
+            // Verify that either the parent path ends with a separator
+            // or the child path has a separator where the parent path ends.
+            if (IsDirectorySeparatorChar(parentFullPath[^1]))
+            {
+                // The child needs to be at least a char longer than the parent for the name.
+                if (childFullPath.Length <= parentFullPath.Length)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                // The child needs to be at least 2 chars longer than the parent:
+                // one for the separator, and one for the name.
+                if ((childFullPath.Length < parentFullPath.Length + 2) ||
+                    !IsDirectorySeparatorChar(childFullPath[parentFullPath.Length]))
+                {
+                    return false;
+                }
+            }
+
+            return childFullPath.StartsWith(parentFullPath, PathInternal.StringComparison);
+
+            // We don't need to check for AltDirectorySeparatorChar, full paths are normalized to DirectorySeparatorChar.
+            static bool IsDirectorySeparatorChar(char c)
+                => c == Path.DirectorySeparatorChar;
+        }
+
+        private static void AttemptDirectorySetLastWriteTime(string fullPath, DateTimeOffset lastWriteTime)
+        {
+            try
+            {
+                Directory.SetLastWriteTime(fullPath, lastWriteTime.UtcDateTime);
+            }
+            catch
+            {
+                // Some OSes like Android might not support setting the last write time, the extraction should not fail because of that
+            }
         }
     }
 }

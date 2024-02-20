@@ -1,15 +1,17 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
+using Xunit;
 
 namespace BMI1Intrinsics
 {
-    internal class Program
+    public class Program
     {
         private static int _errorCode = 100;
 
-        static int Main(string[] args)
+        [Fact]
+        public static int TestEntryPoint()
         {
-            // bmi1 expression are folded to to hwintrinsics that return identical results
+            // bmi1 expression are folded to hwintrinsics that return identical results
 
             var values = new (uint input1, uint input2, uint andnExpected, uint blsiExpected, uint blsrExpected, uint blmskExpected)[] {
                 (0, 0, 0, 0 ,0 ,0xFFFFFFFF),

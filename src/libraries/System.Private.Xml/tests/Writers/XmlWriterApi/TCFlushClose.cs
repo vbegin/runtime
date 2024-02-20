@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
 using System.Text;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCFlushClose
     {
@@ -60,7 +60,7 @@ namespace System.Xml.Tests
                     w = WriterHelper.Create(writerStream, wSettings, overrideAsync: true, async: utils.Async);
                     break;
                 default:
-                    Assert.True(false, "unknown writer");
+                    Assert.Fail("unknown writer");
                     break;
             }
 
@@ -157,7 +157,7 @@ namespace System.Xml.Tests
             }
             catch (XmlException)
             {
-                Assert.True(false);
+                Assert.Fail();
             }
             finally
             {

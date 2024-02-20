@@ -1,13 +1,14 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Threading
 {
@@ -27,9 +28,10 @@ namespace System.Threading
         private ManagedThreadId _managedThreadId;
         private string? _name;
         private StartHelper? _startHelper;
+        private Exception? _startException;
 
         // Protects starting the thread and setting its priority
-        private Lock _lock = new Lock();
+        private Lock _lock = new Lock(useTrivialWaits: true);
 
         // This is used for a quick check on thread pool threads after running a work item to determine if the name, background
         // state, or priority were changed by the work item, and if so to reset it. Other threads may also change some of those,
@@ -145,7 +147,7 @@ namespace System.Threading
                 {
                     int threadState = SetThreadStateBit(ThreadState.Background);
                     // was foreground and has started
-                    if ((threadState & ((int)ThreadState.Background | (int)ThreadState.Unstarted)) == 0)
+                    if ((threadState & ((int)ThreadState.Background | (int)ThreadState.Unstarted | (int)ThreadState.Stopped)) == 0)
                     {
                         DecrementRunningForeground();
                     }
@@ -154,7 +156,7 @@ namespace System.Threading
                 {
                     int threadState = ClearThreadStateBit(ThreadState.Background);
                     // was background and has started
-                    if ((threadState & ((int)ThreadState.Background | (int)ThreadState.Unstarted)) == (int)ThreadState.Background)
+                    if ((threadState & ((int)ThreadState.Background | (int)ThreadState.Unstarted | (int)ThreadState.Stopped)) == (int)ThreadState.Background)
                     {
                         IncrementRunningForeground();
                         _mayNeedResetForThreadPool = true;
@@ -229,7 +231,7 @@ namespace System.Threading
                 }
 
                 // Prevent race condition with starting this thread
-                using (LockHolder.Hold(_lock))
+                using (_lock.EnterScope())
                 {
                     if (HasStarted() && !SetPriorityLive(value))
                     {
@@ -319,16 +321,45 @@ namespace System.Threading
         /// appropriate for the processor.
         /// TODO: See issue https://github.com/dotnet/corert/issues/4430
         /// </summary>
-        internal const int OptimalMaxSpinWaitsPerSpinIteration = 64;
+        internal const int OptimalMaxSpinWaitsPerSpinIteration = 8;
 
-        public static void SpinWait(int iterations) => RuntimeImports.RhSpinWait(iterations);
+        // Max iterations to be done in RhSpinWait.
+        // RhSpinWait does not switch GC modes and we want to avoid native spinning in coop mode for too long.
+        private const int SpinWaitCoopThreshold = 1024;
+
+        internal static void SpinWaitInternal(int iterations)
+        {
+            Debug.Assert(iterations <= SpinWaitCoopThreshold);
+            if (iterations > 0)
+            {
+                RuntimeImports.RhSpinWait(iterations);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)] // Slow path method. Make sure that the caller frame does not pay for PInvoke overhead.
+        private static void LongSpinWait(int iterations)
+        {
+            RuntimeImports.RhLongSpinWait(iterations);
+        }
+
+        public static void SpinWait(int iterations)
+        {
+            if (iterations > SpinWaitCoopThreshold)
+            {
+                LongSpinWait(iterations);
+            }
+            else
+            {
+                SpinWaitInternal(iterations);
+            }
+        }
 
         [MethodImpl(MethodImplOptions.NoInlining)] // Slow path method. Make sure that the caller frame does not pay for PInvoke overhead.
         public static bool Yield() => RuntimeImports.RhYield();
 
         private void StartCore()
         {
-            using (LockHolder.Hold(_lock))
+            using (_lock.EnterScope())
             {
                 if (!GetThreadStateBit(ThreadState.Unstarted))
                 {
@@ -367,9 +398,13 @@ namespace System.Threading
 
                 if (GetThreadStateBit(ThreadState.Unstarted))
                 {
-                    // Lack of memory is the only expected reason for thread creation failure
-                    throw new ThreadStartException(new OutOfMemoryException());
+                    Exception? startException = _startException;
+                    _startException = null;
+
+                    throw new ThreadStartException(startException ?? new OutOfMemoryException());
                 }
+
+                Debug.Assert(_startException == null);
             }
         }
 
@@ -384,8 +419,10 @@ namespace System.Threading
                 System.Threading.ManagedThreadId.SetForCurrentThread(thread._managedThreadId);
                 thread.InitializeComOnNewThread();
             }
-            catch (OutOfMemoryException)
+            catch (Exception e)
             {
+                thread._startException = e;
+
 #if TARGET_UNIX
                 // This should go away once OnThreadExit stops using t_currentThread to signal
                 // shutdown of the thread on Unix.
@@ -418,52 +455,16 @@ namespace System.Threading
 
         private static void StopThread(Thread thread)
         {
-            int state = thread._threadState;
-            if ((state & (int)(ThreadState.Stopped | ThreadState.Aborted)) == 0)
+            if ((thread._threadState & (int)(ThreadState.Stopped | ThreadState.Aborted)) == 0)
             {
                 thread.SetThreadStateBit(ThreadState.Stopped);
             }
+
+            int state = thread.ClearThreadStateBit(ThreadState.Background);
             if ((state & (int)ThreadState.Background) == 0)
             {
                 DecrementRunningForeground();
             }
-        }
-
-        // The upper bits of t_currentProcessorIdCache are the currentProcessorId. The lower bits of
-        // the t_currentProcessorIdCache are counting down to get it periodically refreshed.
-        // TODO: Consider flushing the currentProcessorIdCache on Wait operations or similar
-        // actions that are likely to result in changing the executing core
-        [ThreadStatic]
-        private static int t_currentProcessorIdCache;
-
-        private const int ProcessorIdCacheShift = 16;
-        private const int ProcessorIdCacheCountDownMask = (1 << ProcessorIdCacheShift) - 1;
-        private const int ProcessorIdRefreshRate = 5000;
-
-        private static int RefreshCurrentProcessorId()
-        {
-            int currentProcessorId = ComputeCurrentProcessorId();
-
-            // Add offset to make it clear that it is not guaranteed to be 0-based processor number
-            currentProcessorId += 100;
-
-            Debug.Assert(ProcessorIdRefreshRate <= ProcessorIdCacheCountDownMask);
-
-            // Mask with int.MaxValue to ensure the execution Id is not negative
-            t_currentProcessorIdCache = ((currentProcessorId << ProcessorIdCacheShift) & int.MaxValue) + ProcessorIdRefreshRate;
-
-            return currentProcessorId;
-        }
-
-        // Cached processor id used as a hint for which per-core stack to access. It is periodically
-        // refreshed to trail the actual thread core affinity.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int GetCurrentProcessorId()
-        {
-            int currentProcessorIdCache = t_currentProcessorIdCache--;
-            if ((currentProcessorIdCache & ProcessorIdCacheCountDownMask) == 0)
-                return RefreshCurrentProcessorId();
-            return (currentProcessorIdCache >> ProcessorIdCacheShift);
         }
 
         internal static void IncrementRunningForeground()

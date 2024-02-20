@@ -9,7 +9,7 @@ using Xunit.Abstractions;
 namespace System.Net.Quic.Tests
 {
     [Collection(nameof(DisableParallelization))]
-    [ConditionalClass(typeof(QuicTestBase), nameof(QuicTestBase.IsSupported))]
+    [ConditionalClass(typeof(QuicTestBase), nameof(QuicTestBase.IsSupported), nameof(QuicTestBase.IsNotArm32CoreClrStressTest))]
     [SkipOnPlatform(TestPlatforms.Windows, "CipherSuitesPolicy is not supported on Windows")]
     public class MsQuicCipherSuitesPolicyTests : QuicTestBase
     {
@@ -71,7 +71,7 @@ namespace System.Net.Quic.Tests
         [Fact]
         public async Task MismatchedCipherPolicies_ConnectAsync_ThrowsQuicException()
         {
-            await Assert.ThrowsAnyAsync<QuicException>(() => TestConnection(
+            await Assert.ThrowsAsync<QuicException>(() => TestConnection(
                new CipherSuitesPolicy(new[] { TlsCipherSuite.TLS_AES_128_GCM_SHA256 }),
                new CipherSuitesPolicy(new[] { TlsCipherSuite.TLS_AES_256_GCM_SHA384 })
             ));

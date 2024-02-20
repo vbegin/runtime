@@ -3,13 +3,8 @@
 
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Threading;
 using Microsoft.DotNet.RemoteExecutor;
 using Xunit;
 
@@ -213,7 +208,9 @@ namespace System.Text.RegularExpressions.Tests
             public DerivedRegex() { }
             public DerivedRegex(string pattern) : base(pattern) { }
 
+#pragma warning disable SYSLIB0052 // Type or member is obsolete
             public new void InitializeReferences() => base.InitializeReferences();
+#pragma warning restore SYSLIB0052 // Type or member is obsolete
 
             public new IDictionary Caps { get => base.Caps; set => base.Caps = value; }
             public new IDictionary CapNames { get => base.CapNames; set => base.CapNames = value; }

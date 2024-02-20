@@ -1,10 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Debug = System.Diagnostics.Debug;
-using SuppressMessageAttribute = System.Diagnostics.CodeAnalysis.SuppressMessageAttribute;
-using Interlocked = System.Threading.Interlocked;
 using System.Diagnostics.CodeAnalysis;
+using Debug = System.Diagnostics.Debug;
+using Interlocked = System.Threading.Interlocked;
+using SuppressMessageAttribute = System.Diagnostics.CodeAnalysis.SuppressMessageAttribute;
 
 namespace System.Xml.Linq
 {
@@ -126,7 +126,7 @@ namespace System.Xml.Linq
         /// <param name="namespaceName">A string containing the namespace name.</param>
         /// <returns>An <see cref="XNamespace"/> constructed from the namespace name string.</returns>
         [CLSCompliant(false)]
-        [return: NotNullIfNotNull("namespaceName")]
+        [return: NotNullIfNotNull(nameof(namespaceName))]
         public static implicit operator XNamespace?(string? namespaceName)
         {
             return namespaceName != null ? Get(namespaceName) : null;

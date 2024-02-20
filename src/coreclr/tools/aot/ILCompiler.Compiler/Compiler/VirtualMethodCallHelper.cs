@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Internal.TypeSystem;
@@ -35,7 +34,7 @@ namespace ILCompiler
         /// </summary>
         public static int GetVirtualMethodSlot(NodeFactory factory, MethodDesc method, TypeDesc implType, bool countDictionarySlots = true)
         {
-            if (method.CanMethodBeInSealedVTable())
+            if (method.CanMethodBeInSealedVTable(factory))
             {
                 // If the method is a sealed newslot method, it will be put in the sealed vtable instead of the type's vtable. In this
                 // case, the slot index return should be the index in the sealed vtable, plus the total number of vtable slots.
@@ -73,7 +72,7 @@ namespace ILCompiler
                 int numSealedVTableEntries = 0;
                 for (int slot = 0; slot < virtualSlots.Count; slot++)
                 {
-                    if (virtualSlots[slot].CanMethodBeInSealedVTable())
+                    if (virtualSlots[slot].CanMethodBeInSealedVTable(factory))
                     {
                         numSealedVTableEntries++;
                         continue;
@@ -94,9 +93,8 @@ namespace ILCompiler
         {
             if (implType.IsInterface)
             {
-                // We normally don't need to ask about vtable slots of interfaces. It's not wrong to ask
-                // that question, but we currently only ask it for IDynamicInterfaceCastable implementations.
-                Debug.Assert(((MetadataType)implType).IsDynamicInterfaceCastableImplementation());
+                // Interface types don't have physically assigned virtual slots, so the number of slots
+                // is always 0. They may have sealed slots.
                 return (implType.HasGenericDictionarySlot() && countDictionarySlots) ? 1 : 0;
             }
 
@@ -112,7 +110,7 @@ namespace ILCompiler
             IReadOnlyList<MethodDesc> virtualSlots = factory.VTable(implType).Slots;
             for (int slot = 0; slot < virtualSlots.Count; slot++)
             {
-                if (virtualSlots[slot].CanMethodBeInSealedVTable())
+                if (virtualSlots[slot].CanMethodBeInSealedVTable(factory))
                     continue;
                 numVTableSlots++;
             }
@@ -146,7 +144,7 @@ namespace ILCompiler
                 //    class Derived<T> : Middle<T, MyStruct> { }    // -> Template is Derived<__UniversalCanon> and needs a dictionary slot
                 //                                                  // -> Basetype tempalte is Middle<__UniversalCanon, MyStruct>. It's a partial
                 //                                                        Universal canonical type, so we need to fully canonicalize it.
-                //                                                  
+                //
                 //    class Middle<T, U> : Base<U> { }              // -> Template is Middle<__UniversalCanon, __UniversalCanon> and needs a dictionary slot
                 //                                                  // -> Basetype template is Base<__UniversalCanon>
                 //
@@ -165,7 +163,7 @@ namespace ILCompiler
                 foreach (var vtableMethod in baseVirtualSlots)
                 {
                     // Methods in the sealed vtable should be excluded from the count
-                    if (vtableMethod.CanMethodBeInSealedVTable())
+                    if (vtableMethod.CanMethodBeInSealedVTable(factory))
                         continue;
                     baseSlots++;
                 }
@@ -193,7 +191,7 @@ namespace ILCompiler
         public static bool HasGenericDictionarySlot(this TypeDesc type)
         {
             // Dictionary slots on generic interfaces are necessary to support static methods on interfaces
-            // The reason behind making this unconditional is simplicity, and keeping method slot indices for methods on IFoo<int> 
+            // The reason behind making this unconditional is simplicity, and keeping method slot indices for methods on IFoo<int>
             // and IFoo<string> identical. That won't change.
             if (type.IsInterface)
                 return type.HasInstantiation;

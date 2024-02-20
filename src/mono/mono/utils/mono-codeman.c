@@ -39,7 +39,7 @@ static const MonoCodeManagerCallbacks *code_manager_callbacks;
  * AMD64 processors maintain icache coherency only for pages which are
  * marked executable. Also, windows DEP requires us to obtain executable memory from
  * malloc when using dynamic code managers. The system malloc can't do this so we use a
- * slighly modified version of Doug Lea's Malloc package for this purpose:
+ * slightly modified version of Doug Lea's Malloc package for this purpose:
  * http://g.oswego.edu/dl/html/malloc.html
  *
  * Or on Windows, HeapCreate (HEAP_CREATE_ENABLE_EXECUTE).
@@ -84,18 +84,18 @@ struct _CodeChunk {
 	CodeChunk *next;
 	int pos;
 	int size;
-	unsigned int reserved: 8;
+	gint reserved: 8;
 	/* this number of bytes is available to resolve addresses far in memory */
-	unsigned int bsize: 24;
+	gint bsize: 24;
 };
 
 struct _MonoCodeManager {
 	CodeChunk *current;
 	CodeChunk *full;
 	CodeChunk *last;
-	int dynamic : 1;
-	int read_only : 1;
-	int no_exec : 1;
+	guint dynamic : 1;
+	guint read_only : 1;
+	guint no_exec : 1;
 };
 
 #define ALIGN_INT(val,alignment) (((val) + (alignment - 1)) & ~(alignment - 1))

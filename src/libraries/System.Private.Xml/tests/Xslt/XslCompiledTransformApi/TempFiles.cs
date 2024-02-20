@@ -1,14 +1,15 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Xunit;
-using Xunit.Abstractions;
 using System.IO;
 using System.Xml.Xsl;
+using Xunit;
+using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XslCompiledTransformApiTests
 {
     //[TestCase(Name = "TemporaryFiles", Desc = "This testcase tests the Temporary Files property on XslCompiledTransform")]
+    [ConditionalClass(typeof(PlatformDetection), nameof(PlatformDetection.IsReflectionEmitSupported))]
     public class TempFiles : XsltApiTestCaseBase2
     {
         private XslCompiledTransform _xsl = null;
@@ -63,7 +64,7 @@ namespace System.Xml.Tests
             catch (Exception e)
             {
                 _output.WriteLine(e.ToString());
-                Assert.True(false);
+                Assert.Fail();
             }
 
             try
@@ -77,7 +78,7 @@ namespace System.Xml.Tests
             catch (XsltException e)
             {
                 _output.WriteLine(e.ToString());
-                Assert.True(false);
+                Assert.Fail();
             }
             return;
         }
@@ -96,7 +97,7 @@ namespace System.Xml.Tests
             }
             catch (System.Xml.XmlException)
             {
-                Assert.True(false);
+                Assert.Fail();
             }
             return;
         }
@@ -121,7 +122,7 @@ namespace System.Xml.Tests
                     if (!r.Read())
                     {
                         _output.WriteLine("There is no 'stylesheet' element in the file");
-                        Assert.True(false);
+                        Assert.Fail();
                     }
                 }
 
@@ -132,7 +133,7 @@ namespace System.Xml.Tests
             {
                 _output.WriteLine("The following exception should not have been thrown");
                 _output.WriteLine(exception.ToString());
-                Assert.True(false);
+                Assert.Fail();
             }
 
             return;
@@ -152,7 +153,7 @@ namespace System.Xml.Tests
             {
                 _output.WriteLine("No exception should not have been thrown");
                 _output.WriteLine(exception.ToString());
-                Assert.True(false);
+                Assert.Fail();
             }
             return;
         }

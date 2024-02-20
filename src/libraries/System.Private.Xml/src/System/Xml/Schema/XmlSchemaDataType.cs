@@ -2,12 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections;
-using System.Diagnostics;
 using System.ComponentModel;
-using System.Xml;
-using System.IO;
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Text;
+using System.Xml;
 
 namespace System.Xml.Schema
 {
@@ -20,6 +20,8 @@ namespace System.Xml.Schema
         public abstract object ParseValue(string s, XmlNameTable? nameTable, IXmlNamespaceResolver? nsmgr);
 
         public virtual XmlSchemaDatatypeVariety Variety { get { return XmlSchemaDatatypeVariety.Atomic; } }
+
+        internal abstract Type ListValueType { get; }
 
         internal XmlSchemaDatatype() { }
 

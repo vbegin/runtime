@@ -396,7 +396,6 @@ public:
     enum FrameAttribs {
         FRAME_ATTR_NONE = 0,
         FRAME_ATTR_EXCEPTION = 1,           // This frame caused an exception
-        FRAME_ATTR_OUT_OF_LINE = 2,         // The exception out of line (IP of the frame is not correct)
         FRAME_ATTR_FAULTED = 4,             // Exception caused by Win32 fault
         FRAME_ATTR_RESUMABLE = 8,           // We may resume from this frame
         FRAME_ATTR_CAPTURE_DEPTH_2 = 0x10,  // This is a helperMethodFrame and the capture occurred at depth 2
@@ -468,7 +467,8 @@ public:
         return NULL;
     }
 
-    virtual PCODE GetReturnAddress()
+    // ASAN doesn't like us messing with the return address.
+    virtual DISABLE_ASAN PCODE GetReturnAddress()
     {
         WRAPPER_NO_CONTRACT;
         TADDR ptr = GetReturnAddressPtr();
@@ -482,7 +482,8 @@ public:
         return NULL;
     }
 
-    void SetReturnAddress(TADDR val)
+    // ASAN doesn't like us messing with the return address.
+    void DISABLE_ASAN SetReturnAddress(TADDR val)
     {
         WRAPPER_NO_CONTRACT;
         TADDR ptr = GetReturnAddressPtr();
@@ -511,7 +512,7 @@ public:
     // UpdateRegDisplay is generally used to fill out the REGDISPLAY parameter, some
     // overrides (e.g., code:ResumableFrame::UpdateRegDisplay) will actually READ what
     // you pass in. So be sure to pass in a valid or zeroed out REGDISPLAY.
-    virtual void UpdateRegDisplay(const PREGDISPLAY)
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false)
     {
         LIMITED_METHOD_DAC_CONTRACT;
         return;
@@ -753,6 +754,12 @@ protected:
         LIMITED_METHOD_CONTRACT;
     }
 
+#ifndef DACCESS_COMPILE
+#if !defined(TARGET_X86) || defined(TARGET_UNIX)
+    static void UpdateFloatingPointRegisters(const PREGDISPLAY pRD);
+#endif // !TARGET_X86 || TARGET_UNIX
+#endif // DACCESS_COMPILE
+
 #if defined(TARGET_UNIX) && !defined(DACCESS_COMPILE)
     virtual ~Frame() { LIMITED_METHOD_CONTRACT; }
 
@@ -770,7 +777,7 @@ protected:
 // exception.  The FRAME_ATTR_RESUMABLE flag tells
 // the GC that the preceding frame needs to be treated
 // like the top of stack (with the important implication that
-// caller-save-regsiters will be potential roots).
+// caller-save-registers will be potential roots).
 //-----------------------------------------------------------------------------
 #ifdef FEATURE_HIJACK
 //-----------------------------------------------------------------------------
@@ -794,7 +801,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY pRD);
+    virtual void UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats = false);
 
     virtual unsigned GetFrameAttribs() {
         LIMITED_METHOD_DAC_CONTRACT;
@@ -863,6 +870,9 @@ public:
 #elif defined(TARGET_LOONGARCH64)
             Object** firstIntReg = (Object**)&this->GetContext()->Tp;
             Object** lastIntReg  = (Object**)&this->GetContext()->S8;
+#elif defined(TARGET_RISCV64)
+            Object** firstIntReg = (Object**)&this->GetContext()->Gp;
+            Object** lastIntReg  = (Object**)&this->GetContext()->T6;
 #else
             _ASSERTE(!"nyi for platform");
 #endif
@@ -951,7 +961,7 @@ public:
 
     //---------------------------------------------------------------
     // Gets value indicating whether the generic parameter type
-    // argument should be supressed.
+    // argument should be suppressed.
     //---------------------------------------------------------------
     virtual BOOL SuppressParamTypeArg()
     {
@@ -996,7 +1006,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
 #ifdef TARGET_X86
     void UpdateRegDisplayHelper(const PREGDISPLAY, UINT cbStackPop);
 #endif
@@ -1076,7 +1086,11 @@ public:
     unsigned GetFrameAttribs()
     {
         LIMITED_METHOD_DAC_CONTRACT;
+#ifdef FEATURE_EH_FUNCLETS
+        return FRAME_ATTR_EXCEPTION | (!!(m_ctx.ContextFlags & CONTEXT_EXCEPTION_ACTIVE) ? FRAME_ATTR_FAULTED : 0);
+#else
         return FRAME_ATTR_EXCEPTION | FRAME_ATTR_FAULTED;
+#endif        
     }
 
 #ifndef FEATURE_EH_FUNCLETS
@@ -1110,7 +1124,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
 
     // Keep as last entry in class
     DEFINE_VTABLE_GETTER_AND_DTOR(FaultingExceptionFrame)
@@ -1172,7 +1186,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
 
     virtual DebuggerEval * GetDebuggerEval();
 
@@ -1259,7 +1273,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
 
     virtual Interception GetInterception()
     {
@@ -1904,7 +1918,7 @@ protected:
     TADDR           m_ReturnAddress;
     TADDR           m_x8; // ret buff arg
     ArgumentRegisters m_argumentRegisters;
-#elif defined (TARGET_LOONGARCH64)
+#elif defined (TARGET_LOONGARCH64) || defined (TARGET_RISCV64)
     TADDR           m_fp;
     TADDR           m_ReturnAddress;
     ArgumentRegisters m_argumentRegisters;
@@ -2033,7 +2047,7 @@ public:
     }
 
 #ifdef TARGET_X86
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
 #endif // TARGET_X86
 
     BOOL TraceFrame(Thread *thread, BOOL fromPatch,
@@ -2077,7 +2091,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
     virtual void GcScanRoots(promote_func *fn, ScanContext* sc);
 
     // HijackFrames are created by trip functions. See OnHijackTripThread()
@@ -2172,7 +2186,7 @@ public:
     PTR_BYTE GetGCRefMap();
 
 #ifdef TARGET_X86
-    virtual void UpdateRegDisplay(const PREGDISPLAY pRD);
+    virtual void UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats = false);
     virtual PCODE GetReturnAddress();
 #endif // TARGET_X86
 
@@ -2230,7 +2244,7 @@ public:
         // So we need to pretent that unresolved default interface methods are like any other interface
         // methods and don't have an instantiation argument.
         //
-        // See code:CEEInfo::getMethodSigInternal
+        // See code:getMethodSigInternal
         //
         assert(GetFunction()->GetMethodTable()->IsInterface());
         return TRUE;
@@ -2315,7 +2329,7 @@ public:
     Interception GetInterception();
 
 #ifdef TARGET_X86
-    virtual void UpdateRegDisplay(const PREGDISPLAY pRD);
+    virtual void UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats = false);
 #endif
 
     // Keep as last entry in class
@@ -2337,7 +2351,7 @@ public:
     virtual void GcScanRoots(promote_func *fn, ScanContext* sc);
 
 #ifdef TARGET_X86
-    virtual void UpdateRegDisplay(const PREGDISPLAY pRD);
+    virtual void UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats = false);
 #endif
 
     virtual ETransitionType GetTransitionType()
@@ -2431,6 +2445,8 @@ public:
     // Push and pop this frame from the thread's stack.
     void Push(Thread* pThread);
     void Pop();
+    // Remove this frame from any position in the thread's stack
+    void Remove();
 
 #endif // DACCESS_COMPILE
 
@@ -2794,7 +2810,8 @@ public:
     {
         WRAPPER_NO_CONTRACT;
         if (FrameHasActiveCall(this) && HasFunction())
-            return PTR_MethodDesc(m_Datum);
+            // Mask off marker bits
+            return PTR_MethodDesc((dac_cast<TADDR>(m_Datum) & ~(sizeof(TADDR) - 1)));
         else
             return NULL;
     }
@@ -2862,11 +2879,14 @@ public:
 #endif // defined(TARGET_X86) || defined(TARGET_ARM)
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY);
+    virtual void UpdateRegDisplay(const PREGDISPLAY, bool updateFloats = false);
 
     // m_Datum contains MethodDesc ptr or
-    // - on AMD64: CALLI target address (if lowest bit is set)
-    // - on X86: argument stack size (if value is <64k)
+    // - on 64 bit host: CALLI target address (if lowest bit is set)
+    // - on windows x86 host: argument stack size (if value is <64k)
+    // When m_Datum contains MethodDesc ptr, then on other than windows x86 host
+    // - bit 1 set indicates invoking new exception handling helpers
+    // - bit 2 indicates CallCatchFunclet or CallFinallyFunclet
     // See code:HasFunction.
     PTR_NDirectMethodDesc   m_Datum;
 
@@ -3025,7 +3045,7 @@ public:
         return TRUE;
     }
 
-    virtual void UpdateRegDisplay(const PREGDISPLAY pRD);
+    virtual void UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats = false);
 
 private:
     // Keep as last entry in class
@@ -3112,7 +3132,7 @@ private:
 
 //-----------------------------------------------------------------------------
 // FrameWithCookie is used to declare a Frame in source code with a cookie
-// immediately preceeding it.
+// immediately preceding it.
 // This is just a specialized version of GSCookieFor<T>
 //
 // For Frames that are set up by stubs, the stub is responsible for setting up
@@ -3321,7 +3341,7 @@ public:
 //     uses "sizeof" to count the OBJECTREF's.
 //
 //   - GCPROTECT_BEGIN spiritually violates our normal convention of not passing
-//     non-const refernce arguments. Unfortunately, this is necessary in
+//     non-const reference arguments. Unfortunately, this is necessary in
 //     order for the sizeof thing to work.
 //
 //   - GCPROTECT_BEGIN does _not_ zero out the OBJECTREF's. You must have

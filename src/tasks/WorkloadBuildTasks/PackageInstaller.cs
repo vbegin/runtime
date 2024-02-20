@@ -19,29 +19,31 @@ namespace Microsoft.Workload.Build.Tasks
         private string _nugetConfigContents;
         private TaskLoggingHelper _logger;
         private string _packagesDir;
+        private bool _cleanPackagesdir;
 
-        private PackageInstaller(string nugetConfigContents, TaskLoggingHelper logger)
+        private PackageInstaller(string nugetConfigContents, string baseTempDir, string? packagesPath, TaskLoggingHelper logger)
         {
             _nugetConfigContents = nugetConfigContents;
 
+            _cleanPackagesdir = packagesPath is null;
             _logger = logger;
-            _tempDir = Path.Combine(Path.GetTempPath(), "install-workload", Path.GetRandomFileName());
-            _packagesDir = Path.Combine(_tempDir, "nuget-packages");
+            _tempDir = Path.Combine(baseTempDir, Path.GetRandomFileName());
+            _packagesDir = packagesPath ?? Path.Combine(_tempDir, "nuget-packages");
         }
 
-        public static bool Install(PackageReference[] references, string nugetConfigContents, TaskLoggingHelper logger, bool stopOnMissing=true)
+        public static bool Install(PackageReference[] references, string nugetConfigContents, string baseTempDir, TaskLoggingHelper logger, bool stopOnMissing=true, string? packagesPath=null)
         {
-            if (!references.Any())
+            if (references.Length == 0)
                 return true;
 
-            return new PackageInstaller(nugetConfigContents, logger)
+            return new PackageInstaller(nugetConfigContents, baseTempDir, packagesPath, logger)
                         .InstallActual(references, stopOnMissing);
         }
 
         private bool InstallActual(PackageReference[] references, bool stopOnMissing)
         {
             // Restore packages
-            if (Directory.Exists(_packagesDir))
+            if (_cleanPackagesdir && Directory.Exists(_packagesDir))
             {
                 _logger.LogMessage(MessageImportance.Low, $"Deleting {_packagesDir}");
                 Directory.Delete(_packagesDir, recursive: true);
@@ -53,13 +55,14 @@ namespace Microsoft.Workload.Build.Tasks
             Directory.CreateDirectory(projecDir);
 
             File.WriteAllText(Path.Combine(projecDir, "Directory.Build.props"), "<Project />");
+            File.WriteAllText(Path.Combine(projecDir, "Directory.Packages.props"), "<Project />");
             File.WriteAllText(Path.Combine(projecDir, "Directory.Build.targets"), "<Project />");
             File.WriteAllText(projectPath, GenerateProject(references));
             File.WriteAllText(Path.Combine(projecDir, "nuget.config"), _nugetConfigContents);
 
             _logger.LogMessage(MessageImportance.Low, $"Restoring packages: {string.Join(", ", references.Select(r => $"{r.Name}/{r.Version}"))}");
 
-            string args = $"restore \"{projectPath}\" /p:RestorePackagesPath=\"{_packagesDir}\"";
+            string args = $"restore \"{projectPath}\" /p:RestorePackagesPath=\"{_packagesDir}\" /bl:{Path.Combine(_tempDir, "restore.binlog")}";
             (int exitCode, string output) = Utils.TryRunProcess(_logger, "dotnet", args, silent: false, debugMessageImportance: MessageImportance.Low);
             if (exitCode != 0)
             {
@@ -67,7 +70,7 @@ namespace Microsoft.Workload.Build.Tasks
                 return false;
             }
 
-            IList<(PackageReference, string)> failedToRestore = references
+            List<(PackageReference, string)> failedToRestore = references
                                                              .Select(r => (r, Path.Combine(_packagesDir, r.Name.ToLowerInvariant(), r.Version)))
                                                              .Where(tuple => !Directory.Exists(tuple.Item2))
                                                              .ToList();

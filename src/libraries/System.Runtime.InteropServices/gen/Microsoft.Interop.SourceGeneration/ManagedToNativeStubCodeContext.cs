@@ -2,10 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
-
 namespace Microsoft.Interop
 {
     public sealed record ManagedToNativeStubCodeContext : StubCodeContext
@@ -14,26 +11,18 @@ namespace Microsoft.Interop
 
         public override bool AdditionalTemporaryStateLivesAcrossStages => true;
 
-        private readonly TargetFramework _framework;
-        private readonly Version _frameworkVersion;
-
         private const string InvokeReturnIdentifier = "__invokeRetVal";
+        private const string InvokeReturnIdentifierNative = "__invokeRetValUnmanaged";
         private readonly string _returnIdentifier;
         private readonly string _nativeReturnIdentifier;
 
         public ManagedToNativeStubCodeContext(
-            StubEnvironment environment,
             string returnIdentifier,
             string nativeReturnIdentifier)
         {
-            _framework = environment.TargetFramework;
-            _frameworkVersion = environment.TargetFrameworkVersion;
             _returnIdentifier = returnIdentifier;
             _nativeReturnIdentifier = nativeReturnIdentifier;
         }
-
-        public override (TargetFramework framework, Version version) GetTargetFramework()
-            =>  (_framework, _frameworkVersion);
 
         public override (string managed, string native) GetIdentifiers(TypePositionInfo info)
         {
@@ -49,12 +38,14 @@ namespace Microsoft.Interop
             // We can't use ReturnIdentifier or ReturnNativeIdentifier since that will be used by the managed return value.
             // Additionally, since all use cases today of a TypePositionInfo in the native position but not the managed
             // are for infos that aren't in the managed signature at all (PreserveSig scenario), we don't have a name
-            // that we can use from source. As a result, we generate another name for the native return value
+            // that we can use from source.
+            // If this changes, the assert below will trigger and we will need to decide what to do.
+            // As a result, we generate another name for the native return value
             // and use the same name for native and managed.
             else if (info.IsNativeReturnPosition)
             {
                 Debug.Assert(info.ManagedIndex == TypePositionInfo.UnsetIndex);
-                return (InvokeReturnIdentifier, InvokeReturnIdentifier);
+                return (InvokeReturnIdentifier, InvokeReturnIdentifierNative);
             }
             else
             {

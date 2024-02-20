@@ -9,6 +9,8 @@ success &= RunTest(Delegates.Run);
 success &= RunTest(Generics.Run);
 success &= RunTest(Interfaces.Run);
 success &= RunTest(Threading.Run);
+success &= RunTest(Devirtualization.Run);
+success &= RunTest(StackTraces.Run);
 
 return success ? 100 : 1;
 

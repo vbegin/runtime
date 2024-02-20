@@ -1,8 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Xml;
 using System.Collections;
+using System.Xml;
 
 namespace System.Security.Cryptography.Xml
 {
@@ -21,9 +21,9 @@ namespace System.Security.Cryptography.Xml
             _rendered.Add(Utils.GetNamespacePrefix(attr), attr);
         }
 
-        internal XmlAttribute GetRendered(string nsPrefix)
+        internal XmlAttribute? GetRendered(string nsPrefix)
         {
-            return (XmlAttribute)_rendered[nsPrefix];
+            return (XmlAttribute?)_rendered[nsPrefix];
         }
 
         internal void AddUnrendered(XmlAttribute attr)
@@ -31,9 +31,9 @@ namespace System.Security.Cryptography.Xml
             _unrendered.Add(Utils.GetNamespacePrefix(attr), attr);
         }
 
-        internal XmlAttribute GetUnrendered(string nsPrefix)
+        internal XmlAttribute? GetUnrendered(string nsPrefix)
         {
-            return (XmlAttribute)_unrendered[nsPrefix];
+            return (XmlAttribute?)_unrendered[nsPrefix];
         }
 
         internal Hashtable GetUnrendered()

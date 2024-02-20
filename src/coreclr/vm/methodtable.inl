@@ -18,7 +18,13 @@
 #include "threadstatics.h"
 
 //==========================================================================================
-FORCEINLINE PTR_EEClass MethodTable::GetClass_NoLogging()
+// DO NOT ADD ANY ASSERTS OR ANY OTHER CODE TO THIS METHOD.
+// DO NOT USE THIS METHOD.
+// Yes folks, for better or worse the debugger pokes supposed object addresses
+// to try to see if objects are valid, possibly firing an AccessViolation or
+// worse.  Thus it is "correct" behaviour for this to AV, and incorrect
+// behaviour for it to assert if called on an invalid pointer.
+FORCEINLINE PTR_EEClass MethodTable::GetClassWithPossibleAV()
 {
     LIMITED_METHOD_DAC_CONTRACT;
 
@@ -38,12 +44,12 @@ FORCEINLINE PTR_EEClass MethodTable::GetClass_NoLogging()
 }
 
 //==========================================================================================
-inline PTR_EEClass MethodTable::GetClass()
+FORCEINLINE PTR_EEClass MethodTable::GetClass()
 {
     LIMITED_METHOD_DAC_CONTRACT;
 
-    _ASSERTE_IMPL(GetClass_NoLogging() != NULL);
-    return GetClass_NoLogging();
+    _ASSERTE_IMPL(GetClassWithPossibleAV() != NULL);
+    return GetClassWithPossibleAV();
 }
 
 //==========================================================================================
@@ -51,20 +57,6 @@ inline Assembly * MethodTable::GetAssembly()
 {
     WRAPPER_NO_CONTRACT;
     return GetModule()->GetAssembly();
-}
-
-//==========================================================================================
-// DO NOT ADD ANY ASSERTS OR ANY OTHER CODE TO THIS METHOD.
-// DO NOT USE THIS METHOD.
-// Yes folks, for better or worse the debugger pokes supposed object addresses
-// to try to see if objects are valid, possibly firing an AccessViolation or
-// worse.  Thus it is "correct" behaviour for this to AV, and incorrect
-// behaviour for it to assert if called on an invalid pointer.
-inline PTR_EEClass MethodTable::GetClassWithPossibleAV()
-{
-    CANNOT_HAVE_CONTRACT;
-    SUPPORTS_DAC;
-    return GetClass_NoLogging();
 }
 
 //==========================================================================================
@@ -90,7 +82,7 @@ inline BOOL MethodTable::IsClassPointerValid()
 inline PTR_Module MethodTable::GetLoaderModule()
 {
     LIMITED_METHOD_DAC_CONTRACT;
-    return m_pLoaderModule;
+    return GetAuxiliaryData()->GetLoaderModule();
 }
 
 inline PTR_LoaderAllocator MethodTable::GetLoaderAllocator()
@@ -99,15 +91,8 @@ inline PTR_LoaderAllocator MethodTable::GetLoaderAllocator()
     return GetLoaderModule()->GetLoaderAllocator();
 }
 
-
-
 #ifndef DACCESS_COMPILE
 //==========================================================================================
-inline void MethodTable::SetLoaderModule(Module* pModule)
-{
-    WRAPPER_NO_CONTRACT;
-    m_pLoaderModule = pModule;
-}
 
 inline void MethodTable::SetLoaderAllocator(LoaderAllocator* pAllocator)
 {
@@ -126,7 +111,7 @@ inline void MethodTable::SetLoaderAllocator(LoaderAllocator* pAllocator)
 inline WORD MethodTable::GetNumNonVirtualSlots()
 {
     LIMITED_METHOD_DAC_CONTRACT;
-    return HasNonVirtualSlots() ? GetClass()->GetNumNonVirtualSlots() : 0;
+    return IsCanonicalMethodTable() ? GetClass()->GetNumNonVirtualSlots() : 0;
 }
 
 //==========================================================================================
@@ -689,7 +674,7 @@ inline DWORD MethodTable::GetNumVtableIndirections()
 {
     WRAPPER_NO_CONTRACT;
 
-    return GetNumVtableIndirections(GetNumVirtuals_NoLogging());
+    return GetNumVtableIndirections(GetNumVirtuals());
 }
 
 //==========================================================================================
@@ -835,7 +820,7 @@ inline BOOL MethodTable::SetComCallWrapperTemplate(ComCallWrapperTemplate *pTemp
     }
     CONTRACTL_END;
 
-    return GetClass_NoLogging()->SetComCallWrapperTemplate(pTemplate);
+    return GetClass()->SetComCallWrapperTemplate(pTemplate);
 }
 
 #ifdef FEATURE_COMINTEROP_UNMANAGED_ACTIVATION
@@ -857,7 +842,7 @@ inline BOOL MethodTable::SetComClassFactory(ClassFactoryBase *pFactory)
     }
     CONTRACTL_END;
 
-    return GetClass_NoLogging()->SetComClassFactory(pFactory);
+    return GetClass()->SetComClassFactory(pFactory);
 }
 #endif // FEATURE_COMINTEROP_UNMANAGED_ACTIVATION
 #endif // FEATURE_COMINTEROP
@@ -946,6 +931,13 @@ inline BOOL MethodTable::IsAutoLayoutOrHasAutoLayoutField()
 {
     LIMITED_METHOD_CONTRACT;
     return GetClass()->IsAutoLayoutOrHasAutoLayoutField();
+}
+
+//==========================================================================================
+inline BOOL MethodTable::IsInt128OrHasInt128Fields()
+{
+    LIMITED_METHOD_CONTRACT;
+    return HasLayout() && GetClass()->IsInt128OrHasInt128Fields();
 }
 
 //==========================================================================================
@@ -1040,29 +1032,13 @@ inline PTR_InterfaceInfo MethodTable::GetInterfaceMap()
 }
 
 //==========================================================================================
-FORCEINLINE TADDR MethodTable::GetMultipurposeSlotPtr(WFLAGS2_ENUM flag, const BYTE * offsets)
-{
-    LIMITED_METHOD_DAC_CONTRACT;
-
-    _ASSERTE(GetFlag(flag));
-
-    DWORD offset = offsets[GetFlag((WFLAGS2_ENUM)(flag - 1))];
-
-    if (offset >= sizeof(MethodTable)) {
-        offset += GetNumVtableIndirections() * sizeof(VTableIndir_t);
-    }
-
-    return dac_cast<TADDR>(this) + offset;
-}
-
-//==========================================================================================
 // This method is dependent on the declared order of optional members
 // If you add or remove an optional member or reorder them please change this method
 FORCEINLINE DWORD MethodTable::GetOffsetOfOptionalMember(OptionalMemberId id)
 {
     LIMITED_METHOD_CONTRACT;
 
-    DWORD offset = c_OptionalMembersStartOffsets[GetFlag(enum_flag_MultipurposeSlotsMask)];
+    DWORD offset = sizeof(MethodTable);
 
     offset += GetNumVtableIndirections() * sizeof(VTableIndir_t);
 
@@ -1083,19 +1059,13 @@ FORCEINLINE DWORD MethodTable::GetOffsetOfOptionalMember(OptionalMemberId id)
 }
 
 //==========================================================================================
-inline DWORD MethodTable::GetOptionalMembersAllocationSize(DWORD dwMultipurposeSlotsMask,
-                                                           BOOL needsGenericsStaticsInfo,
-                                                           BOOL needsTokenOverflow)
+inline DWORD MethodTable::GetOptionalMembersAllocationSize(bool hasInterfaceMap)
 {
     LIMITED_METHOD_CONTRACT;
 
-    DWORD size = c_OptionalMembersStartOffsets[dwMultipurposeSlotsMask] - sizeof(MethodTable);
+    DWORD size = 0;
 
-    if (needsGenericsStaticsInfo)
-        size += sizeof(GenericsStaticsInfo);
-    if (dwMultipurposeSlotsMask & enum_flag_HasInterfaceMap)
-        size += sizeof(UINT_PTR);
-    if (needsTokenOverflow)
+    if (hasInterfaceMap)
         size += sizeof(UINT_PTR);
 
     return size;
@@ -1148,6 +1118,32 @@ inline PTR_BYTE MethodTable::GetNonGCThreadStaticsBasePointer()
         return NULL;
 
     return pTLM->GetNonGCStaticsBasePointer(this);
+}
+
+//==========================================================================================
+inline PTR_BYTE MethodTable::GetGCThreadStaticsBaseHandle()
+{
+    CONTRACTL
+    {
+        NOTHROW;
+        GC_NOTRIGGER;
+        MODE_COOPERATIVE;
+    }
+    CONTRACTL_END;
+
+    // Get the current thread
+    PTR_Thread pThread = dac_cast<PTR_Thread>(GetThread());
+
+    // Get the current module's ModuleIndex
+    ModuleIndex index = GetModuleForStatics()->GetModuleIndex();
+
+    PTR_ThreadLocalBlock pTLB = ThreadStatics::GetCurrentTLB(pThread);
+
+    PTR_ThreadLocalModule pTLM = pTLB->GetTLMIfExists(index);
+    if (pTLM == NULL)
+        return NULL;
+
+    return dac_cast<PTR_BYTE>(pTLM->GetPrecomputedGCStaticsBaseHandle());
 }
 
 //==========================================================================================
@@ -1233,7 +1229,6 @@ inline OBJECTREF MethodTable::AllocateNoChecks()
     // we know an instance of this class already exists in the same appdomain
     // therefore, some checks become redundant.
     // this currently only happens for Delegate.Combine
-    CONSISTENCY_CHECK(IsRestored_NoLogging());
 
     CONSISTENCY_CHECK(CheckInstanceActivated());
 
@@ -1315,9 +1310,11 @@ FORCEINLINE PTR_Module MethodTable::GetGenericsStaticsModuleAndID(DWORD * pID)
 
     _ASSERTE(HasGenericsStaticsInfo());
 
-    _ASSERTE(FitsIn<DWORD>(GetGenericsStaticsInfo()->m_DynamicTypeID) || GetGenericsStaticsInfo()->m_DynamicTypeID == (SIZE_T)-1);
-    *pID = static_cast<DWORD>(GetGenericsStaticsInfo()->m_DynamicTypeID);
-    return GetLoaderModule();
+    PTR_MethodTableAuxiliaryData AuxiliaryData = GetAuxiliaryDataForWrite();
+    PTR_GenericsStaticsInfo staticsInfo = MethodTableAuxiliaryData::GetGenericStaticsInfo(AuxiliaryData);
+    _ASSERTE(FitsIn<DWORD>(staticsInfo->m_DynamicTypeID) || staticsInfo->m_DynamicTypeID == (SIZE_T)-1);
+    *pID = (DWORD)staticsInfo->m_DynamicTypeID;
+    return AuxiliaryData->GetLoaderModule();
 }
 
 //==========================================================================================
@@ -1327,19 +1324,16 @@ inline OBJECTHANDLE MethodTable::GetLoaderAllocatorObjectHandle()
     return GetLoaderAllocator()->GetLoaderAllocatorObjectHandle();
 }
 
+#ifndef DACCESS_COMPILE
 //==========================================================================================
 FORCEINLINE OBJECTREF MethodTable::GetManagedClassObjectIfExists()
 {
     LIMITED_METHOD_CONTRACT;
 
-    // Logging will be done by the slow path
-    LOADERHANDLE handle = GetWriteableData_NoLogging()->GetExposedClassObjectHandle();
+    const RUNTIMETYPEHANDLE handle = GetAuxiliaryData()->m_hExposedClassObject;
 
     OBJECTREF retVal;
-
-    // GET_LOADERHANDLE_VALUE_FAST macro is inlined here to let us give hint to the compiler
-    // when the return value is not null.
-    if (!LoaderAllocator::GetHandleValueFast(handle, &retVal) &&
+    if (!TypeHandle::GetManagedClassObjectFromHandleFast(handle, &retVal) &&
         !GetLoaderAllocator()->GetHandleValueFastPhase2(handle, &retVal))
     {
         return NULL;
@@ -1348,6 +1342,7 @@ FORCEINLINE OBJECTREF MethodTable::GetManagedClassObjectIfExists()
     COMPILER_ASSUME(retVal != NULL);
     return retVal;
 }
+#endif
 
 //==========================================================================================
 inline void MethodTable::SetIsArray(CorElementType arrayType)
@@ -1404,7 +1399,7 @@ FORCEINLINE BOOL MethodTable::ImplementsInterfaceInline(MethodTable *pInterface)
     while (--numInterfaces);
 
     // Second scan, looking for the curiously recurring generic scenario
-    if (pInterface->HasInstantiation() && !ContainsGenericVariables() && pInterface->GetInstantiation().ContainsAllOneType(this))
+    if (pInterface->HasInstantiation() && !GetAuxiliaryData()->MayHaveOpenInterfacesInInterfaceMap() && pInterface->GetInstantiation().ContainsAllOneType(this))
     {
         numInterfaces = GetNumInterfaces();
         pInfo = GetInterfaceMap();

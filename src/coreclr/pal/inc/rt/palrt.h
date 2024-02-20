@@ -156,25 +156,12 @@ inline void *__cdecl operator new(size_t, void *_P)
 
 #define _WINNT_
 
-// C++ standard, 18.1.5 - offsetof requires a POD (plain old data) struct or
-// union. Since offsetof is a macro, gcc doesn't actually check for improper
-// use of offsetof, it keys off of the -> from NULL (which is also invalid for
-// non-POD types by 18.1.5)
-//
-// As we have numerous examples of this behavior in our codebase,
-// making an offsetof which doesn't use 0.
-
-// PAL_safe_offsetof is a version of offsetof that protects against an
-// overridden operator&
-
-#define FIELD_OFFSET(type, field) __builtin_offsetof(type, field)
 #ifndef offsetof
 #define offsetof(type, field) __builtin_offsetof(type, field)
 #endif
-#define PAL_safe_offsetof(type, field) __builtin_offsetof(type, field)
 
 #define CONTAINING_RECORD(address, type, field) \
-    ((type *)((LONG_PTR)(address) - FIELD_OFFSET(type, field)))
+    ((type *)((LONG_PTR)(address) - offsetof(type, field)))
 
 #define ARGUMENT_PRESENT(ArgumentPointer)    (\
     (CHAR *)(ArgumentPointer) != (CHAR *)(NULL) )
@@ -604,9 +591,6 @@ STDAPI CreateStreamOnHGlobal(PVOID hGlobal, BOOL fDeleteOnRelease, interface ISt
 
 #define STGM_NOSNAPSHOT         0x00200000L
 
-STDAPI IIDFromString(LPOLESTR lpsz, IID* lpiid);
-STDAPI_(int) StringFromGUID2(REFGUID rguid, LPOLESTR lpsz, int cchMax);
-
 /******************* CRYPT **************************************/
 
 #define PUBLICKEYBLOB           0x6
@@ -646,29 +630,6 @@ typedef unsigned int ALG_ID;
 // 1 null termination
 #define LOCALE_NAME_MAX_LENGTH   85
 
-#define CSTR_LESS_THAN            1
-#define CSTR_EQUAL                2
-#define CSTR_GREATER_THAN         3
-
-/******************* shlwapi ************************************/
-
-// note: diff in NULL handing and calling convetion
-#define StrChrW                 (WCHAR*)PAL_wcschr
-
-STDAPI_(LPWSTR) StrRChrW(LPCWSTR lpStart, LPCWSTR lpEnd, WCHAR wMatch);
-
-#define lstrcmpW                PAL_wcscmp
-#define lstrcmpiW               _wcsicmp
-
-#ifdef UNICODE
-#define StrChr                  StrChrW
-
-#define StrRChr                 StrRChrW
-
-#define lstrcmp                 lstrcmpW
-#define lstrcmpi                lstrcmpiW
-#endif
-
 
 #ifdef __cplusplus
 /*
@@ -685,10 +646,8 @@ STDAPI_(LPWSTR) StrRChrW(LPCWSTR lpStart, LPCWSTR lpEnd, WCHAR wMatch);
 
 /*
 The wrappers below are simple implementations that may not be as robust as complete functions in the Secure CRT library.
-Remember to fix the errcode defintion in safecrt.h.
+Remember to fix the errcode definition in safecrt.h.
 */
-
-#define swscanf_s swscanf
 
 #define _wfopen_s _wfopen_unsafe
 #define fopen_s _fopen_unsafe
@@ -722,9 +681,9 @@ inline int __cdecl _vscprintf_unsafe(const char *_Format, va_list _ArgList)
     }
 }
 
-inline errno_t __cdecl _wfopen_unsafe(PAL_FILE * *ff, const WCHAR *fileName, const WCHAR *mode)
+inline errno_t __cdecl _wfopen_unsafe(FILE * *ff, const WCHAR *fileName, const WCHAR *mode)
 {
-    PAL_FILE *result = _wfopen(fileName, mode);
+    FILE *result = _wfopen(fileName, mode);
     if(result == 0) {
         return 1;
     } else {
@@ -733,9 +692,9 @@ inline errno_t __cdecl _wfopen_unsafe(PAL_FILE * *ff, const WCHAR *fileName, con
     }
 }
 
-inline errno_t __cdecl _fopen_unsafe(PAL_FILE * *ff, const char *fileName, const char *mode)
+inline errno_t __cdecl _fopen_unsafe(FILE * *ff, const char *fileName, const char *mode)
 {
-  PAL_FILE *result = PAL_fopen(fileName, mode);
+  FILE *result = fopen(fileName, mode);
   if(result == 0) {
     return 1;
   } else {
@@ -746,15 +705,6 @@ inline errno_t __cdecl _fopen_unsafe(PAL_FILE * *ff, const char *fileName, const
 
 }
 #endif /* __cplusplus */
-
-STDAPI_(BOOL) PathIsUNCW(LPCWSTR pszPath);
-STDAPI_(BOOL) PathCanonicalizeW(LPWSTR lpszDst, LPCWSTR lpszSrc);
-
-#ifdef UNICODE
-#define PathIsUNC           PathIsUNCW
-#define PathCanonicalize    PathCanonicalizeW
-
-#endif // UNICODE
 
 /******************* misc ***************************************/
 
@@ -782,21 +732,12 @@ typename std::remove_reference<T>::type&& move( T&& t );
 
 typedef DWORD OLE_COLOR;
 
-#define PF_COMPARE_EXCHANGE_DOUBLE          2
-
-typedef VOID (NTAPI * WAITORTIMERCALLBACKFUNC) (PVOID, BOOLEAN );
-
 typedef HANDLE HWND;
-
-#define IS_TEXT_UNICODE_SIGNATURE             0x0008
-#define IS_TEXT_UNICODE_UNICODE_MASK          0x000F
 
 typedef struct _LIST_ENTRY {
    struct _LIST_ENTRY *Flink;
    struct _LIST_ENTRY *Blink;
 } LIST_ENTRY, *PLIST_ENTRY;
-
-typedef VOID (NTAPI *WAITORTIMERCALLBACK)(PVOID, BOOLEAN);
 
 // PORTABILITY_ASSERT and PORTABILITY_WARNING macros are meant to be used to
 // mark places in the code that needs attention for portability. The usual
@@ -880,24 +821,6 @@ typedef VOID (NTAPI *WAITORTIMERCALLBACK)(PVOID, BOOLEAN);
 #define IMAGE_COR20_HEADER_FIELD(obj, f)    ((obj).f)
 #endif
 
-// copied from winnt.h
-#define PROCESSOR_ARCHITECTURE_INTEL            0
-#define PROCESSOR_ARCHITECTURE_MIPS             1
-#define PROCESSOR_ARCHITECTURE_ALPHA            2
-#define PROCESSOR_ARCHITECTURE_PPC              3
-#define PROCESSOR_ARCHITECTURE_SHX              4
-#define PROCESSOR_ARCHITECTURE_ARM              5
-#define PROCESSOR_ARCHITECTURE_IA64             6
-#define PROCESSOR_ARCHITECTURE_ALPHA64          7
-#define PROCESSOR_ARCHITECTURE_MSIL             8
-#define PROCESSOR_ARCHITECTURE_AMD64            9
-#define PROCESSOR_ARCHITECTURE_IA32_ON_WIN64    10
-#define PROCESSOR_ARCHITECTURE_NEUTRAL          11
-#define PROCESSOR_ARCHITECTURE_ARM64            12
-#define PROCESSOR_ARCHITECTURE_LOONGARCH64      13
-
-#define PROCESSOR_ARCHITECTURE_UNKNOWN 0xFFFF
-
 //
 // JIT Debugging Info. This structure is defined to have constant size in
 // both the emulated and native environment.
@@ -905,7 +828,6 @@ typedef VOID (NTAPI *WAITORTIMERCALLBACK)(PVOID, BOOLEAN);
 
 typedef struct _JIT_DEBUG_INFO {
     DWORD dwSize;
-    DWORD dwProcessorArchitecture;
     DWORD dwThreadID;
     DWORD dwReserved0;
     ULONG64 lpExceptionAddress;
@@ -930,11 +852,6 @@ interface IDispatch;
 interface ITypeInfo;
 interface ITypeLib;
 interface IMoniker;
-
-typedef VOID (WINAPI *LPOVERLAPPED_COMPLETION_ROUTINE)(
-    DWORD dwErrorCode,
-    DWORD dwNumberOfBytesTransfered,
-    LPOVERLAPPED lpOverlapped);
 
 //
 // Debug APIs
@@ -1074,7 +991,7 @@ typedef struct _DISPATCHER_CONTEXT {
     DWORD Reserved;
 } DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
 
-#elif defined(HOST_ARM64)
+#elif defined(HOST_ARM64) || defined(HOST_LOONGARCH64) || defined(HOST_RISCV64)
 
 typedef struct _DISPATCHER_CONTEXT {
     ULONG64 ControlPc;
@@ -1122,24 +1039,6 @@ typedef struct _DISPATCHER_CONTEXT {
     BOOLEAN ControlPcIsUnwound;
 } DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
 
-#elif defined(HOST_LOONGARCH64)
-
-typedef struct _DISPATCHER_CONTEXT {
-    ULONG64 ControlPc;
-    ULONG64 ImageBase;
-    PRUNTIME_FUNCTION FunctionEntry;
-    ULONG64 EstablisherFrame;
-    ULONG64 TargetPc;
-    PCONTEXT ContextRecord;
-    PEXCEPTION_ROUTINE LanguageHandler;
-    PVOID HandlerData;
-    PVOID HistoryTable;
-    ULONG64 ScopeIndex;
-    BOOLEAN ControlPcIsUnwound;
-    PBYTE  NonVolatileRegisters;
-    ULONG64 Reserved;
-} DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
-
 #elif defined(HOST_S390X)
 
 typedef struct _DISPATCHER_CONTEXT {
@@ -1161,8 +1060,6 @@ typedef struct _DISPATCHER_CONTEXT {
 #error Unknown architecture for defining DISPATCHER_CONTEXT.
 
 #endif
-
-// #endif // !defined(TARGET_OSX)
 
 typedef DISPATCHER_CONTEXT *PDISPATCHER_CONTEXT;
 
@@ -1192,26 +1089,6 @@ typedef LONG (WINAPI *PTOP_LEVEL_EXCEPTION_FILTER)(
     IN struct _EXCEPTION_POINTERS *ExceptionInfo
     );
 typedef PTOP_LEVEL_EXCEPTION_FILTER LPTOP_LEVEL_EXCEPTION_FILTER;
-
-/******************* ntdef ************************************/
-
-#ifndef ANYSIZE_ARRAY
-#define ANYSIZE_ARRAY 1       // winnt
-#endif
-
-/******************* winnt ************************************/
-
-typedef struct LIST_ENTRY32 {
-    ULONG Flink;
-    ULONG Blink;
-} LIST_ENTRY32;
-typedef LIST_ENTRY32 *PLIST_ENTRY32;
-
-typedef struct LIST_ENTRY64 {
-    ULONGLONG Flink;
-    ULONGLONG Blink;
-} LIST_ENTRY64;
-typedef LIST_ENTRY64 *PLIST_ENTRY64;
 
 /******************** PAL RT APIs *******************************/
 

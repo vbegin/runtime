@@ -225,7 +225,7 @@ ASN1_OCTET_STRING* CryptoNative_X509FindExtensionData(X509* x, int32_t nid)
     return X509_EXTENSION_get_data(ext);
 }
 
-void CryptoNative_X509StoreDestory(X509_STORE* v)
+void CryptoNative_X509StoreDestroy(X509_STORE* v)
 {
     if (v != NULL)
     {
@@ -252,7 +252,7 @@ int32_t CryptoNative_X509StoreSetRevocationFlag(X509_STORE* ctx, X509RevocationF
     return X509_STORE_set_flags(ctx, verifyFlags);
 }
 
-X509_STORE_CTX* CryptoNative_X509StoreCtxCreate()
+X509_STORE_CTX* CryptoNative_X509StoreCtxCreate(void)
 {
     ERR_clear_error();
     return X509_STORE_CTX_new();
@@ -350,10 +350,19 @@ int32_t CryptoNative_X509StoreCtxRebuildChain(X509_STORE_CTX* ctx)
     return X509_verify_cert(ctx);
 }
 
-void CryptoNative_X509StoreCtxSetVerifyCallback(X509_STORE_CTX* ctx, X509StoreVerifyCallback callback)
+int32_t CryptoNative_X509StoreCtxSetVerifyCallback(X509_STORE_CTX* ctx, X509StoreVerifyCallback callback, void* appData)
 {
-    // Just a field mutator, no error queue interactions apply.
+    ERR_clear_error();
+
     X509_STORE_CTX_set_verify_cb(ctx, callback);
+
+    return X509_STORE_CTX_set_app_data(ctx, appData);
+}
+
+void* CryptoNative_X509StoreCtxGetAppData(X509_STORE_CTX* ctx)
+{
+    // Just a field accessor, no error queue interactions apply.
+    return X509_STORE_CTX_get_app_data(ctx);
 }
 
 int32_t CryptoNative_X509StoreCtxGetErrorDepth(X509_STORE_CTX* ctx)
@@ -443,6 +452,13 @@ static DIR* OpenUserStore(const char* storePath, char** pathTmp, size_t* pathTmp
     // Leave one byte for '\0' and one for '/'
     size_t allocSize = storePathLen + sizeof(ent->d_name) + 2;
     char* tmp = (char*)calloc(allocSize, sizeof(char));
+    if (!tmp)
+    {
+        *pathTmp = NULL;
+        *nextFileWrite = NULL;
+        return NULL;
+    }
+
     memcpy_s(tmp, allocSize, storePath, storePathLen);
     tmp[storePathLen] = '/';
     *pathTmp = tmp;
@@ -510,6 +526,10 @@ static X509* ReadNextPublicCert(DIR* dir, X509Stack* tmpStack, char* pathTmp, si
                     {
                         return cert;
                     }
+                }
+                else
+                {
+                    fclose(fp);
                 }
             }
         }
@@ -595,6 +615,8 @@ int32_t CryptoNative_X509StackAddDirectoryStore(X509Stack* stack, char* storePat
 
         if (tmpStack == NULL)
         {
+            free(pathTmp);
+            closedir(storeDir);
             return 0;
         }
 
@@ -871,7 +893,7 @@ static OCSP_CERTID* MakeCertId(X509* subject, X509* issuer)
     return OCSP_cert_to_id(EVP_sha1(), subject, issuer);
 }
 
-static time_t GetIssuanceWindowStart()
+static time_t GetIssuanceWindowStart(void)
 {
     // time_t granularity is seconds, so subtract 4 days worth of seconds.
     // The 4 day policy is based on the CA/Browser Forum Baseline Requirements
@@ -1280,11 +1302,11 @@ CryptoNative_X509ChainVerifyOcsp(X509_STORE_CTX* storeCtx, OCSP_REQUEST* req, OC
     return X509ChainVerifyOcsp(storeCtx, subject, issuer, req, resp, cachePath);
 }
 
-int32_t CryptoNative_X509DecodeOcspToExpiration(const uint8_t* buf, int32_t len, OCSP_REQUEST* req, X509* subject, X509* issuer, int64_t* expiration)
+int32_t CryptoNative_X509DecodeOcspToExpiration(const uint8_t* buf, int32_t len, OCSP_REQUEST* req, X509* subject, X509** issuers, int issuersLen, int64_t* expiration)
 {
     ERR_clear_error();
 
-    if (buf == NULL || len == 0)
+    if (buf == NULL || len == 0 || issuersLen == 0)
     {
         return 0;
     }
@@ -1307,7 +1329,16 @@ int32_t CryptoNative_X509DecodeOcspToExpiration(const uint8_t* buf, int32_t len,
 
     if (bag != NULL)
     {
-        if (X509_STORE_add_cert(store, issuer) && sk_X509_push(bag, issuer))
+        int i;
+        for (i = 0; i < issuersLen; i++)
+        {
+            if (!X509_STORE_add_cert(store, issuers[i]) || !sk_X509_push(bag, issuers[i]))
+            {
+                break;
+            }
+        }
+
+        if (i == issuersLen)
         {
             ctx = X509_STORE_CTX_new();
         }
@@ -1321,7 +1352,7 @@ int32_t CryptoNative_X509DecodeOcspToExpiration(const uint8_t* buf, int32_t len,
         {
             int canCache = 0;
             time_t expiration_t = 0;
-            X509VerifyStatusCode code = CheckOcspGetExpiry(req, resp, subject, issuer, ctx, &canCache, &expiration_t);
+            X509VerifyStatusCode code = CheckOcspGetExpiry(req, resp, subject, issuers[0], ctx, &canCache, &expiration_t);
 
             if (sizeof(time_t) == sizeof(int64_t))
             {

@@ -3,15 +3,15 @@
 
 using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 
 namespace Internal.Cryptography
 {
     internal static partial class Helpers
     {
         [UnsupportedOSPlatformGuard("browser")]
-        internal static bool HasNonAesSymmetricEncryption =>
+        internal static bool HasSymmetricEncryption { get; } =
 #if NETCOREAPP
             !OperatingSystem.IsBrowser();
 #else
@@ -42,15 +42,15 @@ namespace Internal.Cryptography
             true;
 #endif
 
-        [return: NotNullIfNotNull("src")]
+        [return: NotNullIfNotNull(nameof(src))]
         public static byte[]? CloneByteArray(this byte[]? src)
         {
-            if (src == null)
+            return src switch
             {
-                return null;
-            }
-
-            return (byte[])(src.Clone());
+                null => null,
+                { Length: 0 } => src,
+                _ => (byte[])src.Clone(),
+            };
         }
 
         internal static bool TryCopyToDestination(this ReadOnlySpan<byte> source, Span<byte> destination, out int bytesWritten)
@@ -63,6 +63,20 @@ namespace Internal.Cryptography
 
             bytesWritten = 0;
             return false;
+        }
+
+        internal static int HashOidToByteLength(string hashOid)
+        {
+            // This file is compiled in netstandard2.0, can't use the HashSizeInBytes consts.
+            return hashOid switch
+            {
+                Oids.Sha256 => 256 >> 3,
+                Oids.Sha384 => 384 >> 3,
+                Oids.Sha512 => 512 >> 3,
+                Oids.Sha1 => 160 >> 3,
+                Oids.Md5 => 128 >> 3,
+                _ => throw new CryptographicException(SR.Format(SR.Cryptography_UnknownHashAlgorithm, hashOid)),
+            };
         }
     }
 }

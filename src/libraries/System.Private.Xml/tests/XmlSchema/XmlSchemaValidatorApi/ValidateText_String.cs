@@ -2,10 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Xml.Schema;
+using System.Xml.Tests;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaValidatorApiTests
 {
     // ===================== ValidateText =====================
 
@@ -36,7 +37,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -144,7 +145,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -167,7 +168,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

@@ -8,12 +8,9 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-
-using FILETIME = System.Runtime.InteropServices.ComTypes.FILETIME;
-
 using Microsoft.Win32.SafeHandles;
-
 using static Interop.Crypt32;
+using FILETIME = System.Runtime.InteropServices.ComTypes.FILETIME;
 
 namespace Internal.Cryptography.Pal.Windows
 {
@@ -48,7 +45,7 @@ namespace Internal.Cryptography.Pal.Windows
                         try
                         {
                             if (!Interop.Crypt32.CryptMsgUpdate(hCryptMsg, encodedContent, encodedContent.Length, fFinal: true))
-                                throw Marshal.GetLastWin32Error().ToCryptographicException();
+                                throw Marshal.GetLastPInvokeError().ToCryptographicException();
                         }
                         finally
                         {
@@ -123,7 +120,7 @@ namespace Internal.Cryptography.Pal.Windows
                         SafeCryptMsgHandle hCryptMsg = Interop.Crypt32.CryptMsgOpenToEncode(MsgEncodingType.All, 0, CryptMsgType.CMSG_ENVELOPED, pEnvelopedEncodeInfo, innerContentType.Value!, IntPtr.Zero);
                         if (hCryptMsg == null || hCryptMsg.IsInvalid)
                         {
-                            Exception e = Marshal.GetLastWin32Error().ToCryptographicException();
+                            Exception e = Marshal.GetLastPInvokeError().ToCryptographicException();
                             hCryptMsg?.Dispose();
                             throw e;
                         }
@@ -412,7 +409,7 @@ namespace Internal.Cryptography.Pal.Windows
 
                     case SubjectIdentifierType.SubjectKeyIdentifier:
                         {
-                            byte[] ski = hCertContext.GetSubjectKeyIdentifer();
+                            byte[] ski = hCertContext.GetSubjectKeyIdentifier();
                             IntPtr pSki = hb.AllocBytes(ski);
 
                             recipientId.dwIdChoice = CertIdChoice.CERT_ID_KEY_IDENTIFIER;

@@ -4,8 +4,10 @@
 using System;
 using System.Runtime.InteropServices;
 
+namespace MarshalArrayAsField.LPArray;
+
 #region Sequential
-#region sequential stuct definition
+#region sequential struct definition
 [StructLayout(LayoutKind.Sequential)]
 public struct S_INTArray_Seq
 {
@@ -233,7 +235,7 @@ public class C_BOOLArray_Seq
 
 #region Explicit
 
-#region explicit stuct definition
+#region explicit struct definition
 [StructLayout(LayoutKind.Explicit)]
 public struct S_INTArray_Exp
 {

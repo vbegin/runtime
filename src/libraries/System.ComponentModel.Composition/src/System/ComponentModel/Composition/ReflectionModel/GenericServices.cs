@@ -2,10 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.ComponentModel.Composition.ReflectionModel
 {
@@ -88,7 +88,7 @@ namespace System.ComponentModel.Composition.ReflectionModel
             return genericSpecialization;
         }
 
-        [return: NotNullIfNotNull("types")]
+        [return: NotNullIfNotNull(nameof(types))]
         public static IEnumerable<Type>? CreateTypeSpecializations(this Type[]? types, Type[] specializationTypes)
         {
             if (types == null)

@@ -4,89 +4,70 @@
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Internal.CommandLine;
 using Internal.TypeSystem.Ecma;
+
 using static System.Console;
 
 namespace ILVerify
 {
-    class Program : IResolver
+    internal sealed class Program : IResolver
     {
-        private readonly Dictionary<string, PEReader> _resolverCache = new Dictionary<string, PEReader>();
-
-        private Options _options;
-        private Dictionary<string, string> _inputFilePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // map of simple name to file path
-        private Dictionary<string, string> _referenceFilePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // map of simple name to file path
-        private IReadOnlyList<Regex> _includePatterns;
-        private IReadOnlyList<Regex> _excludePatterns;
-        private IReadOnlyList<Regex> _ignoreErrorPatterns;
+        private readonly Dictionary<string, PEReader> _resolverCache = new();
+        private readonly ILVerifyRootCommand _command;
+        private readonly Dictionary<string, string> _inputFilePaths; // map of simple name to file path
+        private readonly Dictionary<string, string> _referenceFilePaths; // map of simple name to file path
+        private readonly Regex[] _includePatterns;
+        private readonly Regex[] _excludePatterns;
+        private readonly Regex[] _ignoreErrorPatterns;
+        private readonly bool _verbose;
 
         private Verifier _verifier;
 
-        public static IReadOnlyList<Regex> StringPatternsToRegexList(IReadOnlyList<string> patterns)
+        public Program(ILVerifyRootCommand command)
         {
-            List<Regex> patternList = new List<Regex>();
-            if (patterns != null)
-            {
-                foreach (var pattern in patterns)
-                    patternList.Add(new Regex(pattern, RegexOptions.Compiled));
-            }
-            return patternList;
-        }
+            _command = command;
 
-        private Program(Options options)
-        {
-            _options = options;
+            _inputFilePaths = Get(command.InputFilePath);
+            _referenceFilePaths = Get(command.Reference);
+            _verbose = Get(_command.Verbose);
 
-            if (options.InputFilePath != null)
+            string[] includePatterns = Get(command.Include);
+            FileInfo includeFile = Get(command.IncludeFile);
+            if (includeFile != null)
             {
-                foreach (var input in options.InputFilePath)
-                    Helpers.AppendExpandedPaths(_inputFilePaths, input, true);
-            }
-
-            if (options.Reference != null)
-            {
-                foreach (var reference in options.Reference)
-                    Helpers.AppendExpandedPaths(_referenceFilePaths, reference, false);
-            }
-
-            string[] includePatterns = options.Include;
-            if (options.IncludeFile != null)
-            {
-                if (options.Include != null && options.Include.Length != 0)
+                if (includePatterns != null && includePatterns.Length != 0)
                     WriteLine("[Warning] --include-file takes precedence over --include");
-                includePatterns = File.ReadAllLines(options.IncludeFile.FullName);
+                includePatterns = File.ReadAllLines(includeFile.FullName);
             }
-            _includePatterns = StringPatternsToRegexList(includePatterns);
+            _includePatterns = StringPatternsToRegexArray(includePatterns);
 
-            string[] excludePatterns = options.Exclude;
-            if (options.ExcludeFile != null)
+            string[] excludePatterns = Get(command.Exclude);
+            FileInfo excludeFile = Get(command.ExcludeFile);
+            if (excludeFile != null)
             {
-                if (options.Exclude != null && options.Exclude.Length != 0)
+                if (excludePatterns != null && excludePatterns.Length != 0)
                     WriteLine("[Warning] --exclude-file takes precedence over --exclude");
-                excludePatterns = File.ReadAllLines(options.ExcludeFile.FullName);
+                excludePatterns = File.ReadAllLines(excludeFile.FullName);
             }
-            _excludePatterns = StringPatternsToRegexList(excludePatterns);
+            _excludePatterns = StringPatternsToRegexArray(excludePatterns);
 
-            string[] ignoreErrorPatterns = options.IgnoreError;
-            if (options.IgnoreErrorFile != null)
+            string[] ignoreErrorPatterns = Get(command.IgnoreError);
+            FileInfo ignoreErrorFile = Get(command.IgnoreErrorFile);
+            if (ignoreErrorFile != null)
             {
-                if (options.IgnoreError != null && options.IgnoreError.Length != 0)
+                if (ignoreErrorPatterns != null && ignoreErrorPatterns.Length != 0)
                     WriteLine("[Warning] --ignore-error-file takes precedence over --ignore-error");
-                ignoreErrorPatterns = File.ReadAllLines(options.IgnoreErrorFile.FullName);
+                ignoreErrorPatterns = File.ReadAllLines(ignoreErrorFile.FullName);
             }
-            _ignoreErrorPatterns = StringPatternsToRegexList(ignoreErrorPatterns);
+            _ignoreErrorPatterns = StringPatternsToRegexArray(ignoreErrorPatterns);
 
-            if (options.Verbose)
+            if (_verbose)
             {
                 WriteLine();
                 foreach (var path in _inputFilePaths)
@@ -108,16 +89,31 @@ namespace ILVerify
                 foreach (var pattern in _ignoreErrorPatterns)
                     WriteLine($"Using ignore error pattern '{pattern}'");
             }
+
+            static Regex[] StringPatternsToRegexArray(string[] patterns)
+            {
+                if (patterns != null)
+                {
+                    var regexes = new Regex[patterns.Length];
+                    for (var i = 0; i < patterns.Length; i++)
+                    {
+                        regexes[i] = new Regex(patterns[i], RegexOptions.Compiled);
+                    }
+
+                    return regexes;
+                }
+                return Array.Empty<Regex>();
+            }
         }
 
-        private int Run()
+        public int Run()
         {
             _verifier = new Verifier(this, new VerifierOptions
             {
-                IncludeMetadataTokensInErrorMessages = _options.Tokens,
-                SanityChecks = _options.SanityChecks
+                IncludeMetadataTokensInErrorMessages = Get(_command.Tokens),
+                SanityChecks = Get(_command.SanityChecks)
             });
-            _verifier.SetSystemModuleName(new AssemblyName(_options.SystemModule ?? "mscorlib"));
+            _verifier.SetSystemModuleName(new AssemblyName(Get(_command.SystemModule) ?? "mscorlib"));
 
             int numErrors = 0;
 
@@ -155,12 +151,9 @@ namespace ILVerify
 
             MetadataReader metadataReader = module.MetadataReader;
 
-            TypeDefinition typeDef = metadataReader.GetTypeDefinition(metadataReader.GetMethodDefinition(result.Method).GetDeclaringType());
-            string typeNamespace = metadataReader.GetString(typeDef.Namespace);
-            Write(typeNamespace);
-            Write(".");
-            string typeName = metadataReader.GetString(typeDef.Name);
-            Write(typeName);
+            TypeDefinitionHandle typeDef = metadataReader.GetMethodDefinition(result.Method).GetDeclaringType();
+            string fullClassName = GetFullClassName(metadataReader, typeDef);
+            Write(fullClassName);
 
             Write("::");
             var method = (EcmaMethod)module.GetMethod(result.Method);
@@ -255,7 +248,7 @@ namespace ILVerify
             else
                 WriteLine("All Classes and Methods in " + path + " Verified.");
 
-            if (_options.Statistics)
+            if (Get(_command.Statistics))
             {
                 WriteLine($"Types found: {typeCounter}");
                 WriteLine($"Types verified: {verifiedTypeCounter}");
@@ -280,7 +273,7 @@ namespace ILVerify
                 var methodName = GetQualifiedMethodName(metadataReader, methodHandle);
 
                 bool verifying = ShouldVerifyMemberName(methodName);
-                if (_options.Verbose)
+                if (_verbose)
                 {
                     Write(verifying ? "Verifying " : "Skipping ");
                     WriteLine(methodName);
@@ -293,7 +286,7 @@ namespace ILVerify
                     {
                         if (ShouldIgnoreVerificationResult(result))
                         {
-                            if (_options.Verbose)
+                            if (_verbose)
                             {
                                 Write("Ignoring ");
                                 PrintVerifyMethodsResult(result, module, path);
@@ -322,7 +315,7 @@ namespace ILVerify
                 // get fully qualified type name
                 var className = GetQualifiedClassName(metadataReader, typeHandle);
                 bool verifying = ShouldVerifyMemberName(className);
-                if (_options.Verbose)
+                if (_verbose)
                 {
                     Write(verifying ? "Verifying " : "Skipping ");
                     WriteLine(className);
@@ -334,15 +327,15 @@ namespace ILVerify
                     {
                         if (ShouldIgnoreVerificationResult(result))
                         {
-                            if (_options.Verbose)
+                            if (_verbose)
                             {
                                 Write("Ignoring ");
-                                Console.WriteLine(result.Message, result.Args);
+                                WriteLine(result.Message, result.Args);
                             }
                         }
                         else
                         {
-                            Console.WriteLine(result.Message, result.Args);
+                            WriteLine(result.Message, result.Args);
                             numErrors++;
                         }
                     }
@@ -352,6 +345,35 @@ namespace ILVerify
 
                 verifiedTypeCounter++;
             }
+        }
+
+        /// <summary>
+        /// Returns full class name, includes parent class for nested class.
+        /// </summary>
+        private string GetFullClassName(MetadataReader metadataReader, TypeDefinitionHandle typeDefinitionHandle)
+        {
+            var typeDef = metadataReader.GetTypeDefinition(typeDefinitionHandle);
+
+            var fullName = new StringBuilder();
+
+            var declaringType = typeDef.GetDeclaringType();
+            if (!declaringType.IsNil)
+            {
+                fullName.Append(GetFullClassName(metadataReader, declaringType));
+                fullName.Append('+');
+            }
+            
+            var namespaceName = metadataReader.GetString(typeDef.Namespace);
+            if (!string.IsNullOrEmpty(namespaceName))
+            {
+                fullName.Append(namespaceName);
+                fullName.Append('.');
+            }
+
+            var typeName = metadataReader.GetString(typeDef.Name);
+            fullName.Append(typeName);
+            
+            return fullName.ToString();
         }
 
         /// <summary>
@@ -400,12 +422,12 @@ namespace ILVerify
 
         private bool ShouldVerifyMemberName(string memberName)
         {
-            if (_includePatterns.Count > 0 && !_includePatterns.Any(p => p.IsMatch(memberName)))
+            if (_includePatterns.Length > 0 && !Array.Exists(_includePatterns, p => p.IsMatch(memberName)))
             {
                 return false;
             }
 
-            if (_excludePatterns.Any(p => p.IsMatch(memberName)))
+            if (Array.Exists(_excludePatterns, p => p.IsMatch(memberName)))
             {
                 return false;
             }
@@ -421,7 +443,7 @@ namespace ILVerify
                 error = result.ExceptionID?.ToStringInvariant();
             }
 
-            if (_ignoreErrorPatterns.Any(p => p.IsMatch(error)))
+            if (Array.Exists(_ignoreErrorPatterns, p => p.IsMatch(error)))
             {
                 return true;
             }
@@ -453,118 +475,13 @@ namespace ILVerify
             return null;
         }
 
-        //
-        // Command line parsing
-        //
-
-        private class ILVerifyRootCommand : RootCommand
-        {
-            public Argument<string[]> InputFilePath { get; } =
-                new("input-file-path", "Input file(s)") { Arity = ArgumentArity.OneOrMore };
-            public Option<string[]> Reference { get; } =
-                new(new[] { "--reference", "-r" }, "Reference metadata from the specified assembly");
-            public Option<string> SystemModule { get; } =
-                new(new[] { "--system-module", "-s" }, "System module name (default: mscorlib)");
-            public Option<bool> SanityChecks { get; } =
-                new(new[] { "--sanity-checks", "-c" }, "Check for valid constructs that are likely mistakes");
-            public Option<string[]> Include { get; } =
-                new(new[] { "--include", "-i" }, "Use only methods/types/namespaces, which match the given regular expression(s)");
-            public Option<FileInfo> IncludeFile { get; } =
-                new Option<FileInfo>(new[] { "--include-file" }, "Same as --include, but the regular expression(s) are declared line by line in the specified file.").ExistingOnly();
-            public Option<string[]> Exclude { get; } =
-                new(new[] { "--exclude", "-e" }, "Skip methods/types/namespaces, which match the given regular expression(s)");
-            public Option<FileInfo> ExcludeFile { get; } =
-                new Option<FileInfo>(new[] { "--exclude-file" }, "Same as --exclude, but the regular expression(s) are declared line by line in the specified file.").ExistingOnly();
-            public Option<string[]> IgnoreError { get; } =
-                new(new[] { "--ignore-error", "-g" }, "Ignore errors, which match the given regular expression(s)");
-            public Option<FileInfo> IgnoreErrorFile { get; } =
-                new Option<FileInfo>(new[] { "--ignore-error-file" }, "Same as --ignore-error, but the regular expression(s) are declared line by line in the specified file.").ExistingOnly();
-            public Option<bool> Statistics { get; } =
-                new(new[] { "--statistics" }, "Print verification statistics");
-            public Option<bool> Verbose { get; } =
-                new(new[] { "--verbose", "-v" }, "Verbose output");
-            public Option<bool> Tokens { get; } =
-                new(new[] { "--tokens", "-t" }, "Include metadata tokens in error messages");
-
-            public ILVerifyRootCommand()
-                : base("Tool for verifying MSIL code based on ECMA-335.")
-            {
-                AddArgument(InputFilePath);
-                AddOption(Reference);
-                AddOption(SystemModule);
-                AddOption(SanityChecks);
-                AddOption(Include);
-                AddOption(IncludeFile);
-                AddOption(Exclude);
-                AddOption(ExcludeFile);
-                AddOption(IgnoreError);
-                AddOption(IgnoreErrorFile);
-                AddOption(Statistics);
-                AddOption(Verbose);
-                AddOption(Tokens);
-
-                this.SetHandler(context =>
-                {
-                    try
-                    {
-                        context.ExitCode = new Program(new Options(this, context.ParseResult)).Run();
-                    }
-                    catch (Exception e)
-                    {
-                        Console.ResetColor();
-                        Console.ForegroundColor = ConsoleColor.Red;
-
-                        // Omit the stacktrace from the error (different from the default System.CommandLine exception handler)
-                        Console.Error.WriteLine("Error: " + e.Message);
-
-                        Console.ResetColor();
-
-                        context.ExitCode = 1;
-                    }
-                });
-            }
-        }
-
-        private class Options
-        {
-            public Options(ILVerifyRootCommand cmd, ParseResult res)
-            {
-                InputFilePath = res.GetValueForArgument(cmd.InputFilePath);
-                Reference = res.GetValueForOption(cmd.Reference);
-                SystemModule = res.GetValueForOption(cmd.SystemModule);
-                SanityChecks = res.GetValueForOption(cmd.SanityChecks);
-                Include = res.GetValueForOption(cmd.Include);
-                IncludeFile = res.GetValueForOption(cmd.IncludeFile);
-                Exclude = res.GetValueForOption(cmd.Exclude);
-                ExcludeFile = res.GetValueForOption(cmd.ExcludeFile);
-                IgnoreError = res.GetValueForOption(cmd.IgnoreError);
-                IgnoreErrorFile = res.GetValueForOption(cmd.IgnoreErrorFile);
-                Statistics = res.GetValueForOption(cmd.Statistics);
-                Verbose = res.GetValueForOption(cmd.Verbose);
-                Tokens = res.GetValueForOption(cmd.Tokens);
-            }
-
-            public string[] InputFilePath { get; }
-            public string[] Reference { get; }
-            public string SystemModule { get; }
-            public bool SanityChecks { get; }
-            public string[] Include { get; }
-            public FileInfo IncludeFile { get; }
-            public string[] Exclude { get; }
-            public FileInfo ExcludeFile { get; }
-            public string[] IgnoreError { get; }
-            public FileInfo IgnoreErrorFile { get; }
-            public bool Statistics { get; }
-            public bool Verbose { get; }
-            public bool Tokens { get; }
-        }
+        private T Get<T>(CliOption<T> option) => _command.Result.GetValue(option);
+        private T Get<T>(CliArgument<T> argument) => _command.Result.GetValue(argument);
 
         private static int Main(string[] args) =>
-            new CommandLineBuilder(new ILVerifyRootCommand())
-                .UseVersionOption()
-                .UseHelp()
-                .UseParseErrorReporting()
-                .Build()
-                .Invoke(args);
+            new CliConfiguration(new ILVerifyRootCommand().UseVersion())
+            {
+                ResponseFileTokenReplacer = Helpers.TryReadResponseFile
+            }.Invoke(args);
     }
 }

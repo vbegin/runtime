@@ -150,7 +150,7 @@ namespace System.Data.Common
             {
                 object Obj = System.Activator.CreateInstance(_dataType, true)!;
 
-                string tempStr = string.Concat("<col>", s, "</col>"); // this is done since you can give fragmet to reader
+                string tempStr = string.Concat("<col>", s, "</col>"); // this is done since you can give fragment to reader
                 StringReader strReader = new StringReader(tempStr);
 
                 using (XmlTextReader xmlTextReader = new XmlTextReader(strReader))
@@ -182,6 +182,9 @@ namespace System.Data.Common
                     }
                 }
                 Type type = (typeName == null) ? _dataType : Type.GetType(typeName)!;
+
+                TypeLimiter.EnsureTypeIsAllowed(type);
+
                 object Obj = System.Activator.CreateInstance(type, true)!;
                 Debug.Assert(xmlReader is DataTextReader, "Invalid DataTextReader is being passed to customer");
                 ((IXmlSerializable)Obj).ReadXml(xmlReader);

@@ -115,7 +115,7 @@ namespace System.Speech.Recognition.SrgsGrammar
         // Decide if the input stream is a cfg.
         // If not assume it's an xml grammar.
         // The stream parameter points to the start of the data on entry and is reset to that point on exit.
-        private static bool CheckIfCfg(Stream stream, out int cfgLength)
+        private static bool CheckIfCfg(SeekableReadStream stream, out int cfgLength)
         {
             long initialPosition = stream.Position;
 
@@ -129,7 +129,7 @@ namespace System.Speech.Recognition.SrgsGrammar
         internal static void CompileXmlOrCopyCfg(
             Stream inputStream,
             Stream outputStream,
-            Uri orginalUri)
+            Uri originalUri)
         {
             // Wrap stream in case Seek is not supported:
             SeekableReadStream seekableInputStream = new(inputStream);
@@ -149,7 +149,7 @@ namespace System.Speech.Recognition.SrgsGrammar
             else
             {
                 // Else compile the Xml:
-                SrgsCompiler.CompileStream(new XmlReader[] { new XmlTextReader(seekableInputStream) }, null, outputStream, true, orginalUri, null, null);
+                SrgsCompiler.CompileStream(new XmlReader[] { new XmlTextReader(seekableInputStream) }, null, outputStream, true, originalUri, null, null);
             }
         }
 

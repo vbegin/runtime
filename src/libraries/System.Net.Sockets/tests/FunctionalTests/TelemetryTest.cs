@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DotNet.RemoteExecutor;
+using Microsoft.DotNet.XUnitExtensions;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -15,6 +16,24 @@ namespace System.Net.Sockets.Tests
 {
     public class TelemetryTest
     {
+        private static readonly Lazy<Task<bool>> s_remoteServerIsReachable = new Lazy<Task<bool>>(() => Task.Run(async () =>
+        {
+            try
+            {
+                using var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+                EndPoint endPoint = await GetRemoteEndPointAsync(useDnsEndPointString: "True", port: 443);
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await socket.ConnectAsync(endPoint, cts.Token);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }));
+
         public readonly ITestOutputHelper _output;
 
         public TelemetryTest(ITestOutputHelper output)
@@ -136,8 +155,13 @@ namespace System.Net.Sockets.Tests
         [OuterLoop]
         [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
         [MemberData(nameof(SocketMethods_WithBools_MemberData))]
-        public void EventSource_SocketConnectsRemote_LogsConnectStartStop(string connectMethod, bool useDnsEndPoint)
+        public async Task EventSource_SocketConnectsRemote_LogsConnectStartStop(string connectMethod, bool useDnsEndPoint)
         {
+            if (!await s_remoteServerIsReachable.Value)
+            {
+                throw new SkipTestException("The remote server is not reachable");
+            }
+
             RemoteExecutor.Invoke(async (connectMethod, useDnsEndPointString) =>
             {
                 using var listener = new TestEventListener("System.Net.Sockets", EventLevel.Verbose, 0.1);
@@ -169,6 +193,13 @@ namespace System.Net.Sockets.Tests
         [MemberData(nameof(SocketMethods_WithBools_MemberData))]
         public void EventSource_SocketConnectFailure_LogsConnectFailed(string connectMethod, bool useDnsEndPoint)
         {
+            // Skip test on Linux kernels that may have a regression that was fixed in 6.6.
+            // See TcpReceiveSendGetsCanceledByDispose test for additional information.
+            if (connectMethod == "Sync" && PlatformDetection.IsLinux && Environment.OSVersion.Version < new Version(6, 6))
+            {
+                return;
+            }
+
             RemoteExecutor.Invoke(async (connectMethod, useDnsEndPointString) =>
             {
                 EndPoint endPoint = await GetRemoteEndPointAsync(useDnsEndPointString, port: 12345);
@@ -345,7 +376,7 @@ namespace System.Net.Sockets.Tests
                     });
 
                     VerifyEvents(events, connect: true, expectedCount: 10);
-                    VerifyEventCounters(events, connectCount: 10, shouldHaveTransferedBytes: true, shouldHaveDatagrams: true);
+                    VerifyEventCounters(events, connectCount: 10, shouldHaveTransferredBytes: true, shouldHaveDatagrams: true);
                 }
             }).Dispose();
         }
@@ -456,7 +487,7 @@ namespace System.Net.Sockets.Tests
             }
         }
 
-        private static void VerifyEventCounters(ConcurrentQueue<(EventWrittenEventArgs Event, Guid ActivityId)> events, int connectCount, bool hasCurrentConnectCounter = false, bool connectOnly = false, bool shouldHaveTransferedBytes = false, bool shouldHaveDatagrams = false)
+        private static void VerifyEventCounters(ConcurrentQueue<(EventWrittenEventArgs Event, Guid ActivityId)> events, int connectCount, bool hasCurrentConnectCounter = false, bool connectOnly = false, bool shouldHaveTransferredBytes = false, bool shouldHaveDatagrams = false)
         {
             Dictionary<string, double[]> eventCounters = events
                 .Where(e => e.Event.EventName == "EventCounters")
@@ -478,13 +509,13 @@ namespace System.Net.Sockets.Tests
             Assert.Equal(0, currentOutgoingConnectAttempts[^1]);
 
             Assert.True(eventCounters.TryGetValue("bytes-received", out double[] bytesReceived));
-            if (shouldHaveTransferedBytes)
+            if (shouldHaveTransferredBytes)
             {
                 Assert.True(bytesReceived[^1] > 0);
             }
 
             Assert.True(eventCounters.TryGetValue("bytes-sent", out double[] bytesSent));
-            if (shouldHaveTransferedBytes)
+            if (shouldHaveTransferredBytes)
             {
                 Assert.True(bytesSent[^1] > 0);
             }

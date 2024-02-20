@@ -67,6 +67,19 @@ static bool ConfigureEncryption(EVP_PKEY_CTX* ctx, RsaPaddingMode padding, const
         {
             return false;
         }
+
+        // OpenSSL 3.2 introduced a change where PKCS#1 RSA decryption does not fail for invalid padding.
+        // If the padding is invalid, the decryption operation returns random data.
+        // See https://github.com/openssl/openssl/pull/13817 for background.
+        // Some Linux distributions backported this change to previous versions of OpenSSL.
+        // Here we do a best-effort to set a flag to revert the behavior to failing if the padding is invalid.
+        ERR_set_mark();
+
+        EVP_PKEY_CTX_ctrl_str(ctx, "rsa_pkcs1_implicit_rejection", "0");
+
+        // Undo any changes to the error queue that may have occured while configuring implicit rejection if the
+        // current version does not support implicit rejection.
+        ERR_pop_to_mark();
     }
     else
     {
@@ -307,7 +320,7 @@ int32_t CryptoNative_RsaVerifyHash(EVP_PKEY* pkey,
         goto done;
     }
 
-    // EVP_PKEY_verify is not consistent on whether a mis-sized hash is an error or just a mismatch.
+    // EVP_PKEY_verify is not consistent on whether a missized hash is an error or just a mismatch.
     // Normalize to mismatch.
     if (hashLen != EVP_MD_get_size(digest))
     {
@@ -334,7 +347,7 @@ static int HasNoPrivateKey(const RSA* rsa)
     // Shared pointer, don't free.
     const RSA_METHOD* meth = RSA_get_method(rsa);
 
-    // The method has descibed itself as having the private key external to the structure.
+    // The method has described itself as having the private key external to the structure.
     // That doesn't mean it's actually present, but we can't tell.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wcast-qual"

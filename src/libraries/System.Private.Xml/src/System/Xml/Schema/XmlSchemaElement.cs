@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.ComponentModel;
-using System.Xml.Serialization;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Xml.Serialization;
 
 namespace System.Xml.Schema
 {
@@ -189,7 +189,7 @@ namespace System.Xml.Schema
             get { return _finalResolved; }
         }
 
-        [return: NotNullIfNotNull("schemaSet")]
+        [return: NotNullIfNotNull(nameof(schemaSet))]
         internal XmlReader? Validate(XmlReader reader, XmlResolver? resolver, XmlSchemaSet schemaSet, ValidationEventHandler valEventHandler)
         {
             if (schemaSet != null)

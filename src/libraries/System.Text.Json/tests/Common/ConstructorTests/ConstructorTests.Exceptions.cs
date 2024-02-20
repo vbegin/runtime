@@ -314,10 +314,6 @@ namespace System.Text.Json.Serialization.Tests
         }
 
         [Fact]
-#if BUILDING_SOURCE_GENERATOR_TESTS
-        [ActiveIssue("Multi-dim arrays not supported.")]
-#endif
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/71838", typeof(PlatformDetection), nameof(PlatformDetection.IsBrowser), nameof(PlatformDetection.IsMonoAOT))]
         public async Task ClassWithUnsupportedCollectionTypes()
         {
             Exception e;
@@ -328,12 +324,12 @@ namespace System.Text.Json.Serialization.Tests
             // since the verification occurs later and is no longer bound to the parent type.
             Assert.DoesNotContain("ClassWithInvalidArray.UnsupportedArray", e.ToString());
 
-            e = await Assert.ThrowsAsync<NotSupportedException>(() => Serializer.DeserializeWrapper<ClassWithInvalidDictionary>(@"{""UnsupportedDictionary"":{}}"));
+            e = await Assert.ThrowsAsync<NotSupportedException>(() => Serializer.DeserializeWrapper<ClassWithInvalidDictionary>(@"{""UnsupportedDictionary"":{""key"":[[1,2,3]]}}"));
             Assert.Contains("System.Int32[,]", e.ToString());
             Assert.DoesNotContain("ClassWithInvalidDictionary.UnsupportedDictionary", e.ToString());
         }
 
-        private class ClassWithInvalidArray
+        public class ClassWithInvalidArray
         {
             public int[,] UnsupportedArray { get; set; }
 
@@ -343,7 +339,7 @@ namespace System.Text.Json.Serialization.Tests
             }
         }
 
-        private class ClassWithInvalidDictionary
+        public class ClassWithInvalidDictionary
         {
             public Dictionary<string, int[,]> UnsupportedDictionary { get; set; }
 

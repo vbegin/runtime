@@ -1,12 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.CompilerServices;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace System.Collections.Generic
 {
-    [TypeDependency("System.Collections.Generic.ObjectEqualityComparer`1")]
     public abstract partial class EqualityComparer<T> : IEqualityComparer, IEqualityComparer<T>
     {
         // To minimize generic instantiation overhead of creating the comparer per type, we keep the generic portion of the code as small
@@ -14,7 +13,7 @@ namespace System.Collections.Generic
         public static EqualityComparer<T> Default { [Intrinsic] get; } = (EqualityComparer<T>)ComparerHelpers.CreateDefaultEqualityComparer(typeof(T));
     }
 
-    public sealed partial class GenericEqualityComparer<T> : EqualityComparer<T> where T : IEquatable<T>
+    public sealed partial class GenericEqualityComparer<T> : EqualityComparer<T> where T : IEquatable<T>?
     {
         internal override int IndexOf(T[] array, T value, int startIndex, int count)
         {
@@ -30,7 +29,7 @@ namespace System.Collections.Generic
             {
                 for (int i = startIndex; i < endIndex; i++)
                 {
-                    if (array[i] != null && array[i].Equals(value)) return i;
+                    if (array[i] != null && array[i]!.Equals(value)) return i;
                 }
             }
             return -1;
@@ -50,7 +49,7 @@ namespace System.Collections.Generic
             {
                 for (int i = startIndex; i >= endIndex; i--)
                 {
-                    if (array[i] != null && array[i].Equals(value)) return i;
+                    if (array[i] != null && array[i]!.Equals(value)) return i;
                 }
             }
             return -1;
@@ -165,7 +164,7 @@ namespace System.Collections.Generic
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool Equals(T x, T y)
         {
-            return System.Runtime.CompilerServices.RuntimeHelpers.EnumEquals(x, y);
+            return RuntimeHelpers.EnumEquals(x, y);
         }
 
         internal override int IndexOf(T[] array, T value, int startIndex, int count)
@@ -173,7 +172,7 @@ namespace System.Collections.Generic
             int endIndex = startIndex + count;
             for (int i = startIndex; i < endIndex; i++)
             {
-                if (System.Runtime.CompilerServices.RuntimeHelpers.EnumEquals(array[i], value)) return i;
+                if (RuntimeHelpers.EnumEquals(array[i], value)) return i;
             }
             return -1;
         }
@@ -183,7 +182,7 @@ namespace System.Collections.Generic
             int endIndex = startIndex - count + 1;
             for (int i = startIndex; i >= endIndex; i--)
             {
-                if (System.Runtime.CompilerServices.RuntimeHelpers.EnumEquals(array[i], value)) return i;
+                if (RuntimeHelpers.EnumEquals(array[i], value)) return i;
             }
             return -1;
         }

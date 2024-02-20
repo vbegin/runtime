@@ -3,7 +3,6 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace System.Text.RegularExpressions
@@ -178,17 +177,17 @@ namespace System.Text.RegularExpressions
         /// </summary>
         private int StringCode(string str)
         {
-#if REGEXGENERATOR
-            if (!_stringTable.TryGetValue(str, out int i))
-            {
-                i = _stringTable.Count;
-                _stringTable.Add(str, i);
-            }
-#else
+#if NET6_0_OR_GREATER
             ref int i = ref CollectionsMarshal.GetValueRefOrAddDefault(_stringTable, str, out bool exists);
             if (!exists)
             {
                 i = _stringTable.Count - 1;
+            }
+#else
+            if (!_stringTable.TryGetValue(str, out int i))
+            {
+                i = _stringTable.Count;
+                _stringTable.Add(str, i);
             }
 #endif
             return i;

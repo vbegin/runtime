@@ -4,7 +4,7 @@
 using OLEDB.Test.ModuleCore;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCFragmentCL
     {
@@ -108,7 +108,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // WriteStartDocument() should error when CL=fragment
@@ -130,7 +130,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

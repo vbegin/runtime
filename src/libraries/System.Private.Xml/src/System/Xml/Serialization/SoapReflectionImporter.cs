@@ -1,16 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Reflection;
 using System;
-using System.Globalization;
-using System.Xml.Schema;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Reflection;
 using System.Threading;
 using System.Xml;
+using System.Xml.Schema;
 using System.Xml.Serialization;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Xml.Serialization
 {
@@ -47,6 +47,7 @@ namespace System.Xml.Serialization
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public void IncludeTypes(ICustomAttributeProvider provider)
         {
+            ArgumentNullException.ThrowIfNull(provider);
             IncludeTypes(provider, new RecursionLimiter());
         }
 
@@ -97,27 +98,31 @@ namespace System.Xml.Serialization
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public XmlMembersMapping ImportMembersMapping(string? elementName, string? ns, XmlReflectionMember[] members)
         {
+            ArgumentNullException.ThrowIfNull(members);
             return ImportMembersMapping(elementName, ns, members, true, true, false);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public XmlMembersMapping ImportMembersMapping(string? elementName, string? ns, XmlReflectionMember[] members, bool hasWrapperElement, bool writeAccessors)
         {
+            ArgumentNullException.ThrowIfNull(members);
             return ImportMembersMapping(elementName, ns, members, hasWrapperElement, writeAccessors, false);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public XmlMembersMapping ImportMembersMapping(string? elementName, string? ns, XmlReflectionMember[] members, bool hasWrapperElement, bool writeAccessors, bool validate)
         {
+            ArgumentNullException.ThrowIfNull(members);
             return ImportMembersMapping(elementName, ns, members, hasWrapperElement, writeAccessors, validate, XmlMappingAccess.Read | XmlMappingAccess.Write);
         }
 
         [RequiresUnreferencedCode(XmlSerializer.TrimSerializationWarning)]
         public XmlMembersMapping ImportMembersMapping(string? elementName, string? ns, XmlReflectionMember[] members, bool hasWrapperElement, bool writeAccessors, bool validate, XmlMappingAccess access)
         {
+            ArgumentNullException.ThrowIfNull(members);
             ElementAccessor element = new ElementAccessor();
             element.IsSoap = true;
-            element.Name = elementName == null || elementName.Length == 0 ? elementName : XmlConvert.EncodeLocalName(elementName);
+            element.Name = string.IsNullOrEmpty(elementName) ? elementName : XmlConvert.EncodeLocalName(elementName);
 
             element.Mapping = ImportMembersMapping(members, ns, hasWrapperElement, writeAccessors, validate, new RecursionLimiter());
             element.Mapping.TypeName = elementName;
@@ -129,7 +134,7 @@ namespace System.Xml.Serialization
             return xmlMapping;
         }
 
-        private static Exception ReflectionException(string context, Exception e)
+        private static InvalidOperationException ReflectionException(string context, Exception e)
         {
             return new InvalidOperationException(SR.Format(SR.XmlReflectionError, context), e);
         }
@@ -724,7 +729,7 @@ namespace System.Xml.Serialization
         {
             ElementAccessor element = new ElementAccessor();
             element.IsSoap = true;
-            element.Name = mapping.TypeName; //XmlConvert.EncodeLocalName(name == null || name.Length == 0 ? mapping.TypeName : name);
+            element.Name = mapping.TypeName;
             element.Namespace = ns;
             element.Mapping = mapping;
             return element;

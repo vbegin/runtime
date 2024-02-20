@@ -483,7 +483,7 @@ void CordbModule::RefreshMetaData()
 
     // There are several different ways we can get the metadata
     // 1) [Most common] Module is loaded into VM and never changed. The importer
-    //    will be constructed refering to the file on disk. This is a significant
+    //    will be constructed referring to the file on disk. This is a significant
     //    working set win because the VM and debugger share the image. If there is
     //    an error reading by file we can fall back to case #2 for these modules
     // 2) Most modules have a buffer in target memory that represents their
@@ -1752,7 +1752,7 @@ CordbFunction * CordbModule::LookupOrCreateFunction(mdMethodDef funcMetaDataToke
 
     CordbFunction * pFunction = m_functions.GetBase(funcMetaDataToken);
 
-    // special case non-existance as need to add to the hash table too
+    // special case non-existence as need to add to the hash table too
     if (pFunction == NULL)
     {
         // EnC adds each version to the hash. So if the hash lookup fails,
@@ -1852,7 +1852,7 @@ CordbFunction * CordbModule::CreateFunction(mdMethodDef funcMetaDataToken, SIZE_
     return pCopy;
 }
 
-#ifdef EnC_SUPPORTED
+#ifdef FEATURE_METADATA_UPDATER
 //---------------------------------------------------------------------------------------
 //
 // Creates a new CordbFunction object to represent this new version of a function and
@@ -1860,7 +1860,7 @@ CordbFunction * CordbModule::CreateFunction(mdMethodDef funcMetaDataToken, SIZE_
 //
 // Arguments:
 //    funcMetaDataToken - the functions methodDef token in this module
-//    enCVerison        - The new version number of this function
+//    enCVersion        - The new version number of this function
 //    ppFunction        - Output param for the new instance - optional
 //
 // Assumptions:
@@ -1929,7 +1929,7 @@ HRESULT CordbModule::UpdateFunction(mdMethodDef funcMetaDataToken,
 
     return hr;
 }
-#endif // EnC_SUPPORTED
+#endif // FEATURE_METADATA_UPDATER
 
 
 HRESULT CordbModule::LookupOrCreateClass(mdTypeDef classMetaDataToken,CordbClass** ppClass)
@@ -2158,7 +2158,7 @@ HRESULT CordbModule::ApplyChanges(ULONG  cbMetaData,
     FAIL_IF_NEUTERED(this);
     ATT_REQUIRE_STOPPED_MAY_FAIL(GetProcess());
 
-#ifdef FEATURE_ENC_SUPPORTED
+#ifdef FEATURE_REMAP_FUNCTION
     // We enable EnC back in code:CordbModule::SetJITCompilerFlags.
     // If EnC isn't enabled, then we'll fail in the LS when we try to ApplyChanges.
     // We'd expect a well-behaved debugger to never actually land here.
@@ -2274,7 +2274,7 @@ HRESULT CordbModule::ApplyChangesInternal(ULONG  cbMetaData,
     if (m_vmDomainAssembly.IsNull())
         return E_UNEXPECTED;
 
-#ifdef FEATURE_ENC_SUPPORTED
+#ifdef FEATURE_REMAP_FUNCTION
     HRESULT hr;
 
     void * pRemoteBuf = NULL;
@@ -2394,9 +2394,9 @@ HRESULT CordbModule::ApplyChangesInternal(ULONG  cbMetaData,
         TESTANDRETURNHR(hr2);
     }
     return hr;
-#else // FEATURE_ENC_SUPPORTED
+#else // FEATURE_REMAP_FUNCTION
     return E_NOTIMPL;
-#endif // FEATURE_ENC_SUPPORTED
+#endif // FEATURE_REMAP_FUNCTION
 
 }
 
@@ -3078,9 +3078,9 @@ HRESULT CordbCode::GetVersionNumber( ULONG32 *nVersion)
 
     *nVersion = (ULONG32)m_nVersion;
 
-#ifndef EnC_SUPPORTED
+#ifndef FEATURE_METADATA_UPDATER
     _ASSERTE(*nVersion == 1);
-#endif // EnC_SUPPORTED
+#endif // FEATURE_METADATA_UPDATER
 
     return S_OK;
 }
@@ -3114,7 +3114,7 @@ CordbILCode::CordbILCode(CordbFunction * pFunction,
                          mdSignature     localVarSigToken,
                          UINT_PTR        id)
   : CordbCode(pFunction, id, nVersion, TRUE),
-#ifdef EnC_SUPPORTED
+#ifdef FEATURE_METADATA_UPDATER
     m_fIsOld(FALSE),
 #endif
     m_codeRegionInfo(codeRegionInfo),
@@ -3123,7 +3123,7 @@ CordbILCode::CordbILCode(CordbFunction * pFunction,
 } // CordbILCode::CordbILCode
 
 
-#ifdef EnC_SUPPORTED
+#ifdef FEATURE_METADATA_UPDATER
 //-----------------------------------------------------------------------------
 // CordbILCode::MakeOld
 // Internal method to perform any cleanup necessary when a code blob is no longer
@@ -4872,6 +4872,8 @@ int CordbNativeCode::GetCallInstructionLength(BYTE *ip, ULONG32 count)
 
     _ASSERTE(!"Invalid opcode!");
     return -1;
+#elif defined(TARGET_RISCV64)
+    return MAX_INSTRUCTION_LENGTH;
 #else
 #error Platform not implemented
 #endif

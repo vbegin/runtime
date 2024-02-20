@@ -19,7 +19,7 @@
 //  http://mswikis/clr/dev/Pages/CLR%20Team%20Commenting.aspx for more information
 //
 //  There is a bug associated with Visual Studio where it does not recognise the hyperlink if there is a ::
-//  preceeding it on the same line. Since C++ uses :: as a namespace separator, this can often mean that the
+//  preceding it on the same line. Since C++ uses :: as a namespace separator, this can often mean that the
 //  second hyperlink on a line does not work. To work around this it is better to use '.' instead of :: as
 //  the namespace separators in code: hyperlinks.
 //
@@ -156,13 +156,13 @@
 #include "virtualcallstub.h"
 #include "strongnameinternal.h"
 #include "syncclean.hpp"
-#include "typeparse.h"
 #include "debuginfostore.h"
 #include "finalizerthread.h"
 #include "threadsuspend.h"
 #include "disassembler.h"
 #include "jithost.h"
 #include "pgo.h"
+#include "pendingload.h"
 
 #ifndef TARGET_UNIX
 #include "dwreport.h"
@@ -170,14 +170,6 @@
 
 #include "stringarraylist.h"
 #include "stubhelpers.h"
-
-#ifdef FEATURE_STACK_SAMPLING
-#include "stacksampler.h"
-#endif
-
-#include "win32threadpool.h"
-
-#include <shlwapi.h>
 
 #ifdef FEATURE_COMINTEROP
 #include "runtimecallablewrapper.h"
@@ -233,13 +225,12 @@ extern "C" HRESULT __cdecl CorDBGetInterface(DebugInterface** rcInterface);
 
 // g_coreclr_embedded indicates that coreclr is linked directly into the program
 // g_hostpolicy_embedded indicates that the hostpolicy library is linked directly into the executable
-// Note: that it can happen that the hostpolicy is embedded but coreclr isn't (on Windows singlefilehost is built that way)
 #ifdef CORECLR_EMBEDDED
 bool g_coreclr_embedded = true;
 bool g_hostpolicy_embedded = true; // We always embed hostpolicy if coreclr is also embedded
 #else
 bool g_coreclr_embedded = false;
-bool g_hostpolicy_embedded = false; // In this case the value may come from a runtime property and may change
+bool g_hostpolicy_embedded = false;
 #endif
 
 // Remember how the last startup of EE went.
@@ -289,8 +280,6 @@ HRESULT EnsureEEStarted()
     // which we will do further down.
     if (!g_fEEStarted)
     {
-        BEGIN_ENTRYPOINT_NOTHROW;
-
         // Initialize our configuration.
         CLRConfig::Initialize();
 
@@ -322,8 +311,6 @@ HRESULT EnsureEEStarted()
                 }
             }
         }
-
-        END_ENTRYPOINT_NOTHROW;
     }
     else
     {
@@ -627,12 +614,8 @@ void EEStartupHelper()
 
 #ifdef HOST_WINDOWS
         InitializeCrashDump();
-#endif // HOST_WINDOWS
 
-        // Initialize Numa and CPU group information
-        // Need to do this as early as possible. Used by creating object handle
-        // table inside Ref_Initialization() before GC is initialized.
-        NumaNodeInfo::InitNumaNodeInfo();
+#endif // HOST_WINDOWS
 #ifndef TARGET_UNIX
         CPUGroupInfo::EnsureInitialized();
 #endif // !TARGET_UNIX
@@ -641,10 +624,11 @@ void EEStartupHelper()
         // This needs to be done before the EE has started
         InitializeStartupFlags();
 
+        PendingTypeLoadTable::Init();
+
         IfFailGo(ExecutableAllocator::StaticInitialize(FatalErrorHandler));
 
         Thread::StaticInitialize();
-        ThreadpoolMgr::StaticInitialize();
 
         JITInlineTrackingMap::StaticInitialize();
         MethodDescBackpatchInfoTracker::StaticInitialize();
@@ -652,6 +636,7 @@ void EEStartupHelper()
         TieredCompilationManager::StaticInitialize();
         CallCountingManager::StaticInitialize();
         OnStackReplacementManager::StaticInitialize();
+        MethodTable::InitMethodDataCache();
 
 #ifdef TARGET_UNIX
         ExecutableAllocator::InitPreferredRange();
@@ -673,7 +658,6 @@ void EEStartupHelper()
         // Initialize the event pipe.
         EventPipeAdapter::Initialize();
 #endif // FEATURE_PERFTRACING
-        GenAnalysis::Initialize();
 
 #ifdef TARGET_UNIX
         PAL_SetShutdownCallback(EESocketCleanupHelper);
@@ -814,7 +798,7 @@ void EEStartupHelper()
         BaseDomain::Attach();
         SystemDomain::Attach();
 
-        // Start up the EE intializing all the global variables
+        // Start up the EE initializing all the global variables
         ECall::Init();
 
         COMDelegate::Init();
@@ -891,6 +875,11 @@ void EEStartupHelper()
         // requires write barriers to have been set up on x86, which happens as part
         // of InitJITHelpers1.
         hr = g_pGCHeap->Initialize();
+        if (FAILED(hr))
+        {
+            LogErrorToHost("GC heap initialization failed with error 0x%08X", hr);
+        }
+
         IfFailGo(hr);
 
 #ifdef FEATURE_PERFTRACING
@@ -899,6 +888,7 @@ void EEStartupHelper()
         // EventPipe initialization, so this is done after the GC has been fully initialized.
         EventPipeAdapter::FinishInitialize();
 #endif // FEATURE_PERFTRACING
+        GenAnalysis::Initialize();
 
         // This isn't done as part of InitializeGarbageCollector() above because thread
         // creation requires AppDomains to have been set up.
@@ -941,13 +931,6 @@ void EEStartupHelper()
 
         SystemDomain::System()->DefaultDomain()->SetupSharedStatics();
 
-#ifdef FEATURE_STACK_SAMPLING
-        StackSampler::Init();
-#endif
-
-        // Perform any once-only SafeHandle initialization.
-        SafeHandle::Init();
-
 #ifdef FEATURE_MINIMETADATA_IN_TRIAGEDUMPS
         // retrieve configured max size for the mini-metadata buffer (defaults to 64KB)
         g_MiniMetaDataBuffMaxSize = CLRConfig::GetConfigValue(CLRConfig::INTERNAL_MiniMdBufferCapacity);
@@ -960,7 +943,6 @@ void EEStartupHelper()
         g_MiniMetaDataBuffAddress = (TADDR) ClrVirtualAlloc(NULL,
                                                 g_MiniMetaDataBuffMaxSize, MEM_COMMIT, PAGE_READWRITE);
 #endif // FEATURE_MINIMETADATA_IN_TRIAGEDUMPS
-
 
         g_fEEStarted = TRUE;
         g_EEStartupStatus = S_OK;
@@ -982,9 +964,6 @@ void EEStartupHelper()
         {
             SystemDomain::SystemModule()->ExpandAll();
         }
-
-        // Perform CoreLib consistency check if requested
-        g_CoreLib.CheckExtended();
 #endif // _DEBUG
 
 
@@ -992,6 +971,7 @@ ErrExit: ;
     }
     EX_CATCH
     {
+        hr = GET_EXCEPTION()->GetHR();
     }
     EX_END_CATCH(RethrowTerminalExceptionsWithInitCheck)
 
@@ -1047,13 +1027,13 @@ LONG FilterStartupException(PEXCEPTION_POINTERS p, PVOID pv)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-// EEStartup is responsible for all the one time intialization of the runtime.  Some of the highlights of
+// EEStartup is responsible for all the one time initialization of the runtime.  Some of the highlights of
 // what it does include
 //     * Creates the default and shared, appdomains.
 //     * Loads System.Private.CoreLib and loads up the fundamental types (System.Object ...)
 //
 // see code:EEStartup#TableOfContents for more on the runtime in general.
-// see code:#EEShutdown for a analagous routine run during shutdown.
+// see code:#EEShutdown for an analogous routine run during shutdown.
 //
 HRESULT EEStartup()
 {
@@ -1257,7 +1237,7 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
 
 #ifdef FEATURE_PERFMAP
         // Flush and close the perf map file.
-        PerfMap::Destroy();
+        PerfMap::Disable();
 #endif
 
         ceeInf.JitProcessShutdownWork();  // Do anything JIT-related that needs to happen at shutdown.
@@ -1325,7 +1305,7 @@ part2:
         // instant process termination.
         if (g_fProcessDetach)
         {
-            // The assert below is a bit too aggresive and has generally brought cases that have been race conditions
+            // The assert below is a bit too aggressive and has generally brought cases that have been race conditions
             // and not easily reproed to validate a bug. A typical race scenario is when there are two threads,
             // T1 and T2, with T2 having taken a lock (e.g. SystemDomain lock), the OS terminates
             // T2 for some reason. Later, when we enter the shutdown thread, we would assert on such
@@ -1642,8 +1622,10 @@ void InitializeGarbageCollector()
     g_pFreeObjectMethodTable->SetComponentSize(1);
 
     hr = GCHeapUtilities::LoadAndInitialize();
+
     if (hr != S_OK)
     {
+        LogErrorToHost("GC initialization failed with error 0x%08X", hr);
         ThrowHR(hr);
     }
 
@@ -1775,6 +1757,7 @@ struct TlsDestructionMonitor
                 thread->DetachThread(TRUE);
             }
 
+            DeleteThreadLocalMemory();
             ThreadDetaching();
         }
     }
@@ -1787,6 +1770,30 @@ thread_local TlsDestructionMonitor tls_destructionMonitor;
 void EnsureTlsDestructionMonitor()
 {
     tls_destructionMonitor.Activate();
+}
+
+#ifdef _MSC_VER
+__declspec(thread)  ThreadStaticBlockInfo t_ThreadStatics;
+#else
+__thread ThreadStaticBlockInfo t_ThreadStatics;
+#endif // _MSC_VER
+
+// Delete the thread local memory only if we the current thread
+// is the one executing this code. If we do not guard it, it will
+// end up deleting the thread local memory of the calling thread.
+void DeleteThreadLocalMemory()
+{
+    t_NonGCThreadStaticBlocksSize = 0;
+    t_GCThreadStaticBlocksSize = 0;
+
+    t_ThreadStatics.NonGCMaxThreadStaticBlocks = 0;
+    t_ThreadStatics.GCMaxThreadStaticBlocks = 0;
+
+    delete[] t_ThreadStatics.NonGCThreadStaticBlocks;
+    t_ThreadStatics.NonGCThreadStaticBlocks = nullptr;
+
+    delete[] t_ThreadStatics.GCThreadStaticBlocks;
+    t_ThreadStatics.GCThreadStaticBlocks = nullptr;
 }
 
 #ifdef DEBUGGING_SUPPORTED
@@ -1939,7 +1946,7 @@ static HRESULT GetThreadUICultureNames(__inout StringArrayList* pCultureNames)
         Thread * pThread = GetThreadNULLOk();
 
         // When fatal errors have occurred our invariants around GC modes may be broken and attempting to transition to co-op may hang
-        // indefinately. We want to ensure a clean exit so rather than take the risk of hang we take a risk of the error resource not
+        // indefinitely. We want to ensure a clean exit so rather than take the risk of hang we take a risk of the error resource not
         // getting localized with a non-default thread-specific culture.
         // A canonical stack trace that gets here is a fatal error in the GC that comes through:
         // coreclr.dll!GetThreadUICultureNames
@@ -2007,12 +2014,10 @@ static HRESULT GetThreadUICultureNames(__inout StringArrayList* pCultureNames)
             sParentCulture = sCulture;
 #endif // !TARGET_UNIX
         }
-        // (LPCWSTR) to restrict the size to null terminated size
-        pCultureNames->AppendIfNotThere((LPCWSTR)sCulture);
-        // Disabling for Dev10 for consistency with managed resource lookup (see AppCompat bug notes in ResourceFallbackManager.cs)
-        // Also, this is in the wrong order - put after the parent culture chain.
-        //AddThreadPreferredUILanguages(pCultureNames);
-        pCultureNames->AppendIfNotThere((LPCWSTR)sParentCulture);
+        sCulture.Normalize();
+        sParentCulture.Normalize();
+        pCultureNames->AppendIfNotThere(sCulture);
+        pCultureNames->AppendIfNotThere(sParentCulture);
         pCultureNames->Append(SString::Empty());
     }
     EX_CATCH
@@ -2069,7 +2074,7 @@ static int GetThreadUICultureId(_Out_ LocaleIDValue* pLocale)
 
 #if 0 // Enable and test if/once the unmanaged runtime is localized
     // When fatal errors have occurred our invariants around GC modes may be broken and attempting to transition to co-op may hang
-    // indefinately. We want to ensure a clean exit so rather than take the risk of hang we take a risk of the error resource not
+    // indefinitely. We want to ensure a clean exit so rather than take the risk of hang we take a risk of the error resource not
     // getting localized with a non-default thread-specific culture.
     // A canonical stack trace that gets here is a fatal error in the GC that comes through:
     // coreclr.dll!GetThreadUICultureNames

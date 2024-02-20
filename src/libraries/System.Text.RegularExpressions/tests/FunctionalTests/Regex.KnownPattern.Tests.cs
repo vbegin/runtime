@@ -5,8 +5,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.DotNet.XUnitExtensions;
 using Xunit;
 
 namespace System.Text.RegularExpressions.Tests
@@ -225,7 +229,7 @@ namespace System.Text.RegularExpressions.Tests
             }
 
             const string Pattern = @"\D+(?<digit>\d+)\D+(?<digit>\d+)?";
-            string[] inputs = { "abc123def456", "abc123def" };
+            string[] inputs = ["abc123def456", "abc123def"];
 
             Regex r = await RegexHelpers.GetRegexAsync(engine, Pattern);
 
@@ -618,7 +622,7 @@ namespace System.Text.RegularExpressions.Tests
             }
 
             const string Pattern = @"^([a-z]+)(\d+)?\.([a-z]+(\d)*)$";
-            string[] values = { "AC10", "Za203.CYM", "XYZ.CoA", "ABC.x170" };
+            string[] values = ["AC10", "Za203.CYM", "XYZ.CoA", "ABC.x170"];
 
             Regex r = await RegexHelpers.GetRegexAsync(engine, Pattern, RegexOptions.IgnoreCase);
 
@@ -1035,7 +1039,7 @@ namespace System.Text.RegularExpressions.Tests
 
             const string Input = "capybara,squirrel,chipmunk,porcupine";
             const string Pattern = @"\G(\w+\s?\w*),?";
-            string[] expected = new[] { "capybara", "squirrel", "chipmunk", "porcupine" };
+            string[] expected = ["capybara", "squirrel", "chipmunk", "porcupine"];
 
             Regex r = await RegexHelpers.GetRegexAsync(engine, Pattern);
 
@@ -1178,11 +1182,11 @@ namespace System.Text.RegularExpressions.Tests
                 yield return new object[] { engine, "IsValidCSharpName", true };
                 yield return new object[] { engine, "_IsValidCSharpName", true };
                 yield return new object[] { engine, "__", true };
-                yield return new object[] { engine, "a\u2169", true  }; // \u2169 is in {Nl}
-                yield return new object[] { engine, "\u2169b", true  }; // \u2169 is in {Nl}
-                yield return new object[] { engine, "a\u0600", true  }; // \u0600 is in {Cf}
+                yield return new object[] { engine, "a\u2169", true };  // \u2169 is in {Nl}
+                yield return new object[] { engine, "\u2169b", true };  // \u2169 is in {Nl}
+                yield return new object[] { engine, "a\u0600", true };  // \u0600 is in {Cf}
                 yield return new object[] { engine, "\u0600b", false }; // \u0600 is in {Cf}
-                yield return new object[] { engine, "a\u0300", true  }; // \u0300 is in {Mn}
+                yield return new object[] { engine, "a\u0300", true };  // \u0300 is in {Mn}
                 yield return new object[] { engine, "\u0300b", false }; // \u0300 is in {Mn}
                 yield return new object[] { engine, "https://foo.com:443/bar/17/groups/0ad1/providers/Network/public/4e-ip?version=16", false };
                 yield return new object[] { engine, "david.jones@proseware.com", false };
@@ -1547,14 +1551,70 @@ namespace System.Text.RegularExpressions.Tests
         }
 
         [OuterLoop("Takes minutes to generate and compile thousands of expressions")]
-        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.Is64BitProcess))] // consumes a lot of memory
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.Is64BitProcess), nameof(PlatformDetection.IsNotMobile), nameof(PlatformDetection.IsNotBrowser))] // consumes a lot of memory, doesn't work on mobile
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/80018", TestRuntimes.Mono)]
         public void PatternsDataSet_ConstructRegexForAll_SourceGenerated()
         {
             Parallel.ForEach(s_patternsDataSet.Value.Chunk(50), chunk =>
             {
                 RegexHelpers.GetRegexesAsync(RegexEngine.SourceGenerated,
-                    chunk.Select(r => (r.Pattern, (RegexOptions?)r.Options, (TimeSpan?)null)).ToArray()).GetAwaiter().GetResult();
+                    chunk.Select(r => (r.Pattern, (CultureInfo?)null, (RegexOptions?)r.Options, (TimeSpan?)null)).ToArray()).GetAwaiter().GetResult();
             });
+        }
+
+        [ActiveIssue("Manual execution only for now until stability is improved")]
+        [OuterLoop("Super slow")]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.Is64BitProcess))] // consumes a lot of memory
+        public async Task PatternsDataSet_GenerateInputsWithNonBacktracking_MatchWithAllEngines()
+        {
+            MethodInfo? sampleMatchesMI = typeof(Regex).GetMethod("SampleMatches", BindingFlags.NonPublic | BindingFlags.Instance) ??
+                throw new SkipTestException("Could not find Regex.SampleMatches");
+            Func<Regex, int, int, IEnumerable<string>> sampleMatches = sampleMatchesMI.CreateDelegate<Func<Regex, int, int, IEnumerable<string>>>();
+
+            DataSetExpression[] entries = s_patternsDataSet.Value;
+            for (int i = 0; i < entries.Length; i++)
+            {
+                DataSetExpression entry = entries[i];
+
+                Regex generator;
+                try
+                {
+                    generator = new Regex(entry.Pattern, RegexHelpers.RegexOptionNonBacktracking | entry.Options);
+                }
+                catch (Exception e) when (e is NotSupportedException or ArgumentOutOfRangeException)
+                {
+                    continue;
+                }
+
+                const int NumInputs = 3;
+                const int Seed = 42;
+                IEnumerable<string> expectedMatchInputs = null;
+                try
+                {
+#pragma warning disable SYSLIB0046 // temporary until some use of SampleMatches no longer hangs
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    ControlledExecution.Run(() => expectedMatchInputs = sampleMatches(generator, NumInputs, Seed), cts.Token);
+#pragma warning restore SYSLIB0046
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.Error.WriteLine($"*** SampleMatches hung on entry {i} ***");
+                    continue;
+                }
+
+                foreach (RegexEngine engine in RegexHelpers.AvailableEngines)
+                {
+                    Regex r = engine == RegexEngine.NonBacktracking ?
+                        generator :
+                        await RegexHelpers.GetRegexAsync(engine, entry.Pattern, entry.Options);
+
+                    foreach (string input in expectedMatchInputs)
+                    {
+                        Console.WriteLine($"[{i}-{engine}] {r} <= {input}");
+                        Assert.True(r.IsMatch(input));
+                    }
+                }
+            }
         }
 #endif
     }

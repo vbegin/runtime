@@ -244,7 +244,7 @@ void SString::Set(const WCHAR *string)
         Clear();
     else
     {
-        Resize((COUNT_T) wcslen(string), REPRESENTATION_UNICODE);
+        Resize((COUNT_T) u16_strlen(string), REPRESENTATION_UNICODE);
         wcscpy_s(GetRawUnicode(), GetBufferSizeInCharIncludeNullChar(), string);
     }
 
@@ -985,7 +985,7 @@ BOOL SString::Find(CIterator &i, const SString &s) const
             const WCHAR *end = GetUnicode() + GetRawCount() - count;
             while (start <= end)
             {
-                if (wcsncmp(start, source.GetRawUnicode(), count) == 0)
+                if (u16_strncmp(start, source.GetRawUnicode(), count) == 0)
                 {
                     i.Resync(this, (BYTE*) start);
                     RETURN TRUE;
@@ -1124,7 +1124,7 @@ BOOL SString::FindBack(CIterator &i, const SString &s) const
 
             while (start >= end)
             {
-                if (wcsncmp(start, source.GetRawUnicode(), count) == 0)
+                if (u16_strncmp(start, source.GetRawUnicode(), count) == 0)
                 {
                     i.Resync(this, (BYTE*) start);
                     RETURN TRUE;
@@ -1334,7 +1334,7 @@ int SString::Compare(const SString &s) const
     switch (GetRepresentation())
     {
     case REPRESENTATION_UNICODE:
-        result = wcsncmp(GetRawUnicode(), source.GetRawUnicode(), smaller);
+        result = u16_strncmp(GetRawUnicode(), source.GetRawUnicode(), smaller);
         break;
 
     case REPRESENTATION_ASCII:
@@ -1448,7 +1448,7 @@ BOOL SString::Equals(const SString &s) const
     switch (GetRepresentation())
     {
     case REPRESENTATION_UNICODE:
-        RETURN (wcsncmp(GetRawUnicode(), source.GetRawUnicode(), count) == 0);
+        RETURN (u16_strncmp(GetRawUnicode(), source.GetRawUnicode(), count) == 0);
 
     case REPRESENTATION_ASCII:
         RETURN (strncmp(GetRawASCII(), source.GetRawASCII(), count) == 0);
@@ -1536,7 +1536,7 @@ BOOL SString::Match(const CIterator &i, const SString &s) const
     switch (GetRepresentation())
     {
     case REPRESENTATION_UNICODE:
-        RETURN (wcsncmp(i.GetUnicode(), source.GetRawUnicode(), count) == 0);
+        RETURN (u16_strncmp(i.GetUnicode(), source.GetRawUnicode(), count) == 0);
 
     case REPRESENTATION_ASCII:
         RETURN (strncmp(i.GetASCII(), source.GetRawASCII(), count) == 0);
@@ -1713,66 +1713,6 @@ void SString::Printf(const CHAR *format, ...)
     va_end(args);
 }
 
-#ifdef _DEBUG
-//
-// Check the Printf use for potential globalization bugs. %S formatting
-// specifier does Unicode->Ansi or Ansi->Unicode conversion using current
-// C-locale. This almost always means globalization bug in the CLR codebase.
-//
-// Ideally, we would elimitate %S from all format strings. Unfortunately,
-// %S is too widespread in non-shipping code that such cleanup is not feasible.
-//
-static void CheckForFormatStringGlobalizationIssues(const SString &format, const SString &result)
-{
-    CONTRACTL
-    {
-        THROWS;
-        GC_NOTRIGGER;
-        DEBUG_ONLY;
-    }
-    CONTRACTL_END;
-
-    BOOL fDangerousFormat = FALSE;
-
-    // Check whether the format string contains the %S formatting specifier
-    SString::CIterator itrFormat = format.Begin();
-    while (*itrFormat)
-    {
-        if (*itrFormat++ == '%')
-        {
-            // <TODO>Handle the complex format strings like %blahS</TODO>
-            if (*itrFormat++ == 'S')
-            {
-                fDangerousFormat = TRUE;
-                break;
-            }
-        }
-    }
-
-    if (fDangerousFormat)
-    {
-        BOOL fNonAsciiUsed = FALSE;
-
-        // Now check whether there are any non-ASCII characters in the output.
-
-        // Check whether the result contains non-Ascii characters
-        SString::CIterator itrResult = format.Begin();
-        while (*itrResult)
-        {
-            if (*itrResult++ > 127)
-            {
-                fNonAsciiUsed = TRUE;
-                break;
-            }
-        }
-
-        CONSISTENCY_CHECK_MSGF(!fNonAsciiUsed,
-            ("Non-ASCII string was produced by %%S format specifier. This is likely globalization bug."
-            "To fix this, change the format string to %%s and do the correct encoding at the Printf callsite"));
-    }
-}
-#endif
-
 #ifndef EBADF
 #define EBADF 9
 #endif
@@ -1819,8 +1759,6 @@ void SString::VPrintf(const CHAR *format, va_list args)
         {
             // Succeeded in writing. Now resize -
             Resize(result, REPRESENTATION_UTF8, PRESERVE);
-            SString sss(Utf8, format);
-            INDEBUG(CheckForFormatStringGlobalizationIssues(sss, *this));
             RETURN;
         }
     }
@@ -1850,8 +1788,6 @@ void SString::VPrintf(const CHAR *format, va_list args)
         {
             // Succeed in writing. Shrink the buffer to fit exactly.
             Resize(result, REPRESENTATION_UTF8, PRESERVE);
-            SString sss(Utf8, format);
-            INDEBUG(CheckForFormatStringGlobalizationIssues(sss, *this));
             RETURN;
         }
 
@@ -1863,82 +1799,6 @@ void SString::VPrintf(const CHAR *format, va_list args)
         if (errno!=0 && errno!=EBADF && errno!=ERANGE)
         {
             CONSISTENCY_CHECK_MSG(FALSE, "_vsnprintf_s failed. Potential globalization bug.");
-            ThrowHR(HRESULT_FROM_WIN32(ERROR_NO_UNICODE_TRANSLATION));
-        }
-    }
-    RETURN;
-}
-
-void SString::Printf(const WCHAR *format, ...)
-{
-    CONTRACT_VOID
-    {
-        INSTANCE_CHECK;
-        PRECONDITION(CheckPointer(format));
-        THROWS;
-        GC_NOTRIGGER;
-    }
-    CONTRACT_END;
-
-    // sprintf gives us no means to know how many characters are written
-    // other than guessing and trying
-
-    if (GetRawCount() > 0)
-    {
-        // First, try to use the existing buffer
-        va_list args;
-        va_start(args, format);
-        int result = _vsnwprintf_s(GetRawUnicode(), GetRawCount()+1, _TRUNCATE, format, args);
-        va_end(args);
-
-        if (result >= 0)
-        {
-            // succeeded
-            Resize(result, REPRESENTATION_UNICODE, PRESERVE);
-            SString sss(format);
-            INDEBUG(CheckForFormatStringGlobalizationIssues(sss, *this));
-            RETURN;
-        }
-    }
-
-    // Make a guess how long the result will be (note this will be doubled)
-
-    COUNT_T guess = (COUNT_T) wcslen(format)+1;
-    if (guess < GetRawCount())
-        guess = GetRawCount();
-    if (guess < MINIMUM_GUESS)
-        guess = MINIMUM_GUESS;
-
-    while (TRUE)
-    {
-        // Double the previous guess - eventually we will get enough space
-        guess *= 2;
-        Resize(guess, REPRESENTATION_UNICODE);
-
-        // Clear errno to avoid false alarms
-        errno = 0;
-
-        va_list args;
-        va_start(args, format);
-        int result = _vsnwprintf_s(GetRawUnicode(), GetRawCount()+1, _TRUNCATE, format, args);
-        va_end(args);
-
-        if (result >= 0)
-        {
-            Resize(result, REPRESENTATION_UNICODE, PRESERVE);
-            SString sss(format);
-            INDEBUG(CheckForFormatStringGlobalizationIssues(sss, *this));
-            RETURN;
-        }
-
-        if (errno==ENOMEM)
-        {
-            ThrowOutOfMemory();
-        }
-        else
-        if (errno!=0 && errno!=EBADF && errno!=ERANGE)
-        {
-            CONSISTENCY_CHECK_MSG(FALSE, "_vsnwprintf_s failed. Potential globalization bug.");
             ThrowHR(HRESULT_FROM_WIN32(ERROR_NO_UNICODE_TRANSLATION));
         }
     }

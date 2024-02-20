@@ -35,50 +35,62 @@ internal static class MsQuicHelpers
         return false;
     }
 
-    internal static unsafe IPEndPoint ToIPEndPoint(this ref QuicAddr quicAddress, AddressFamily? addressFamilyOverride = null)
+    internal static unsafe IPEndPoint QuicAddrToIPEndPoint(QuicAddr* quicAddress, AddressFamily? addressFamilyOverride = null)
     {
         // MsQuic always uses storage size as if IPv6 was used
-        Span<byte> addressBytes = new Span<byte>((byte*)Unsafe.AsPointer(ref quicAddress), Internals.SocketAddress.IPv6AddressSize);
-        return new Internals.SocketAddress(addressFamilyOverride ?? SocketAddressPal.GetAddressFamily(addressBytes), addressBytes).GetIPEndPoint();
+        Span<byte> addressBytes = new Span<byte>(quicAddress, SocketAddressPal.IPv6AddressSize);
+        if (addressFamilyOverride != null)
+        {
+            SocketAddressPal.SetAddressFamily(addressBytes, (AddressFamily)addressFamilyOverride!);
+        }
+        return IPEndPointExtensions.CreateIPEndPoint(addressBytes);
     }
 
-    internal static unsafe QuicAddr ToQuicAddr(this IPEndPoint iPEndPoint)
+    internal static unsafe QuicAddr ToQuicAddr(this IPEndPoint ipEndPoint)
     {
-        // TODO: is the layout same for SocketAddress.Buffer and QuicAddr on all platforms?
         QuicAddr result = default;
         Span<byte> rawAddress = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref result, 1));
-
-        Internals.SocketAddress address = IPEndPointExtensions.Serialize(iPEndPoint);
-        Debug.Assert(address.Size <= rawAddress.Length);
-
-        address.Buffer.AsSpan(0, address.Size).CopyTo(rawAddress);
+        ipEndPoint.Serialize(rawAddress);
         return result;
     }
 
     internal static unsafe T GetMsQuicParameter<T>(MsQuicSafeHandle handle, uint parameter)
-        where T: unmanaged
+        where T : unmanaged
     {
         T value;
-        uint length = (uint)sizeof(T);
-
-        ThrowHelper.ThrowIfMsQuicError(MsQuicApi.Api.ApiTable->GetParam(
-            handle.QuicHandle,
+        GetMsQuicParameter(handle, parameter, (uint)sizeof(T), (byte*)&value);
+        return value;
+    }
+    internal static unsafe void GetMsQuicParameter(MsQuicSafeHandle handle, uint parameter, uint length, byte* value)
+    {
+        int status = MsQuicApi.Api.GetParam(
+            handle,
             parameter,
             &length,
-            (byte*)&value),
-            $"GetParam({handle}, {parameter}) failed");
+            value);
 
-        return value;
+        if (StatusFailed(status))
+        {
+            ThrowHelper.ThrowMsQuicException(status, $"GetParam({handle}, {parameter}) failed");
+        }
     }
 
     internal static unsafe void SetMsQuicParameter<T>(MsQuicSafeHandle handle, uint parameter, T value)
-        where T: unmanaged
+        where T : unmanaged
     {
-        ThrowHelper.ThrowIfMsQuicError(MsQuicApi.Api.ApiTable->SetParam(
-            handle.QuicHandle,
+        SetMsQuicParameter(handle, parameter, (uint)sizeof(T), (byte*)&value);
+    }
+    internal static unsafe void SetMsQuicParameter(MsQuicSafeHandle handle, uint parameter, uint length, byte* value)
+    {
+        int status = MsQuicApi.Api.SetParam(
+            handle,
             parameter,
-            (uint)sizeof(T),
-            (byte*)&value),
-            $"SetParam({handle}, {parameter}) failed");
+            length,
+            value);
+
+        if (StatusFailed(status))
+        {
+            ThrowHelper.ThrowMsQuicException(status, $"SetParam({handle}, {parameter}) failed");
+        }
     }
 }

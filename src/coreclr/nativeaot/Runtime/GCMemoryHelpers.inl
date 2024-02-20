@@ -7,6 +7,21 @@
 // Unmanaged GC memory helpers
 //
 
+// A 'clump' is defined as the size of memory covered by 1 byte in the card table.
+#ifdef HOST_64BIT
+#define CLUMP_SIZE 0x800
+#define LOG2_CLUMP_SIZE 11
+#else
+#define CLUMP_SIZE 0x400
+#define LOG2_CLUMP_SIZE 10
+#endif
+
+// Global data cells exported by the GC.
+extern "C" unsigned char* g_ephemeral_low;
+extern "C" unsigned char* g_ephemeral_high;
+extern "C" unsigned char* g_lowest_address;
+extern "C" unsigned char* g_highest_address;
+
 #if defined(HOST_64BIT)
 static const int card_byte_shift = 11;
 static const int card_bundle_byte_shift = 21;
@@ -19,32 +34,33 @@ static const int card_byte_shift = 10;
 #endif
 
 
-// This function fills a piece of memory in a GC safe way.  It makes the guarantee
-// that it will fill memory in at least pointer sized chunks whenever possible.
+// This function clears a piece of memory in a GC safe way.
+// Object-aligned memory is zeroed with no smaller than pointer-size granularity.
+// We must make this guarantee whenever we clear memory in the GC heap that could contain object
+// references.  The GC or other user threads can read object references at any time, clearing them bytewise can result
+// in a read on another thread getting incorrect data.
 // Unaligned memory at the beginning and remaining bytes at the end are written bytewise.
-// We must make this guarantee whenever we clear memory in the GC heap that could contain
-// object references.  The GC or other user threads can read object references at any time,
-// clearing them bytewise can result in a read on another thread getting incorrect data.
-FORCEINLINE void InlineGCSafeFillMemory(void * mem, size_t size, size_t pv)
+// USAGE:  The caller is responsible for null-checking the reference.
+FORCEINLINE void InlineGcSafeZeroMemory(void * mem, size_t size)
 {
     uint8_t * memBytes = (uint8_t *)mem;
     uint8_t * endBytes = &memBytes[size];
 
     // handle unaligned bytes at the beginning
     while (!IS_ALIGNED(memBytes, sizeof(void *)) && (memBytes < endBytes))
-        *memBytes++ = (uint8_t)pv;
+        *memBytes++ = 0;
 
     // now write pointer sized pieces
     // volatile ensures that this doesn't get optimized back into a memset call
     size_t nPtrs = (endBytes - memBytes) / sizeof(void *);
     volatile uintptr_t* memPtr = (uintptr_t*)memBytes;
     for (size_t i = 0; i < nPtrs; i++)
-        *memPtr++ = pv;
+        *memPtr++ = 0;
 
     // handle remaining bytes at the end
     memBytes = (uint8_t*)memPtr;
     while (memBytes < endBytes)
-        *memBytes++ = (uint8_t)pv;
+        *memBytes++ = 0;
 }
 
 // These functions copy memory in a GC safe way.  They makes the guarantee
@@ -192,7 +208,7 @@ inline static void SoftwareWriteWatchSetDirtyRegion(void* address, size_t length
     uint8_t* end_pointer = reinterpret_cast<uint8_t*>(address) + length - 1;
     size_t end_index = reinterpret_cast<size_t>(end_pointer) >> SoftwareWriteWatchAddressToTableByteIndexShift;
 
-    // We'll mark the entire region of memory as dirty by memseting all entries in
+    // We'll mark the entire region of memory as dirty by memsetting all entries in
     // the SWW table between the start and end indexes.
     memset(&g_write_watch_table[base_index], ~0, end_index - base_index + 1);
 }
@@ -229,7 +245,7 @@ FORCEINLINE void InlinedBulkWriteBarrier(void* pMemStart, size_t cbMemSize)
         // Compute the shadow heap address corresponding to the beginning of the range of heap addresses modified
         // and in the process range check it to make sure we have the shadow version allocated.
         uintptr_t* shadowSlot = (uintptr_t*)(g_GCShadow + ((uint8_t*)pMemStart - g_lowest_address));
-        if (shadowSlot <= (uintptr_t*)g_GCShadowEnd)
+        if (shadowSlot < (uintptr_t*)g_GCShadowEnd)
         {
             // Iterate over every pointer sized slot in the range, copying data from the real heap to the shadow heap.
             // As we perform each copy we need to recheck the real heap contents with an ordered read to ensure we're
@@ -238,7 +254,8 @@ FORCEINLINE void InlinedBulkWriteBarrier(void* pMemStart, size_t cbMemSize)
             // heap validation.
 
             uintptr_t* realSlot = (uintptr_t*)pMemStart;
-            uintptr_t slotCount = cbMemSize / sizeof(uintptr_t);
+            ptrdiff_t slotCount = (ptrdiff_t)(cbMemSize / sizeof(uintptr_t));
+            ASSERT(slotCount < (uintptr_t*)g_GCShadowEnd - shadowSlot);
             do
             {
                 // Update shadow slot from real slot.

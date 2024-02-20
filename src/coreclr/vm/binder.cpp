@@ -17,7 +17,6 @@
 #include "customattribute.h"
 #include "debugdebugger.h"
 #include "dllimport.h"
-#include "nativeoverlapped.h"
 #include "clrvarargs.h"
 #include "sigbuilder.h"
 #include "olevariant.h"
@@ -84,10 +83,13 @@ PTR_MethodTable CoreLibBinder::LookupClassLocal(BinderClassID id)
         (void)ClassLoader::LoadTypeByNameThrowing(GetModule()->GetAssembly(), &nameHandle);
 
         // Now load the nested type.
-        nameHandle.SetName(NULL, nestedTypeMaybe + 1);
+        nameHandle.SetName("", nestedTypeMaybe + 1);
 
         // We don't support nested types in nested types.
         _ASSERTE(strchr(nameHandle.GetName(), '+') == NULL);
+
+        // We don't support nested types with explicit namespaces
+        _ASSERTE(strchr(nameHandle.GetName(), '.') == NULL);
         pMT = ClassLoader::LoadTypeByNameThrowing(GetModule()->GetAssembly(), &nameHandle).AsMethodTable();
     }
 
@@ -230,7 +232,7 @@ NOINLINE PTR_MethodTable CoreLibBinder::LookupClassIfExist(BinderClassID id)
     const CoreLibClassDescription *d = (&g_CoreLib)->m_classDescriptions + (int)id;
 
     PTR_MethodTable pMT = ClassLoader::LoadTypeByNameThrowing(GetModule()->GetAssembly(), d->nameSpace, d->name,
-        ClassLoader::ReturnNullIfNotFound, ClassLoader::DontLoadTypes, CLASS_LOAD_UNRESTOREDTYPEKEY).AsMethodTable();
+        ClassLoader::ReturnNullIfNotFound, ClassLoader::DontLoadTypes, CLASS_LOAD_APPROXPARENTS).AsMethodTable();
 
     _ASSERTE((pMT == NULL) || (pMT->GetModule() == GetModule()));
 
@@ -407,7 +409,7 @@ Again:
 
 //------------------------------------------------------------------
 // Resolve type references in the hardcoded metasig.
-// Returns a new signature with type refences resolved.
+// Returns a new signature with type references resolved.
 //------------------------------------------------------------------
 void CoreLibBinder::BuildConvertedSignature(const BYTE* pSig, SigBuilder * pSigBuilder)
 {
@@ -502,7 +504,7 @@ void CoreLibBinder::TriggerGCUnderStress()
 #ifndef DACCESS_COMPILE
     _ASSERTE (GetThreadNULLOk());
     TRIGGERSGC ();
-    // Force a GC here because GetClass could trigger GC nondeterminsticly
+    // Force a GC here because GetClass could trigger GC nondeterministicly
     if (g_pConfig->GetGCStressLevel() != 0)
     {
         DEBUG_ONLY_REGION();
@@ -586,7 +588,7 @@ void CoreLibBinder::Check()
         else
         if (p->fieldName != NULL)
         {
-            // This assert will fire if there is DEFINE_FIELD_U macro without preceeding DEFINE_CLASS_U macro in corelib.h
+            // This assert will fire if there is DEFINE_FIELD_U macro without preceding DEFINE_CLASS_U macro in corelib.h
             _ASSERTE(pMT != NULL);
 
             FieldDesc * pFD = MemberLoader::FindField(pMT, p->fieldName, NULL, 0, NULL);
@@ -1122,8 +1124,6 @@ void CoreLibBinder::CheckExtended()
 #define ASMCONSTANTS_C_ASSERT(cond)
 #define ASMCONSTANTS_RUNTIME_ASSERT(cond) _ASSERTE(cond)
 #include "asmconstants.h"
-
-    _ASSERTE(sizeof(VARIANT) == CoreLibBinder::GetClass(CLASS__NATIVEVARIANT)->GetNativeSize());
 
     printf("CheckExtended: completed without exception.\n");
 

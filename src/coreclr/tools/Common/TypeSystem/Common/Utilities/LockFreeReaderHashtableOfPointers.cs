@@ -14,7 +14,7 @@ namespace Internal.TypeSystem
     /// <summary>
     /// A hash table which is lock free for readers and up to 1 writer at a time.
     /// It must be possible to compute the key's hashcode from a value.
-    /// All values must convertable to/from an IntPtr.
+    /// All values must convertible to/from an IntPtr.
     /// It must be possible to perform an equality check between a key and a value.
     /// It must be possible to perform an equality check between a value and a value.
     /// A LockFreeReaderKeyValueComparer must be provided to perform these operations.
@@ -213,7 +213,7 @@ namespace Internal.TypeSystem
         /// <returns>The value that replaced the sentinel, or null</returns>
         private static IntPtr WaitForSentinelInHashtableToDisappear(IntPtr[] hashtable, int tableIndex)
         {
-            var sw = new SpinWait();
+            var sw = default(SpinWait);
             while (true)
             {
                 IntPtr value = Volatile.Read(ref hashtable[tableIndex]);
@@ -364,7 +364,7 @@ namespace Internal.TypeSystem
         }
 
         /// <summary>
-        /// Attemps to add a value to the hashtable, or find a value which is already present in the hashtable.
+        /// Attempts to add a value to the hashtable, or find a value which is already present in the hashtable.
         /// In some cases, this will fail due to contention with other additions and must be retried.
         /// Note that the key is not specified as it is implicit in the value. This function is thread-safe,
         /// but must only take locks around internal operations and GetValueHashCode.
@@ -535,7 +535,7 @@ namespace Internal.TypeSystem
         public TValue GetValueIfExists(TValue value)
         {
             if (value == null)
-                throw new ArgumentNullException();
+                throw new ArgumentNullException(nameof(value));
 
             IntPtr[] hashTableLocal = GetCurrentHashtable();
             Debug.Assert(hashTableLocal.Length > 0);
@@ -576,7 +576,7 @@ namespace Internal.TypeSystem
         /// </summary>
         public struct Enumerator : IEnumerator<TValue>
         {
-            LockFreeReaderHashtableOfPointers<TKey, TValue> _hashtable;
+            private LockFreeReaderHashtableOfPointers<TKey, TValue> _hashtable;
             private IntPtr[] _hashtableContentsToEnumerate;
             private int _index;
             private TValue _current;

@@ -811,20 +811,22 @@ void BlockResetAgeMapForBlocksWorker(uint32_t *pdwGen, uint32_t dwClumpMask, Sca
             {
                 if (!HndIsNullOrDestroyedHandle(*pValue))
                 {
-                    int thisAge = g_theGCHeap->WhichGeneration(*pValue);
+                    int thisAge = GetConvertedGeneration(*pValue);
                     if (minAge > thisAge)
                         minAge = thisAge;
 
+#ifdef FEATURE_ASYNC_PINNED_HANDLES
                     GCToEEInterface::WalkAsyncPinned(*pValue, &minAge,
                         [](Object*, Object* to, void* ctx)
                         {
                             int* minAge = reinterpret_cast<int*>(ctx);
-                            int generation = g_theGCHeap->WhichGeneration(to);
+                            int generation = GetConvertedGeneration(to);
                             if (*minAge > generation)
                             {
                                 *minAge = generation;
                             }
                         });
+#endif
                }
             }
             _ASSERTE(FitsInU1(minAge));
@@ -901,7 +903,7 @@ static void VerifyObjectAndAge(_UNCHECKED_OBJECTREF from, _UNCHECKED_OBJECTREF o
 {
     VerifyObject(from, obj);
 
-    int thisAge = g_theGCHeap->WhichGeneration(obj);
+    int thisAge = GetConvertedGeneration(obj);
 
     //debugging code
     //if (minAge > thisAge && thisAge < g_theGCHeap->GetMaxGeneration())
@@ -914,7 +916,7 @@ static void VerifyObjectAndAge(_UNCHECKED_OBJECTREF from, _UNCHECKED_OBJECTREF o
     //    // for test programs - if the object is a string, print it
     //    if (obj->GetGCSafeMethodTable() == g_pStringClass)
     //    {
-    //        printf("'%ls'\n", ((StringObject *)obj)->GetBuffer());
+    //        wprintf("'%s'\n", ((StringObject *)obj)->GetBuffer());
     //    }
     //    else
     //    {
@@ -966,12 +968,15 @@ void BlockVerifyAgeMapForBlocksWorker(uint32_t *pdwGen, uint32_t dwClumpMask, Sc
                 if (!HndIsNullOrDestroyedHandle(*pValue))
                 {
                     VerifyObjectAndAge((*pValue), (*pValue), minAge);
+
+#ifdef FEATURE_ASYNC_PINNED_HANDLES
                     GCToEEInterface::WalkAsyncPinned(*pValue, &minAge,
                         [](Object* from, Object* object, void* age)
                         {
                             uint8_t* minAge = reinterpret_cast<uint8_t*>(age);
                             VerifyObjectAndAge(from, object, *minAge);
                         });
+#endif
 
                     if (uType == HNDTYPE_DEPENDENT)
                     {

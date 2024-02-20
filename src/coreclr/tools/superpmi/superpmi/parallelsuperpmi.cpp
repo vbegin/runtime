@@ -8,7 +8,11 @@
 #include "lightweightmap.h"
 #include "commandline.h"
 #include "errorhandling.h"
-#include "metricssummary.h"
+#include "fileio.h"
+
+// Forward declare the conversion method. Including spmiutil.h pulls in other headers
+// that cause build breaks.
+std::string ConvertToUtf8(const WCHAR* str);
 
 #define MAX_LOG_LINE_SIZE 0x1000 // 4 KB
 
@@ -192,12 +196,7 @@ void ProcessChildStdErr(char* stderrFilename)
         if (buff[buffLen - 1] == '\n')
             buff[buffLen - 1] = 0;
 
-        if (strncmp(buff, "ERROR: ", 7) == 0)
-            LogError("%s", &buff[7]); // log as Error and remove the "ERROR: " in front
-        else if (strncmp(buff, "WARNING: ", 9) == 0)
-            LogWarning("%s", &buff[9]); // log as Warning and remove the "WARNING: " in front
-        else if (strlen(buff) > 0)
-            LogWarning("%s", buff); // unknown output, log it as a warning
+        LogPassThroughStderr("%s", buff);
     }
 
 Cleanup:
@@ -232,26 +231,10 @@ void ProcessChildStdOut(const CommandLine::Options& o,
         if (buff[buffLen - 1] == '\n')
             buff[buffLen - 1] = 0;
 
-        if (strncmp(buff, "MISSING: ", 9) == 0)
-            LogMissing("%s", &buff[9]); // log as Missing and remove the "MISSING: " in front
-        else if (strncmp(buff, "ISSUE: ", 7) == 0)
-        {
-            if (strncmp(&buff[7], "<ASM_DIFF> ", 11) == 0)
-                LogIssue(ISSUE_ASM_DIFF, "%s", &buff[18]); // log as Issue and remove the "ISSUE: <ASM_DIFF>" in front
-            else if (strncmp(&buff[7], "<ASSERT> ", 9) == 0)
-                LogIssue(ISSUE_ASSERT, "%s", &buff[16]); // log as Issue and remove the "ISSUE: <ASSERT>" in front
-        }
-        else if (strncmp(buff, g_SuperPMIUsageFirstLine, strlen(g_SuperPMIUsageFirstLine)) == 0)
+        if (strncmp(buff, g_SuperPMIUsageFirstLine, strlen(g_SuperPMIUsageFirstLine)) == 0)
         {
             *usageError = true; // Signals that we had a SuperPMI command line usage error
-
-            // Read the entire stdout file and printf it
-            printf("%s", buff);
-            while (fgets(buff, MAX_LOG_LINE_SIZE, fp) != NULL)
-            {
-                printf("%s", buff);
-            }
-            break;
+            LogPassThroughStdout("%s", buff);
         }
         else if (strncmp(buff, g_AllFormatStringFixedPrefix, strlen(g_AllFormatStringFixedPrefix)) == 0)
         {
@@ -285,6 +268,12 @@ void ProcessChildStdOut(const CommandLine::Options& o,
             *excluded += childExcluded;
             *missing += childMissing;
         }
+        else
+        {
+            // Do output pass-through.
+            // Note that the same logging verbosity level is passed to the child processes.
+            LogPassThroughStdout("%s", buff);
+        }
     }
 
 Cleanup:
@@ -292,35 +281,6 @@ Cleanup:
     {
         fclose(fp);
     }
-}
-
-static bool ProcessChildMetrics(const char* baseMetricsSummaryPath, const char* diffMetricsSummaryPath, MetricsSummary* baseMetrics, MetricsSummary* diffMetrics)
-{
-    if (baseMetricsSummaryPath != nullptr)
-    {
-        MetricsSummary childBaseMetrics;
-        if (!MetricsSummary::LoadFromFile(baseMetricsSummaryPath, &childBaseMetrics))
-        {
-            LogError("Couldn't load base metrics summary created by child process");
-            return false;
-        }
-
-        baseMetrics->AggregateFrom(childBaseMetrics);
-    }
-
-    if (diffMetricsSummaryPath != nullptr)
-    {
-        MetricsSummary childDiffMetrics;
-        if (!MetricsSummary::LoadFromFile(diffMetricsSummaryPath, &childDiffMetrics))
-        {
-            LogError("Couldn't load diff metrics summary created by child process");
-            return false;
-        }
-
-        diffMetrics->AggregateFrom(childDiffMetrics);
-    }
-
-    return true;
 }
 
 #ifndef TARGET_UNIX // TODO-Porting: handle Ctrl-C signals gracefully on Unix
@@ -341,30 +301,16 @@ int __cdecl compareInt(const void* arg1, const void* arg2)
 
 struct PerWorkerData
 {
-    HANDLE hStdOutput;
-    HANDLE hStdError;
+    HANDLE hStdOutput = INVALID_HANDLE_VALUE;
+    HANDLE hStdError = INVALID_HANDLE_VALUE;
 
-    char* failingMCListPath;
-    char* diffMCListPath;
-    char* stdOutputPath;
-    char* stdErrorPath;
-    char* baseMetricsSummaryPath;
-    char* diffMetricsSummaryPath;
-
-    PerWorkerData()
-        : hStdOutput(INVALID_HANDLE_VALUE)
-        , hStdError(INVALID_HANDLE_VALUE)
-        , failingMCListPath(nullptr)
-        , diffMCListPath(nullptr)
-        , stdOutputPath(nullptr)
-        , stdErrorPath(nullptr)
-        , baseMetricsSummaryPath(nullptr)
-        , diffMetricsSummaryPath(nullptr)
-    {
-    }
+    char* failingMCListPath = nullptr;
+    char* detailsPath = nullptr;
+    char* stdOutputPath = nullptr;
+    char* stdErrorPath = nullptr;
 };
 
-void MergeWorkerMCLs(char* mclFilename, PerWorkerData* workerData, int workerCount, char* PerWorkerData::*mclPath)
+static void MergeWorkerMCLs(char* mclFilename, PerWorkerData* workerData, int workerCount, char* PerWorkerData::*mclPath)
 {
     int **MCL = new int *[workerCount], *MCLCount = new int[workerCount], totalCount = 0;
 
@@ -390,6 +336,43 @@ void MergeWorkerMCLs(char* mclFilename, PerWorkerData* workerData, int workerCou
     // Write the merged MCL array back to disk
     if (!WriteArrayToMCL(mclFilename, mergedMCL, totalCount))
         LogError("Unable to write to MCL file %s.", mclFilename);
+
+    delete[] MCL;
+    delete[] MCLCount;
+    delete[] mergedMCL;
+}
+
+static void MergeWorkerCsvs(char* csvFilename, PerWorkerData* workerData, int workerCount, char* PerWorkerData::* csvPath)
+{
+    FileWriter fw;
+    if (!FileWriter::CreateNew(csvFilename, &fw))
+    {
+        LogError("Could not create file %s", csvFilename);
+        return;
+    }
+
+    bool hasHeader = false;
+    for (int i = 0; i < workerCount; i++)
+    {
+        FileLineReader reader;
+        if (!FileLineReader::Open(workerData[i].*csvPath, &reader))
+        {
+            LogError("Could not open child CSV file %s", workerData[i].*csvPath);
+            continue;
+        }
+
+        if (hasHeader && !reader.AdvanceLine())
+        {
+            continue;
+        }
+
+        while (reader.AdvanceLine())
+        {
+             fw.Printf("%s\n", reader.GetCurrentLine());
+        }
+
+        hasHeader = true;
+    }
 }
 
 #define MAX_CMDLINE_SIZE 0x1000 // 4 KB
@@ -412,10 +395,10 @@ void addJitOptionArgument(LightWeightMap<DWORD, DWORD>* jitOptions,
     {
         for (unsigned i = 0; i < jitOptions->GetCount(); i++)
         {
-            WCHAR* key   = (WCHAR*)jitOptions->GetBuffer(jitOptions->GetKey(i));
-            WCHAR* value = (WCHAR*)jitOptions->GetBuffer(jitOptions->GetItem(i));
-            bytesWritten += sprintf_s(spmiArgs + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -%s %S=%S",
-                                      optionName, key, value);
+            std::string key   = ConvertToUtf8((WCHAR*)jitOptions->GetBuffer(jitOptions->GetKey(i)));
+            std::string value = ConvertToUtf8((WCHAR*)jitOptions->GetBuffer(jitOptions->GetItem(i)));
+            bytesWritten += sprintf_s(spmiArgs + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -%s %s=%s",
+                                      optionName, key.c_str(), value.c_str());
         }
     }
 }
@@ -426,9 +409,6 @@ char* ConstructChildProcessArgs(const CommandLine::Options& o)
     int   bytesWritten = 0;
     char* spmiArgs     = new char[MAX_CMDLINE_SIZE];
     *spmiArgs          = '\0';
-
-// We don't pass through /parallel, /skipCleanup, /verbosity, /failingMCList, or /diffMCList. Everything else we need to
-// reconstruct and pass through.
 
 #define ADDSTRING(s)                                                                                                   \
     if (s != nullptr)                                                                                                  \
@@ -446,16 +426,46 @@ char* ConstructChildProcessArgs(const CommandLine::Options& o)
         bytesWritten += sprintf_s(spmiArgs + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " %s %s", arg, s);         \
     }
 
+    // Only pass through an integer argument if it is not the same as the default (which must be specified here).
+    // (This is a proxy for "did the command-line parser actually parse something for this argument".)
+#define ADDARG_INT(i, arg, defaultValue)                                                                               \
+    if (i != defaultValue)                                                                                             \
+    {                                                                                                                  \
+        bytesWritten += sprintf_s(spmiArgs + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " %s %d", arg, i);         \
+    }
+
+    // We don't pass through:
+    //
+    //    -parallel
+    //    -writeLogFile (the parent process writes the log file based on the output of the child processes)
+    //    -reproName
+    //    -coredistools
+    //    -skipCleanup
+    //    -metricsSummary
+    //    -baseMetricsSummary
+    //    -diffMetricsSummary
+    //    -failingMCList
+    //    -diffMCList
+    //
+    // Everything else we need to reconstruct and pass through.
+    //
+    // Note that for -verbosity, if the level includes LOGLEVEL_INFO, the process will output a
+    // "Loaded/Jitted/FailedCompile/Excluded/Missing[/Diffs]" line which is parsed and summarized by
+    // the parent process. If it isn't output, the summary doesn't happen.
+
     ADDARG_BOOL(o.breakOnError, "-boe");
     ADDARG_BOOL(o.breakOnAssert, "-boa");
     ADDARG_BOOL(o.breakOnException, "-box");
+    ADDARG_BOOL(o.ignoreStoredConfig, "-ignoreStoredConfig");
     ADDARG_BOOL(o.applyDiff, "-applyDiff");
+    ADDARG_STRING(o.verbosity, "-verbosity");
     ADDARG_STRING(o.reproName, "-reproName");
-    ADDARG_STRING(o.writeLogFile, "-writeLogFile");
     ADDARG_STRING(o.methodStatsTypes, "-emitMethodStats");
     ADDARG_STRING(o.hash, "-matchHash");
     ADDARG_STRING(o.targetArchitecture, "-target");
     ADDARG_STRING(o.compileList, "-compile");
+    ADDARG_INT(o.failureLimit, "-failureLimit", -1);
+    ADDARG_INT(o.repeatCount, "-repeatCount", 1);
 
     addJitOptionArgument(o.forceJitOptions, bytesWritten, spmiArgs, "jitoption force");
     addJitOptionArgument(o.forceJit2Options, bytesWritten, spmiArgs, "jit2option force");
@@ -470,6 +480,7 @@ char* ConstructChildProcessArgs(const CommandLine::Options& o)
 #undef ADDSTRING
 #undef ADDARG_BOOL
 #undef ADDARG_STRING
+#undef ADDARG_INT
 
     return spmiArgs;
 }
@@ -524,8 +535,8 @@ int doParallelSuperPMI(CommandLine::Options& o)
     LogVerbose("Using child (%s) with args (%s)", spmiFilename, spmiArgs);
     if (o.mclFilename != nullptr)
         LogVerbose(" failingMCList=%s", o.mclFilename);
-    if (o.diffMCLFilename != nullptr)
-        LogVerbose(" diffMCLFilename=%s", o.diffMCLFilename);
+    if (o.details != nullptr)
+        LogVerbose(" details=%s", o.details);
     LogVerbose(" workerCount=%d, skipCleanup=%d.", o.workerCount, o.skipCleanup);
 
     PerWorkerData* perWorkerData = new PerWorkerData[o.workerCount];
@@ -547,22 +558,10 @@ int doParallelSuperPMI(CommandLine::Options& o)
             sprintf_s(wd.failingMCListPath, MAX_PATH, "%sParallelSuperPMI-%u-%d.mcl", tempPath, randNumber, i);
         }
 
-        if (o.diffMCLFilename != nullptr)
+        if (o.details != nullptr)
         {
-            wd.diffMCListPath = new char[MAX_PATH];
-            sprintf_s(wd.diffMCListPath, MAX_PATH, "%sParallelSuperPMI-Diff-%u-%d.mcl", tempPath, randNumber, i);
-        }
-
-        if (o.baseMetricsSummaryFile != nullptr)
-        {
-            wd.baseMetricsSummaryPath = new char[MAX_PATH];
-            sprintf_s(wd.baseMetricsSummaryPath, MAX_PATH, "%sParallelSuperPMI-BaseMetricsSummary-%u-%d.txt", tempPath, randNumber, i);
-        }
-
-        if (o.diffMetricsSummaryFile != nullptr)
-        {
-            wd.diffMetricsSummaryPath = new char[MAX_PATH];
-            sprintf_s(wd.diffMetricsSummaryPath, MAX_PATH, "%sParallelSuperPMI-DiffMetricsSummary-%u-%d.txt", tempPath, randNumber, i);
+            wd.detailsPath = new char[MAX_PATH];
+            sprintf_s(wd.detailsPath, MAX_PATH, "%sParallelSuperPMI-Details-%u-%d.csv", tempPath, randNumber, i);
         }
 
         wd.stdOutputPath = new char[MAX_PATH];
@@ -589,28 +588,10 @@ int doParallelSuperPMI(CommandLine::Options& o)
                                       wd.failingMCListPath);
         }
 
-        if (wd.diffMCListPath != nullptr)
+        if (wd.detailsPath != nullptr)
         {
-            bytesWritten += sprintf_s(cmdLine + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -diffMCList %s",
-                                      wd.diffMCListPath);
-        }
-
-        if (wd.baseMetricsSummaryPath != nullptr)
-        {
-            bytesWritten += sprintf_s(cmdLine + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -baseMetricsSummary %s",
-                                      wd.baseMetricsSummaryPath);
-        }
-
-        if (wd.diffMetricsSummaryPath != nullptr)
-        {
-            bytesWritten += sprintf_s(cmdLine + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -diffMetricsSummary %s",
-                                      wd.diffMetricsSummaryPath);
-        }
-
-        if (o.failureLimit > 0)
-        {
-            bytesWritten += sprintf_s(cmdLine + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -failureLimit %d",
-                                      o.failureLimit);
+            bytesWritten += sprintf_s(cmdLine + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -details %s",
+                                      wd.detailsPath);
         }
 
         bytesWritten += sprintf_s(cmdLine + bytesWritten, MAX_CMDLINE_SIZE - bytesWritten, " -v ewmin %s", spmiArgs);
@@ -693,8 +674,6 @@ int doParallelSuperPMI(CommandLine::Options& o)
         bool usageError = false; // variable to flag if we hit a usage error in SuperPMI
 
         int loaded = 0, jitted = 0, failed = 0, excluded = 0, missing = 0, diffs = 0;
-        MetricsSummary baseMetrics;
-        MetricsSummary diffMetrics;
 
         // Read the stderr files and log them as errors
         // Read the stdout files and parse them for counts and log any MISSING or ISSUE errors
@@ -703,7 +682,6 @@ int doParallelSuperPMI(CommandLine::Options& o)
             PerWorkerData& wd = perWorkerData[i];
             ProcessChildStdErr(wd.stdErrorPath);
             ProcessChildStdOut(o, wd.stdOutputPath, &loaded, &jitted, &failed, &excluded, &missing, &diffs, &usageError);
-            ProcessChildMetrics(wd.baseMetricsSummaryPath, wd.diffMetricsSummaryPath, &baseMetrics, &diffMetrics);
 
             if (usageError)
                 break;
@@ -715,20 +693,10 @@ int doParallelSuperPMI(CommandLine::Options& o)
             MergeWorkerMCLs(o.mclFilename, perWorkerData, o.workerCount, &PerWorkerData::failingMCListPath);
         }
 
-        if (o.diffMCLFilename != nullptr && !usageError)
+        if (o.details != nullptr && !usageError)
         {
             // Concat the resulting diff .mcl files
-            MergeWorkerMCLs(o.diffMCLFilename, perWorkerData, o.workerCount, &PerWorkerData::diffMCListPath);
-        }
-
-        if (o.baseMetricsSummaryFile != nullptr && !usageError)
-        {
-            baseMetrics.SaveToFile(o.baseMetricsSummaryFile);
-        }
-
-        if (o.diffMetricsSummaryFile != nullptr && !usageError)
-        {
-            diffMetrics.SaveToFile(o.diffMetricsSummaryFile);
+            MergeWorkerCsvs(o.details, perWorkerData, o.workerCount, &PerWorkerData::detailsPath);
         }
 
         if (!usageError)
@@ -755,22 +723,14 @@ int doParallelSuperPMI(CommandLine::Options& o)
             PerWorkerData& wd = perWorkerData[i];
             if (wd.failingMCListPath != nullptr)
             {
-                DeleteFile(wd.failingMCListPath);
+                remove(wd.failingMCListPath);
             }
-            if (wd.diffMCListPath != nullptr)
+            if (wd.detailsPath != nullptr)
             {
-                DeleteFile(wd.diffMCListPath);
+                remove(wd.detailsPath);
             }
-            if (wd.baseMetricsSummaryPath != nullptr)
-            {
-                DeleteFile(wd.baseMetricsSummaryPath);
-            }
-            if (wd.diffMetricsSummaryPath != nullptr)
-            {
-                DeleteFile(wd.diffMetricsSummaryPath);
-            }
-            DeleteFile(wd.stdOutputPath);
-            DeleteFile(wd.stdErrorPath);
+            remove(wd.stdOutputPath);
+            remove(wd.stdErrorPath);
         }
     }
 

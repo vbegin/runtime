@@ -174,18 +174,13 @@
       System.Xml.XPath;
       System.Xml.XPath.XDocument;
     </NetCoreAppLibrary>
-    <NetCoreAppLibraryNoReference>
-      System.Private.CoreLib;
-      System.Private.DataContractSerialization;
-      System.Private.Uri;
-      System.Private.Xml;
-      System.Private.Xml.Linq;
-    </NetCoreAppLibraryNoReference>
     <!-- List .NETCoreApp shared framework generator project names below. -->
     <NetCoreAppLibraryGenerator>
+      ComInterfaceGenerator;
       LibraryImportGenerator;
       JSImportGenerator;
-      System.Text.Json.SourceGeneration.Roslyn4.0;
+      Microsoft.Interop.SourceGeneration;
+      System.Text.Json.SourceGeneration.Roslyn4.4;
       System.Text.RegularExpressions.Generator;
     </NetCoreAppLibraryGenerator>
     <AspNetCoreAppLibrary>
@@ -203,6 +198,8 @@
       Microsoft.Extensions.Configuration.Xml;
       Microsoft.Extensions.DependencyInjection;
       Microsoft.Extensions.DependencyInjection.Abstractions;
+      Microsoft.Extensions.Diagnostics;
+      Microsoft.Extensions.Diagnostics.Abstractions;
       Microsoft.Extensions.FileProviders.Abstractions;
       Microsoft.Extensions.FileProviders.Composite;
       Microsoft.Extensions.FileProviders.Physical;
@@ -225,6 +222,7 @@
       System.Diagnostics.EventLog;
       System.IO.Pipelines;
       System.Security.Cryptography.Xml;
+      System.Threading.RateLimiting;
     </AspNetCoreAppLibrary>
     <WindowsDesktopCoreAppLibrary>
       Microsoft.Win32.Registry.AccessControl;
@@ -234,7 +232,6 @@
       System.Diagnostics.EventLog;
       System.Diagnostics.PerformanceCounter;
       System.DirectoryServices;
-      System.Drawing.Common;
       System.IO.Packaging;
       System.Resources.Extensions;
       System.Security.Cryptography.Pkcs;
@@ -249,7 +246,6 @@
   <ItemGroup>
     <NetFxReference Include="$(NetFxReference)" />
     <NetCoreAppLibrary Include="$(NetCoreAppLibrary)" />
-    <NetCoreAppLibraryNoReference Include="$(NetCoreAppLibraryNoReference)" />
     <NetCoreAppLibraryGenerator Include="$(NetCoreAppLibraryGenerator)" />
     <AspNetCoreAppLibrary Include="$(AspNetCoreAppLibrary)" />
     <WindowsDesktopCoreAppLibrary Include="$(WindowsDesktopCoreAppLibrary)" />

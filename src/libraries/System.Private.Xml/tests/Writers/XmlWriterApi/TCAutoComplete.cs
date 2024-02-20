@@ -4,7 +4,7 @@
 using OLEDB.Test.ModuleCore;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     ////[TestCase(Name = "Auto-completion of tokens")]
     public class TCAutoComplete
@@ -70,7 +70,7 @@ namespace System.Xml.Tests
                 {
                     CError.WriteLineIgnore("Exception: " + e.ToString());
 
-                    Assert.True(false);
+                    Assert.Fail();
                 }
                 catch (InvalidOperationException e)
                 {
@@ -80,7 +80,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // WriteEndElement without WriteStartElement
@@ -104,7 +104,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // WriteFullEndElement without WriteStartElement
@@ -128,7 +128,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

@@ -8,7 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-#if !BUILDING_INBOX_LIBRARY
+#if !NETCOREAPP
 using System.Runtime.InteropServices;
 #endif
 
@@ -47,6 +47,7 @@ namespace System.Text.Json
         private Memory<byte> _memory;
 
         private bool _inObject;
+        private bool _commentAfterNoneOrPropertyName;
         private JsonTokenType _tokenType;
         private BitStack _bitStack;
 
@@ -56,6 +57,10 @@ namespace System.Text.Json
         private int _currentDepth;
 
         private JsonWriterOptions _options; // Since JsonWriterOptions is a struct, use a field to avoid a copy for internal code.
+
+        // Cache indentation settings from JsonWriterOptions to avoid recomputing them in the hot path.
+        private byte _indentByte;
+        private int _indentLength;
 
         /// <summary>
         /// Returns the amount of bytes written by the <see cref="Utf8JsonWriter"/> so far
@@ -79,7 +84,7 @@ namespace System.Text.Json
         /// </summary>
         public JsonWriterOptions Options => _options;
 
-        private int Indentation => CurrentDepth * JsonConstants.SpacesPerIndent;
+        private int Indentation => CurrentDepth * _indentLength;
 
         internal JsonTokenType TokenType => _tokenType;
 
@@ -88,6 +93,10 @@ namespace System.Text.Json
         /// written so far. This provides the depth of the current token.
         /// </summary>
         public int CurrentDepth => _currentDepth & JsonConstants.RemoveFlagsBitMask;
+
+        private Utf8JsonWriter()
+        {
+        }
 
         /// <summary>
         /// Constructs a new <see cref="Utf8JsonWriter"/> instance with a specified <paramref name="bufferWriter"/>.
@@ -107,12 +116,7 @@ namespace System.Text.Json
             }
 
             _output = bufferWriter;
-            _options = options;
-
-            if (_options.MaxDepth == 0)
-            {
-                _options.MaxDepth = JsonWriterOptions.DefaultMaxDepth; // If max depth is not set, revert to the default depth.
-            }
+            SetOptions(options);
         }
 
         /// <summary>
@@ -136,14 +140,21 @@ namespace System.Text.Json
                 throw new ArgumentException(SR.StreamNotWritable);
 
             _stream = utf8Json;
+            SetOptions(options);
+
+            _arrayBufferWriter = new ArrayBufferWriter<byte>();
+        }
+
+        private void SetOptions(JsonWriterOptions options)
+        {
             _options = options;
+            _indentByte = (byte)_options.IndentCharacter;
+            _indentLength = options.IndentSize;
 
             if (_options.MaxDepth == 0)
             {
                 _options.MaxDepth = JsonWriterOptions.DefaultMaxDepth; // If max depth is not set, revert to the default depth.
             }
-
-            _arrayBufferWriter = new ArrayBufferWriter<byte>();
         }
 
         /// <summary>
@@ -226,6 +237,25 @@ namespace System.Text.Json
             ResetHelper();
         }
 
+        internal void ResetAllStateForCacheReuse()
+        {
+            ResetHelper();
+
+            _stream = null;
+            _arrayBufferWriter = null;
+            _output = null;
+        }
+
+        internal void Reset(IBufferWriter<byte> bufferWriter, JsonWriterOptions options)
+        {
+            Debug.Assert(_output is null && _stream is null && _arrayBufferWriter is null);
+
+            _output = bufferWriter;
+            SetOptions(options);
+        }
+
+        internal static Utf8JsonWriter CreateEmptyInstanceForCaching() => new Utf8JsonWriter();
+
         private void ResetHelper()
         {
             BytesPending = default;
@@ -234,6 +264,7 @@ namespace System.Text.Json
 
             _inObject = default;
             _tokenType = default;
+            _commentAfterNoneOrPropertyName = default;
             _currentDepth = default;
 
             _bitStack = default;
@@ -275,7 +306,7 @@ namespace System.Text.Json
                     _arrayBufferWriter.Advance(BytesPending);
                     BytesPending = 0;
 
-#if BUILDING_INBOX_LIBRARY
+#if NETCOREAPP
                     _stream.Write(_arrayBufferWriter.WrittenSpan);
 #else
                     Debug.Assert(_arrayBufferWriter.WrittenMemory.Length == _arrayBufferWriter.WrittenCount);
@@ -389,7 +420,7 @@ namespace System.Text.Json
                     _arrayBufferWriter.Advance(BytesPending);
                     BytesPending = 0;
 
-#if BUILDING_INBOX_LIBRARY
+#if NETCOREAPP
                     await _stream.WriteAsync(_arrayBufferWriter.WrittenMemory, cancellationToken).ConfigureAwait(false);
 #else
                     Debug.Assert(_arrayBufferWriter.WrittenMemory.Length == _arrayBufferWriter.WrittenCount);
@@ -524,7 +555,7 @@ namespace System.Text.Json
         private void WriteStartIndented(byte token)
         {
             int indent = Indentation;
-            Debug.Assert(indent <= 2 * _options.MaxDepth);
+            Debug.Assert(indent <= _indentLength * _options.MaxDepth);
 
             int minRequired = indent + 1;   // 1 start token
             int maxRequired = minRequired + 3; // Optionally, 1 list separator and 1-2 bytes for new line
@@ -541,13 +572,10 @@ namespace System.Text.Json
                 output[BytesPending++] = JsonConstants.ListSeparator;
             }
 
-            if (_tokenType != JsonTokenType.PropertyName)
+            if (_tokenType is not JsonTokenType.PropertyName and not JsonTokenType.None || _commentAfterNoneOrPropertyName)
             {
-                if (_tokenType != JsonTokenType.None)
-                {
-                    WriteNewLine(output);
-                }
-                JsonWriterHelper.WriteIndentation(output.Slice(BytesPending), indent);
+                WriteNewLine(output);
+                WriteIndentation(output.Slice(BytesPending), indent);
                 BytesPending += indent;
             }
 
@@ -968,10 +996,10 @@ namespace System.Text.Json
                 {
                     // The end token should be at an outer indent and since we haven't updated
                     // current depth yet, explicitly subtract here.
-                    indent -= JsonConstants.SpacesPerIndent;
+                    indent -= _indentLength;
                 }
 
-                Debug.Assert(indent <= 2 * _options.MaxDepth);
+                Debug.Assert(indent <= _indentLength * _options.MaxDepth);
                 Debug.Assert(_options.SkipValidation || _tokenType != JsonTokenType.None);
 
                 int maxRequired = indent + 3; // 1 end token, 1-2 bytes for new line
@@ -985,7 +1013,7 @@ namespace System.Text.Json
 
                 WriteNewLine(output);
 
-                JsonWriterHelper.WriteIndentation(output.Slice(BytesPending), indent);
+                WriteIndentation(output.Slice(BytesPending), indent);
                 BytesPending += indent;
 
                 output[BytesPending++] = token;
@@ -1001,6 +1029,11 @@ namespace System.Text.Json
                 output[BytesPending++] = JsonConstants.CarriageReturn;
             }
             output[BytesPending++] = JsonConstants.LineFeed;
+        }
+
+        private void WriteIndentation(Span<byte> buffer, int indent)
+        {
+            JsonWriterHelper.WriteIndentation(buffer, indent, _indentByte);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

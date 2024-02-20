@@ -69,11 +69,6 @@ namespace Internal.Cryptography
             }
         }
 
-        public static byte[] ValueAsAscii(this Oid oid)
-        {
-            return Encoding.ASCII.GetBytes(oid.Value!);
-        }
-
         public unsafe delegate void DecodedObjectReceiver(void* pvDecodedObject, int cbDecodedObject);
         public unsafe delegate TResult DecodedObjectReceiver<TResult>(void* pvDecodedObject, int cbDecodedObject);
         public unsafe delegate TResult DecodedObjectReceiver<TState, TResult>(void* pvDecodedObject, int cbDecodedObject, TState state);
@@ -96,7 +91,7 @@ namespace Internal.Cryptography
                     null,
                     ref cb))
                 {
-                    throw Marshal.GetLastWin32Error().ToCryptographicException();
+                    throw Marshal.GetLastPInvokeError().ToCryptographicException();
                 }
 
                 int MaxStackAllocSize = 256;
@@ -118,7 +113,7 @@ namespace Internal.Cryptography
                         pDecoded,
                         ref cb))
                     {
-                        throw Marshal.GetLastWin32Error().ToCryptographicException();
+                        throw Marshal.GetLastPInvokeError().ToCryptographicException();
                     }
 
                     return receiver(pDecoded, cb);
@@ -142,7 +137,7 @@ namespace Internal.Cryptography
                 null,
                 ref cb))
             {
-                throw Marshal.GetLastWin32Error().ToCryptographicException();
+                throw Marshal.GetLastPInvokeError().ToCryptographicException();
             }
 
             const int MaxStackAllocSize = 256;
@@ -164,7 +159,7 @@ namespace Internal.Cryptography
                     pDecoded,
                     ref cb))
                 {
-                    throw Marshal.GetLastWin32Error().ToCryptographicException();
+                    throw Marshal.GetLastPInvokeError().ToCryptographicException();
                 }
 
                 return receiver(pDecoded, cb);

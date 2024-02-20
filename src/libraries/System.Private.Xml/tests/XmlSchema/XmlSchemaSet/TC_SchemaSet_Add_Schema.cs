@@ -7,7 +7,7 @@ using System.Xml.Schema;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaTests
 {
     public class TC_SchemaSet_Add_Schema : TC_SchemaSetBase
     {
@@ -42,7 +42,7 @@ namespace System.Xml.Tests
                     return;
                 }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -118,7 +118,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -180,7 +180,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //[Variation(Desc = "v7 - 430164_import Add(XmlSchema) does not check if location already exists")]
@@ -231,7 +231,7 @@ namespace System.Xml.Tests
             {
                 s.Compile();
                 _output.WriteLine("No exception thrown");
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaException e)
             {

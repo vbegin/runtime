@@ -1,12 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
-
 using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Threading;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Net.NetworkInformation
 {
@@ -80,7 +79,7 @@ namespace System.Net.NetworkInformation
                         NetworkAvailabilityChangedEventHandler handler = subscriber.Key;
                         ExecutionContext? ec = subscriber.Value;
 
-                        if (ec == null) // Flow supressed
+                        if (ec == null) // Flow suppressed
                         {
                             handler(null, args);
                         }
@@ -166,7 +165,7 @@ namespace System.Net.NetworkInformation
                     }
                     catch (NetworkInformationException nie)
                     {
-                        if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(null, nie);
+                        if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(nie);
                     }
                 }
 
@@ -179,7 +178,7 @@ namespace System.Net.NetworkInformation
                         NetworkAddressChangedEventHandler handler = subscriber.Key;
                         ExecutionContext? ec = subscriber.Value;
 
-                        if (ec == null) // Flow supressed
+                        if (ec == null) // Flow suppressed
                         {
                             handler(null, EventArgs.Empty);
                         }

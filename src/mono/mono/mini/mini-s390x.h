@@ -77,7 +77,6 @@ struct SeqPointInfo {
 #define MONO_ARCH_HAVE_OP_GENERIC_CLASS_INIT		1
 #define MONO_ARCH_HAVE_SETUP_ASYNC_CALLBACK		1
 #define MONO_ARCH_HAVE_TRACK_FPREGS			1
-#define MONO_ARCH_HAVE_OPTIMIZED_DIV			1
 #define MONO_ARCH_HAVE_OP_TAILCALL_MEMBASE		1
 #define MONO_ARCH_HAVE_OP_TAILCALL_REG			1
 #define MONO_ARCH_HAVE_SDB_TRAMPOLINES			1
@@ -128,8 +127,6 @@ struct SeqPointInfo {
 #define MONO_ARCH_CALLEE_FREGS (0xfffe)
 
 #define MONO_ARCH_CALLEE_SAVED_FREGS 0
-
-#define MONO_ARCH_USE_FPSTACK FALSE
 
 #define MONO_ARCH_INST_FIXED_REG(desc) ((desc == 'o') ? s390_r2 : 		\
 					((desc == 'g') ? s390_f0 : 		\

@@ -22,7 +22,7 @@
 #define ASMCONSTANTS_RUNTIME_ASSERT(cond)
 #endif
 
-// Some contants are different in _DEBUG builds.  This macro factors out ifdefs from below.
+// Some constants are different in _DEBUG builds.  This macro factors out ifdefs from below.
 #ifdef _DEBUG
 #define DBG_FRE(dbg,fre) dbg
 #else
@@ -80,7 +80,7 @@ ASMCONSTANTS_C_ASSERT(MethodTable__m_dwFlags == offsetof(MethodTable, m_dwFlags)
 ASMCONSTANTS_C_ASSERT(MethodTable__enum_flag_ContainsPointers == MethodTable::enum_flag_ContainsPointers);
 
 #define MethodTable__m_ElementType        DBG_FRE(0x24, 0x20)
-ASMCONSTANTS_C_ASSERT(MethodTable__m_ElementType == offsetof(MethodTable, m_pMultipurposeSlot1));
+ASMCONSTANTS_C_ASSERT(MethodTable__m_ElementType == offsetof(MethodTable, m_ElementTypeHnd));
 
 #define SIZEOF__MethodTable             DBG_FRE(0x2c, 0x28)
 ASMCONSTANTS_C_ASSERT(SIZEOF__MethodTable == sizeof(MethodTable));
@@ -122,9 +122,6 @@ ASMCONSTANTS_C_ASSERT(MethodDesc__m_wFlags == offsetof(MethodDesc, m_wFlags))
 ASMCONSTANTS_C_ASSERT(MethodDesc__mdcClassification == mdcClassification)
 
 #ifdef FEATURE_COMINTEROP
-
-#define MethodDesc__mcComInterop 0x6
-ASMCONSTANTS_C_ASSERT(MethodDesc__mcComInterop == mcComInterop)
 
 #define Stub__m_pCode DBG_FRE(0x10, 0x0c)
 ASMCONSTANTS_C_ASSERT(Stub__m_pCode == sizeof(Stub))
@@ -237,6 +234,31 @@ ASMCONSTANTS_C_ASSERT(CallCountingStubData__TargetForMethod == offsetof(CallCoun
 
 #define CallCountingStubData__TargetForThresholdReached 0x08
 ASMCONSTANTS_C_ASSERT(CallCountingStubData__TargetForThresholdReached == offsetof(CallCountingStubData, TargetForThresholdReached))
+
+#ifdef PROFILING_SUPPORTED
+#define PROFILE_ENTER        0x1
+#define PROFILE_LEAVE        0x2
+#define PROFILE_TAILCALL     0x4
+
+#define SIZEOF__PROFILE_PLATFORM_SPECIFIC_DATA 104
+ASMCONSTANTS_C_ASSERT(SIZEOF__PROFILE_PLATFORM_SPECIFIC_DATA == sizeof(PROFILE_PLATFORM_SPECIFIC_DATA))
+
+#define ASMCONSTANTS_C_ASSERT_OFFSET(type, field) \
+    ASMCONSTANTS_C_ASSERT(type##__##field == offsetof(type, field))
+
+#define PROFILE_PLATFORM_SPECIFIC_DATA__functionId 80
+ASMCONSTANTS_C_ASSERT_OFFSET(PROFILE_PLATFORM_SPECIFIC_DATA, functionId)
+#define PROFILE_PLATFORM_SPECIFIC_DATA__probeSp 84
+ASMCONSTANTS_C_ASSERT_OFFSET(PROFILE_PLATFORM_SPECIFIC_DATA, probeSp)
+#define PROFILE_PLATFORM_SPECIFIC_DATA__profiledSp 88
+ASMCONSTANTS_C_ASSERT_OFFSET(PROFILE_PLATFORM_SPECIFIC_DATA, profiledSp)
+#define PROFILE_PLATFORM_SPECIFIC_DATA__hiddenArg 92
+ASMCONSTANTS_C_ASSERT_OFFSET(PROFILE_PLATFORM_SPECIFIC_DATA, hiddenArg)
+#define PROFILE_PLATFORM_SPECIFIC_DATA__flags 96
+ASMCONSTANTS_C_ASSERT_OFFSET(PROFILE_PLATFORM_SPECIFIC_DATA, flags)
+
+#undef ASMCONSTANTS_C_ASSERT_OFFSET
+#endif  // PROFILING_SUPPORTED
 
 #undef ASMCONSTANTS_RUNTIME_ASSERT
 #undef ASMCONSTANTS_C_ASSERT

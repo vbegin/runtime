@@ -76,7 +76,26 @@ namespace Microsoft.Extensions.Caching.Memory
         /// </summary>
         public int Count => _coherentState.Count;
 
-        // internal for testing
+        /// <summary>
+        /// Gets an enumerable of the all the keys in the <see cref="MemoryCache"/>.
+        /// </summary>
+        public IEnumerable<object> Keys
+        {
+            get
+            {
+                foreach (KeyValuePair<object, CacheEntry> pairs in _coherentState._entries)
+                {
+                    yield return pairs.Key;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Internal accessor for Size for testing only.
+        ///
+        /// Note that this is only eventually consistent with the contents of the collection.
+        /// See comment on <see cref="CoherentState"/>.
+        /// </summary>
         internal long Size => _coherentState.Size;
 
         internal bool TrackLinkedCacheEntries { get; }
@@ -157,7 +176,7 @@ namespace Microsoft.Extensions.Caching.Memory
                     }
                     else
                     {
-                        // The update will fail if the previous entry was removed after retrival.
+                        // The update will fail if the previous entry was removed after retrieval.
                         // Adding the new entry will succeed only if no entry has been added since.
                         // This guarantees removing an old entry does not prevent adding a new entry.
                         entryAdded = coherentState._entries.TryAdd(entry.Key, entry);
@@ -384,10 +403,10 @@ namespace Microsoft.Extensions.Caching.Memory
             {
                 for (int i = 0; i < _allStats.Count; i++)
                 {
-                    if (_allStats[i].TryGetTarget(out Stats? stats) && stats == current)
+                    if (!_allStats[i].TryGetTarget(out Stats? stats))
                     {
                         _allStats.RemoveAt(i);
-                        break;
+                        i--;
                     }
                 }
 
@@ -421,6 +440,10 @@ namespace Microsoft.Extensions.Caching.Memory
             }
         }
 
+        /// <summary>
+        /// Returns true if increasing the cache size by the size of entry would
+        /// cause it to exceed any size limit on the cache, otherwise, returns false.
+        /// </summary>
         private bool UpdateCacheSizeExceedsCapacity(CacheEntry entry, CoherentState coherentState)
         {
             long sizeLimit = _options.SizeLimitValue;
@@ -474,7 +497,7 @@ namespace Microsoft.Extensions.Caching.Memory
                 long lowWatermark = sizeLimit - (long)(sizeLimit * _options.CompactionPercentage);
                 if (currentSize > lowWatermark)
                 {
-                     Compact(currentSize - (long)lowWatermark, entry => entry.Size, coherentState);
+                    Compact(currentSize - (long)lowWatermark, entry => entry.Size, coherentState);
                 }
             }
 
@@ -578,11 +601,16 @@ namespace Microsoft.Extensions.Caching.Memory
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             Dispose(true);
         }
 
+        /// <summary>
+        /// Dispose the cache and clear all entries.
+        /// </summary>
+        /// <param name="disposing">Dispose the object resources if true; otherwise, take no action.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
@@ -613,6 +641,22 @@ namespace Microsoft.Extensions.Caching.Memory
             ThrowHelper.ThrowIfNull(key);
         }
 
+        /// <summary>
+        /// Wrapper for the memory cache entries collection.
+        ///
+        /// Entries may have various sizes. If a size limit has been set, the cache keeps track of the aggregate of all the entries' sizes
+        /// in order to trigger compaction when the size limit is exceeded.
+        ///
+        /// For performance reasons, the size is not updated atomically with the collection, but is only made eventually consistent.
+        ///
+        /// When the memory cache is cleared, it replaces the backing collection entirely. This may occur in parallel with operations
+        /// like add, set, remove, and compact which may modify the collection and thus its overall size.
+        ///
+        /// To keep the overall size eventually consistent, therefore, the collection and the overall size are wrapped in this CoherentState
+        /// object. Individual operations take a local reference to this wrapper object while they work, and make size updates to this object.
+        /// Clearing the cache simply replaces the object, so that any still in progress updates do not affect the overall size value for
+        /// the new backing collection.
+        /// </summary>
         private sealed class CoherentState
         {
             internal ConcurrentDictionary<object, CacheEntry> _entries = new ConcurrentDictionary<object, CacheEntry>();

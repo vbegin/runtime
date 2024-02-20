@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Xunit;
-using Xunit.Abstractions;
 using System.IO;
 using System.Xml.Schema;
+using Xunit;
+using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaTests
 {
     //[TestCase(Name = "TC_SchemaSet_Reprocess", Desc = "", Priority = 1)]
     public class TC_SchemaSet_Reprocess : TC_SchemaSetBase
@@ -64,7 +64,7 @@ namespace System.Xml.Tests
                 CError.Compare(sc.IsCompiled, false, "AddIsCompiled");
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -96,7 +96,7 @@ namespace System.Xml.Tests
                 CError.Compare(sc.Count, 1, "AE");
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -225,7 +225,7 @@ namespace System.Xml.Tests
                 _output.WriteLine(e.ToString());
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -262,7 +262,7 @@ namespace System.Xml.Tests
                 _output.WriteLine(e.ToString());
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------

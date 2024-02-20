@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.IO
 {
@@ -58,7 +58,7 @@ namespace System.IO
             {
                 if (!Interop.Kernel32.GetFileAttributesEx(path, Interop.Kernel32.GET_FILEEX_INFO_LEVELS.GetFileExInfoStandard, ref data))
                 {
-                    errorCode = Marshal.GetLastWin32Error();
+                    errorCode = Marshal.GetLastPInvokeError();
 
                     if (!IsPathUnreachableError(errorCode))
                     {
@@ -84,7 +84,7 @@ namespace System.IO
                         {
                             if (handle.IsInvalid)
                             {
-                                errorCode = Marshal.GetLastWin32Error();
+                                errorCode = Marshal.GetLastPInvokeError();
                             }
                             else
                             {

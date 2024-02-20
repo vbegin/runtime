@@ -7,9 +7,8 @@
 #include "daccess.h"
 #include "rhassert.h"
 #include "slist.h"
-#include "gcrhinterface.h"
+#include "GcEnum.h"
 #include "shash.h"
-#include "RWLock.h"
 #include "TypeManager.h"
 #include "varint.h"
 #include "PalRedhawkCommon.h"
@@ -23,10 +22,12 @@
 #include "thread.h"
 #include "threadstore.h"
 #include "threadstore.inl"
+#include "thread.inl"
 #include "stressLog.h"
 #include "rhbinder.h"
 #include "MethodTable.h"
 #include "MethodTable.inl"
+#include "CommonMacros.inl"
 
 COOP_PINVOKE_HELPER(FC_BOOL_RET, RhpEHEnumInitFromStackFrameIterator, (
     StackFrameIterator* pFrameIter, void ** pMethodStartAddressOut, EHEnum* pEHEnum))
@@ -91,9 +92,19 @@ COOP_PINVOKE_HELPER(int32_t, RhGetModuleFileName, (HANDLE moduleHandle, _Out_ co
 
 COOP_PINVOKE_HELPER(void, RhpCopyContextFromExInfo, (void * pOSContext, int32_t cbOSContext, PAL_LIMITED_CONTEXT * pPalContext))
 {
-    UNREFERENCED_PARAMETER(cbOSContext);
     ASSERT((size_t)cbOSContext >= sizeof(CONTEXT));
     CONTEXT* pContext = (CONTEXT *)pOSContext;
+
+#ifndef HOST_WASM
+
+    memset(pOSContext, 0, cbOSContext);
+    pContext->ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+
+    // Fill in CONTEXT_CONTROL registers that were not captured in PAL_LIMITED_CONTEXT.
+    PopulateControlSegmentRegisters(pContext);
+
+#endif // !HOST_WASM
+
 #if defined(UNIX_AMD64_ABI)
     pContext->Rip = pPalContext->IP;
     pContext->Rsp = pPalContext->Rsp;
@@ -193,11 +204,10 @@ EXTERN_C int32_t __stdcall RhpPInvokeExceptionGuard(PEXCEPTION_RECORD       pExc
 
     Thread * pThread = ThreadStore::GetCurrentThread();
 
-    // If the thread is currently in the "do not trigger GC" mode, we must not allocate, we must not reverse pinvoke, or
-    // return from a pinvoke.  All of these things will deadlock with the GC and they all become increasingly likely as
-    // exception dispatch kicks off.  So we just address this as early as possible with a FailFast.  The most
-    // likely case where this occurs is in our GC-callouts for Jupiter lifetime management -- in that case, we have
-    // managed code that calls to native code (without pinvoking) which might have a bug that causes an AV.
+    // A thread in DoNotTriggerGc mode has many restrictions that will become increasingly likely to be violated as
+    // exception dispatch kicks off. So we just address this as early as possible with a FailFast.
+    // The most likely case where this occurs is in GC-callouts -- in that case, we have
+    // managed code that runs on behalf of GC, which might have a bug that causes an AV.
     if (pThread->IsDoNotTriggerGcSet())
         RhFailFast();
 
@@ -271,20 +281,26 @@ EXTERN_C void* RhpThrowHwEx2 = NULL;
 EXTERN_C void* RhpRethrow2   = NULL;
 #endif
 
-EXTERN_C void * RhpAssignRefAVLocation;
-EXTERN_C void * RhpCheckedAssignRefAVLocation;
-EXTERN_C void * RhpCheckedLockCmpXchgAVLocation;
-EXTERN_C void * RhpCheckedXchgAVLocation;
-EXTERN_C void * RhpLockCmpXchg32AVLocation;
-EXTERN_C void * RhpLockCmpXchg64AVLocation;
-EXTERN_C void * RhpCopyMultibyteDestAVLocation;
-EXTERN_C void * RhpCopyMultibyteSrcAVLocation;
-EXTERN_C void * RhpCopyMultibyteNoGCRefsDestAVLocation;
-EXTERN_C void * RhpCopyMultibyteNoGCRefsSrcAVLocation;
-EXTERN_C void * RhpCopyMultibyteWithWriteBarrierDestAVLocation;
-EXTERN_C void * RhpCopyMultibyteWithWriteBarrierSrcAVLocation;
-EXTERN_C void * RhpCopyAnyWithWriteBarrierDestAVLocation;
-EXTERN_C void * RhpCopyAnyWithWriteBarrierSrcAVLocation;
+EXTERN_C CODE_LOCATION RhpAssignRefAVLocation;
+EXTERN_C CODE_LOCATION RhpCheckedAssignRefAVLocation;
+EXTERN_C CODE_LOCATION RhpCheckedLockCmpXchgAVLocation;
+EXTERN_C CODE_LOCATION RhpCheckedXchgAVLocation;
+#if !defined(HOST_AMD64) && !defined(HOST_ARM64)
+EXTERN_C CODE_LOCATION RhpLockCmpXchg8AVLocation;
+EXTERN_C CODE_LOCATION RhpLockCmpXchg16AVLocation;
+EXTERN_C CODE_LOCATION RhpLockCmpXchg32AVLocation;
+EXTERN_C CODE_LOCATION RhpLockCmpXchg64AVLocation;
+#endif
+EXTERN_C CODE_LOCATION RhpByRefAssignRefAVLocation1;
+
+#if !defined(HOST_ARM64)
+EXTERN_C CODE_LOCATION RhpByRefAssignRefAVLocation2;
+#endif
+
+#if defined(HOST_ARM64) && !defined(LSE_INSTRUCTIONS_ENABLED_BY_DEFAULT)
+EXTERN_C CODE_LOCATION RhpCheckedLockCmpXchgAVLocation2;
+EXTERN_C CODE_LOCATION RhpCheckedXchgAVLocation2;
+#endif
 
 static bool InWriteBarrierHelper(uintptr_t faultingIP)
 {
@@ -295,8 +311,20 @@ static bool InWriteBarrierHelper(uintptr_t faultingIP)
         (uintptr_t)&RhpCheckedAssignRefAVLocation,
         (uintptr_t)&RhpCheckedLockCmpXchgAVLocation,
         (uintptr_t)&RhpCheckedXchgAVLocation,
+#if !defined(HOST_AMD64) && !defined(HOST_ARM64)
+        (uintptr_t)&RhpLockCmpXchg8AVLocation,
+        (uintptr_t)&RhpLockCmpXchg16AVLocation,
         (uintptr_t)&RhpLockCmpXchg32AVLocation,
         (uintptr_t)&RhpLockCmpXchg64AVLocation,
+#endif
+        (uintptr_t)&RhpByRefAssignRefAVLocation1,
+#if !defined(HOST_ARM64)
+        (uintptr_t)&RhpByRefAssignRefAVLocation2,
+#endif
+#if defined(HOST_ARM64) && !defined(LSE_INSTRUCTIONS_ENABLED_BY_DEFAULT)
+        (uintptr_t)&RhpCheckedLockCmpXchgAVLocation2,
+        (uintptr_t)&RhpCheckedXchgAVLocation2,
+#endif
     };
 
     // compare the IP against the list of known possible AV locations in the write barrier helpers
@@ -316,14 +344,14 @@ static bool InWriteBarrierHelper(uintptr_t faultingIP)
     return false;
 }
 
-EXTERN_C void* RhpInitialInterfaceDispatch;
-EXTERN_C void* RhpInterfaceDispatchAVLocation1;
-EXTERN_C void* RhpInterfaceDispatchAVLocation2;
-EXTERN_C void* RhpInterfaceDispatchAVLocation4;
-EXTERN_C void* RhpInterfaceDispatchAVLocation8;
-EXTERN_C void* RhpInterfaceDispatchAVLocation16;
-EXTERN_C void* RhpInterfaceDispatchAVLocation32;
-EXTERN_C void* RhpInterfaceDispatchAVLocation64;
+EXTERN_C CODE_LOCATION RhpInitialInterfaceDispatch;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation1;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation2;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation4;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation8;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation16;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation32;
+EXTERN_C CODE_LOCATION RhpInterfaceDispatchAVLocation64;
 
 static bool InInterfaceDispatchHelper(uintptr_t faultingIP)
 {
@@ -439,7 +467,7 @@ int32_t __stdcall RhpHardwareExceptionHandler(uintptr_t faultCode, uintptr_t fau
     {
         *arg0Reg = faultCode;
         *arg1Reg = faultingIP;
-        palContext->SetIp((uintptr_t)&RhpThrowHwEx);
+        palContext->SetIp(PCODEToPINSTR((PCODE)&RhpThrowHwEx));
 
         return EXCEPTION_CONTINUE_EXECUTION;
     }
@@ -523,7 +551,7 @@ int32_t __stdcall RhpVectoredExceptionHandler(PEXCEPTION_POINTERS pExPtrs)
 
     if (translateToManagedException)
     {
-        pExPtrs->ContextRecord->SetIp((uintptr_t)&RhpThrowHwEx);
+        pExPtrs->ContextRecord->SetIp(PCODEToPINSTR((PCODE)&RhpThrowHwEx));
         pExPtrs->ContextRecord->SetArg0Reg(faultCode);
         pExPtrs->ContextRecord->SetArg1Reg(faultingIP);
 

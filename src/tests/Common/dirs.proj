@@ -10,12 +10,12 @@
       <DisabledProjects Include="$(TestRoot)*\**\cs_template.csproj" />
       <DisabledProjects Include="$(TestRoot)Common\**\*.*proj" />
       <DisabledProjects Include="$(TestRoot)FunctionalTests\**\*.csproj" /> <!-- They need to be isolated from the existing setup -->
-      <DisabledProjects Include="$(TestRoot)BuildWasmApps\**\*.csproj" /> <!-- built and run with libraries -->
       <DisabledProjects Include="$(TestRoot)GC\Performance\Framework\GCPerfTestFramework.csproj" />
       <DisabledProjects Include="$(TestRoot)Loader\classloader\StaticVirtualMethods\**\generatetest.csproj" /> <!-- test generators -->
       <DisabledProjects Include="$(TestRoot)Performance\Scenario\JitBench\unofficial_dotnet\JitBench.csproj" /> <!-- no official build support for SDK-style netcoreapp2.0 projects -->
       <DisabledProjects Include="$(TestRoot)TestWrappers*\**\*.csproj" />
       <DisabledProjects Include="$(TestRoot)nativeaot\**\*.csproj" Condition="'$(TestBuildMode)' != 'nativeaot'" />
+      <DisabledProjects Include="$(TestRoot)readytorun\**\*.csproj" Condition="'$(TestBuildMode)' == 'nativeaot'" />
     </ItemGroup>
 
     <ItemGroup>
@@ -45,11 +45,17 @@
       <AllProjects Include="$(TestRoot)**\*.fsproj" Exclude="@(DisabledProjects)" />
       <AllProjects Include="$(TestRoot)**\*.ilproj" Exclude="@(DisabledProjects)" />
     </ItemGroup>
-
     <!-- All the test projects are partitioned into the test groups as defined below.
          Each of the test groups is meant to be built by a separate MSBuild invocation with specified $(__TestGroupToBuild) property. -->
-
     <ItemGroup Condition=" '$(CLRTestPriorityToBuild)' == '0' ">
+
+      <!-- Fast filter to avoid files with Pri1 projects, this isn't completely accurate, but its close. Any Pri1 tests not caught by this will be skipped,
+           and any tests intended as Pri0 will end up running as Pri1, which isn't terrible. This trick allows us to avoid loading each project into msbuild
+           and evaluating it, which is a substantial improvement to the performance of the "Copy native test components to test output folder" task in our test runs  -->
+      <Pri1Projects Include="@(AllProjects)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(AllProjects.FullPath)')), '&lt;CLRTestPriority&gt;1&lt;/CLRTestPriority&gt;'))" />
+
+      <AllProjects Remove="@(Pri1Projects)" />
+
       <!-- Group number k consists of all the test projects P such that _GroupStartsWith(k) <= P.Identity < _GroupStartsWith(k+1).
            In other words, ItemGroup _GroupStartsWith defines boundaries between the test groups. -->
 
@@ -59,11 +65,11 @@
         <GroupNumber>1</GroupNumber>
       </_GroupStartsWith> -->
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Methodical\Boxing\callconv\_relinstance_il.ilproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\Methodical">
         <GroupNumber>2</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Regression\CLR-x86-JIT\V1-M12-Beta2\b35351\b35351.ilproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\Regression">
         <GroupNumber>3</GroupNumber>
       </_GroupStartsWith>
     </ItemGroup>
@@ -74,39 +80,39 @@
         <GroupNumber>1</GroupNumber>
       </_GroupStartsWith> -->
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\CodeGenBringUpTests\DblNeg_ro.csproj">
+      <_GroupStartsWith Include="$(TestRoot)Interop">
         <GroupNumber>2</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Directed\shift\uint32_d.csproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\Directed">
         <GroupNumber>3</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Methodical\AsgOp\r8\r8flat_cs_r.csproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\IL_Conformance">
         <GroupNumber>4</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Methodical\eh\finallyexec\tryCatchFinallyThrow_nonlocalexit4_ro.csproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\Methodical">
         <GroupNumber>5</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Regression\CLR-x86-JIT\V1-M09.5-PDC\b25701\b25701.ilproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\Methodical\flowgraph">
         <GroupNumber>6</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\Regression\JitBlue\GitHub_19171\GitHub_19171.csproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\opt">
         <GroupNumber>7</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)JIT\jit64\valuetypes\nullable\box-unbox\value\box-unbox-value030.csproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\Regression\CLR-x86-JIT\V1-M11-Beta2">
         <GroupNumber>8</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)Loader\classloader\TypeGeneratorTests\TypeGeneratorTest225\Generated225.ilproj">
+      <_GroupStartsWith Include="$(TestRoot)JIT\SIMD">
         <GroupNumber>9</GroupNumber>
       </_GroupStartsWith>
 
-      <_GroupStartsWith Include="$(TestRoot)Loader\classloader\generics\VSD\Class2_ImplicitOverrideVirtualNewslot.csproj">
+      <_GroupStartsWith Include="$(TestRoot)Loader\classloader\TypeGeneratorTests\TypeGeneratorTest200">
         <GroupNumber>10</GroupNumber>
       </_GroupStartsWith>
     </ItemGroup>
@@ -122,11 +128,11 @@
         <InGroup>True</InGroup>
       </AllProjects>
 
-      <AllProjects Condition=" '$(_GroupStartsWith)' != '' And $([System.StringComparer]::Ordinal.Compare($(_GroupStartsWith), %(Identity))) &gt; 0 ">
+      <AllProjects Condition=" '$(_GroupStartsWith)' != '' And $([System.StringComparer]::OrdinalIgnoreCase.Compare($(_GroupStartsWith), %(Identity))) &gt; 0 ">
         <InGroup>False</InGroup>
       </AllProjects>
 
-      <AllProjects Condition=" '$(_GroupEndsWithExcl)' != '' And $([System.StringComparer]::Ordinal.Compare(%(Identity), $(_GroupEndsWithExcl))) &gt;= 0 ">
+      <AllProjects Condition=" '$(_GroupEndsWithExcl)' != '' And $([System.StringComparer]::OrdinalIgnoreCase.Compare(%(Identity), $(_GroupEndsWithExcl))) &gt;= 0 ">
         <InGroup>False</InGroup>
       </AllProjects>
     </ItemGroup>
@@ -136,6 +142,9 @@
         <AdditionalProperties>TargetOS=$(TargetOS)</AdditionalProperties>
       </Project>
     </ItemGroup>
+
+    <Message Importance="High" Text="Number of test projects total: @(Project->Count())" Condition="'$(__TestGroupToBuild)' == ''" />
+    <Message Importance="High" Text="Number of test projects in group $(__TestGroupToBuild): @(Project->Count())" Condition="'$(__TestGroupToBuild)' != ''" />
 
   </Target>
 

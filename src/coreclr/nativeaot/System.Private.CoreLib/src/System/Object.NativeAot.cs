@@ -22,13 +22,28 @@ namespace System
         [Intrinsic]
         public Type GetType()
         {
-            return Type.GetTypeFromEETypePtr(this.GetEETypePtr());
+            return Type.GetTypeFromMethodTable(m_pEEType);
         }
 
         [Intrinsic]
-        protected object MemberwiseClone()
+        protected internal unsafe object MemberwiseClone()
         {
-            return RuntimeImports.RhMemberwiseClone(this);
+            object clone = this.GetMethodTable()->IsArray ?
+                RuntimeImports.RhNewArray(this.GetMethodTable(), Unsafe.As<Array>(this).Length) :
+                RuntimeImports.RhNewObject(this.GetMethodTable());
+
+            // copy contents of "this" to the clone
+
+            nuint byteCount = RuntimeHelpers.GetRawObjectDataSize(this);
+            ref byte src = ref this.GetRawData();
+            ref byte dst = ref clone.GetRawData();
+
+            if (this.GetMethodTable()->ContainsGCPointers)
+                Buffer.BulkMoveWithWriteBarrier(ref dst, ref src, byteCount);
+            else
+                Buffer.Memmove(ref dst, ref src, byteCount);
+
+            return clone;
         }
     }
 }

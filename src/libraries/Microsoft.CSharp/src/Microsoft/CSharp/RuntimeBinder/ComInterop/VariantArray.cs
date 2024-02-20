@@ -10,31 +10,32 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace Microsoft.CSharp.RuntimeBinder.ComInterop
 {
     [StructLayout(LayoutKind.Sequential)]
     internal struct VariantArray1
     {
-        public Variant Element0;
+        public ComVariant Element0;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct VariantArray2
     {
-        public Variant Element0, Element1;
+        public ComVariant Element0, Element1;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct VariantArray4
     {
-        public Variant Element0, Element1, Element2, Element3;
+        public ComVariant Element0, Element1, Element2, Element3;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct VariantArray8
     {
-        public Variant Element0, Element1, Element2, Element3, Element4, Element5, Element6, Element7;
+        public ComVariant Element0, Element1, Element2, Element3, Element4, Element5, Element6, Element7;
     }
 
     //
@@ -47,7 +48,7 @@ namespace Microsoft.CSharp.RuntimeBinder.ComInterop
     internal static class VariantArray
     {
         // Don't need a dictionary for this, it will have very few elements
-        // (guarenteed less than 28, in practice 0-2)
+        // (guaranteed less than 28, in practice 0-2)
         private static readonly List<Type> s_generatedTypes = new List<Type>(0);
 
         [DynamicDependency(DynamicallyAccessedMemberTypes.PublicFields, typeof(VariantArray1))]
@@ -61,8 +62,6 @@ namespace Microsoft.CSharp.RuntimeBinder.ComInterop
             return Expression.Field(variantArray, "Element" + field);
         }
 
-        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2055:UnrecognizedReflectionPattern",
-            Justification = "MakeGenericType is called on a dynamically created type that doesn't contain trimming annotations.")]
         internal static Type GetStructType(int args)
         {
             Debug.Assert(args >= 0);
@@ -90,7 +89,7 @@ namespace Microsoft.CSharp.RuntimeBinder.ComInterop
                 }
 
                 // Else generate a new type
-                Type type = CreateCustomType(size).MakeGenericType(new Type[] { typeof(Variant) });
+                Type type = CreateCustomType(size);
                 s_generatedTypes.Add(type);
                 return type;
             }
@@ -100,10 +99,9 @@ namespace Microsoft.CSharp.RuntimeBinder.ComInterop
         {
             TypeAttributes attrs = TypeAttributes.NotPublic | TypeAttributes.SequentialLayout;
             TypeBuilder type = UnsafeMethods.DynamicModule.DefineType("VariantArray" + size, attrs, typeof(ValueType));
-            GenericTypeParameterBuilder T = type.DefineGenericParameters(new string[] { "T" })[0];
             for (int i = 0; i < size; i++)
             {
-                type.DefineField("Element" + i, T, FieldAttributes.Public);
+                type.DefineField("Element" + i, typeof(ComVariant), FieldAttributes.Public);
             }
             return type.CreateType();
         }

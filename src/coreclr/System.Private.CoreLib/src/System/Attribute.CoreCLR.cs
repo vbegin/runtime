@@ -227,8 +227,7 @@ namespace System
                     }
                     else
                     {
-                        ParameterInfo[] parameters = rtMethod.GetParameters();
-                        return parameters[position]; // Point to the correct ParameterInfo of the method
+                        return rtMethod.GetParametersAsSpan()[position]; // Point to the correct ParameterInfo of the method
                     }
                 }
             }
@@ -515,10 +514,11 @@ namespace System
             if (attrib == null || attrib.Length == 0)
                 return null;
 
+            Attribute match = attrib[0];
             if (attrib.Length == 1)
-                return attrib[0];
+                return match;
 
-            throw new AmbiguousMatchException(SR.RFLCT_AmbigCust);
+            throw ThrowHelper.GetAmbiguousMatchException(match);
         }
 
         #endregion
@@ -607,20 +607,18 @@ namespace System
 
         public static Attribute? GetCustomAttribute(ParameterInfo element, Type attributeType, bool inherit)
         {
-            // Returns an Attribute of base class/inteface attributeType on the ParameterInfo or null if none exists.
+            // Returns an Attribute of base class/interface attributeType on the ParameterInfo or null if none exists.
             // throws an AmbiguousMatchException if there are more than one defined.
             Attribute[] attrib = GetCustomAttributes(element, attributeType, inherit);
 
             if (attrib == null || attrib.Length == 0)
                 return null;
 
-            if (attrib.Length == 0)
-                return null;
-
+            Attribute match = attrib[0];
             if (attrib.Length == 1)
-                return attrib[0];
+                return match;
 
-            throw new AmbiguousMatchException(SR.RFLCT_AmbigCust);
+            throw ThrowHelper.GetAmbiguousMatchException(match);
         }
 
         #endregion
@@ -679,17 +677,18 @@ namespace System
 
         public static Attribute? GetCustomAttribute(Module element, Type attributeType, bool inherit)
         {
-            // Returns an Attribute of base class/inteface attributeType on the Module or null if none exists.
+            // Returns an Attribute of base class/interface attributeType on the Module or null if none exists.
             // throws an AmbiguousMatchException if there are more than one defined.
             Attribute[] attrib = GetCustomAttributes(element, attributeType, inherit);
 
             if (attrib == null || attrib.Length == 0)
                 return null;
 
+            Attribute match = attrib[0];
             if (attrib.Length == 1)
-                return attrib[0];
+                return match;
 
-            throw new AmbiguousMatchException(SR.RFLCT_AmbigCust);
+            throw ThrowHelper.GetAmbiguousMatchException(match);
         }
 
         #endregion
@@ -748,17 +747,18 @@ namespace System
 
         public static Attribute? GetCustomAttribute(Assembly element, Type attributeType, bool inherit)
         {
-            // Returns an Attribute of base class/inteface attributeType on the Assembly or null if none exists.
+            // Returns an Attribute of base class/interface attributeType on the Assembly or null if none exists.
             // throws an AmbiguousMatchException if there are more than one defined.
             Attribute[] attrib = GetCustomAttributes(element, attributeType, inherit);
 
             if (attrib == null || attrib.Length == 0)
                 return null;
 
+            Attribute match = attrib[0];
             if (attrib.Length == 1)
-                return attrib[0];
+                return match;
 
-            throw new AmbiguousMatchException(SR.RFLCT_AmbigCust);
+            throw ThrowHelper.GetAmbiguousMatchException(match);
         }
 
         #endregion

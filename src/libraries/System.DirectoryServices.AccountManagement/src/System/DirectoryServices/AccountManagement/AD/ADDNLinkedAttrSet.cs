@@ -2,10 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.DirectoryServices;
-using System.Collections.Generic;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.DirectoryServices;
 using System.Security.Principal;
 
 namespace System.DirectoryServices.AccountManagement
@@ -257,7 +257,7 @@ namespace System.DirectoryServices.AccountManagement
                 memberFound = _memberSearchResultsEnumerator.MoveNext();
 
                 // The search is complete.
-                // Dipose the searcher and search results.
+                // Dispose the searcher and search results.
                 if (!memberFound)
                 {
                     _currentMembersSearcher.Dispose();
@@ -354,7 +354,7 @@ namespace System.DirectoryServices.AccountManagement
                     // We reached the end of this group's membership.  If we're not processing recursively,
                     // we're done.  Otherwise, go on to the next group to visit.
                     // First create a DE that points to the group we want to expand,  Using that as a search root run
-                    // an ASQ search against  member and start enumerting those results.
+                    // an ASQ search against  member and start enumerating those results.
                     if (_recursive)
                     {
                         GlobalDebug.WriteLineIf(GlobalDebug.Info,
@@ -667,11 +667,10 @@ namespace System.DirectoryServices.AccountManagement
                     if (null == foreignSid.sidIssuerName)
                     {
                         // create and return the unknown principal if it is not yet present in usersVisited
-                        if (!_usersVisited.ContainsKey(foreignSid.name))
+                        if (_usersVisited.TryAdd(foreignSid.name, true))
                         {
                             byte[] sid = Utils.ConvertNativeSidToByteArray(foreignSid.pSid);
                             UnknownPrincipal unknownPrincipal = UnknownPrincipal.CreateUnknownPrincipal(_storeCtx.OwningContext, sid, foreignSid.name);
-                            _usersVisited.Add(foreignSid.name, true);
                             this.current = null;
                             _currentForeignDE = null;
                             _currentForeignPrincipal = unknownPrincipal;

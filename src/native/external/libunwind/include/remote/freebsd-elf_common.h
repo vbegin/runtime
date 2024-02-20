@@ -169,6 +169,7 @@ typedef struct {
 #define EM_TINYJ	61	/* Advanced Logic Corp. TinyJ processor. */
 #define EM_X86_64	62	/* Advanced Micro Devices x86-64 */
 #define	EM_AMD64	EM_X86_64	/* Advanced Micro Devices x86-64 (compat) */
+#define EM_RISCV	243	/* RISC-V. */
 
 /* Non-standard or deprecated. */
 #define EM_486		6	/* Intel i486. */
@@ -627,7 +628,7 @@ typedef struct {
 #define	R_IA_64_PCREL22		0x7a	/* immediate22	S + A - P */
 #define	R_IA_64_PCREL64I	0x7b	/* immediate64	S + A - P */
 #define	R_IA_64_IPLTMSB		0x80	/* function descriptor MSB special */
-#define	R_IA_64_IPLTLSB		0x81	/* function descriptor LSB speciaal */
+#define	R_IA_64_IPLTLSB		0x81	/* function descriptor LSB special */
 #define	R_IA_64_SUB		0x85	/* immediate64	A - S */
 #define	R_IA_64_LTOFF22X	0x86	/* immediate22	special */
 #define	R_IA_64_LDXMOV		0x87	/* immediate22	special */

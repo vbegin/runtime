@@ -348,10 +348,7 @@ namespace System.Security.Cryptography
         [MemberNotNull(nameof(_key))]
         private void ThrowIfDisposed()
         {
-            if (_key == null)
-            {
-                throw new ObjectDisposedException(nameof(DSAOpenSsl));
-            }
+            ObjectDisposedException.ThrowIf(_key is null, this);
         }
 
         private SafeDsaHandle GetKey()
@@ -373,6 +370,7 @@ namespace System.Security.Cryptography
             // with the already loaded key.
             ForceSetKeySize(BitsPerByte * Interop.Crypto.DsaKeySize(newKey));
 
+            FreeKey();
             _key = new Lazy<SafeDsaHandle>(newKey);
         }
 

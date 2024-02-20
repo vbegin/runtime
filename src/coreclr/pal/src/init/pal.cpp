@@ -36,7 +36,6 @@ SET_DEFAULT_DEBUG_CHANNEL(PAL); // some headers have code with asserts, so do th
 #include "pal/utils.h"
 #include "pal/debug.h"
 #include "pal/init.h"
-#include "pal/numa.h"
 #include "pal/stackstring.hpp"
 #include "pal/cgroup.h"
 #include <minipal/getexepath.h>
@@ -96,13 +95,6 @@ int CacheLineSize;
 #include <clrconfignocache.h>
 
 using namespace CorUnix;
-
-//
-// $$TODO The C++ compiler doesn't like pal/cruntime.h so duplicate the
-// necessary prototype here
-//
-
-extern "C" BOOL CRTInitStdStreams( void );
 
 extern bool g_running_in_exe;
 
@@ -288,6 +280,14 @@ InitializeDefaultStackSize()
             g_defaultStackSize = std::max(size, (DWORD)PTHREAD_STACK_MIN);
         }
     }
+
+#ifdef HOST_APPLE
+    // Match Windows stack size
+    if (g_defaultStackSize == 0)
+    {
+        g_defaultStackSize = 1536 * 1024;
+    }
+#endif
 
 #ifdef ENSURE_PRIMARY_STACK_SIZE
     if (g_defaultStackSize == 0)
@@ -666,20 +666,6 @@ Initialize(
             }
         }
 
-        if (FALSE == CRTInitStdStreams())
-        {
-            ERROR("Unable to initialize CRT standard streams\n");
-            palError = ERROR_PALINIT_STD_STREAMS;
-            goto CLEANUP15;
-        }
-
-        if (FALSE == NUMASupportInitialize())
-        {
-            ERROR("Unable to initialize NUMA support\n");
-            palError = ERROR_PALINIT_NUMA;
-            goto CLEANUP15;
-        }
-
         TRACE("First-time PAL initialization complete.\n");
         init_count++;
 
@@ -699,10 +685,6 @@ Initialize(
     }
     goto done;
 
-    NUMASupportCleanup();
-    /* No cleanup required for CRTInitStdStreams */
-CLEANUP15:
-    FILECleanupStdHandles();
 CLEANUP14:
     SEHCleanup();
 CLEANUP13:
@@ -1054,7 +1036,7 @@ TerminateProcess along with PAL_Terminate and PAL_Initialize
 
 Return value :
     TRUE if critical section existed (and was acquired)
-    FALSE if critical section doens't exist yet
+    FALSE if critical section doesn't exist yet
 --*/
 BOOL PALInitLock(void)
 {

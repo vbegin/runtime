@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCOmitXmlDecl
     {
@@ -30,7 +30,7 @@ namespace System.Xml.Tests
             {
                 CError.WriteLine("Did not write XmlDecl when OmitXmlDecl was FALSE. NodeType = {0}", xr.NodeType.ToString());
                 xr.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
             else if (xr.NodeType == XmlNodeType.XmlDeclaration)
             {
@@ -40,7 +40,7 @@ namespace System.Xml.Tests
             else
             {
                 xr.Dispose();
-                Assert.True(false);
+                Assert.Fail();
             }
         }
 
@@ -67,7 +67,7 @@ namespace System.Xml.Tests
                 {
                     CError.WriteLine("Wrote XmlDecl when OmitXmlDecl was TRUE");
                     xr.Dispose();
-                    Assert.True(false);
+                    Assert.Fail();
                 }
             }
             xr.Dispose();
@@ -98,7 +98,7 @@ namespace System.Xml.Tests
                 {
                     CError.WriteLine("Wrote XmlDecl when OmitXmlDecl was TRUE");
                     xr.Dispose();
-                    Assert.True(false);
+                    Assert.Fail();
                 }
             }
             xr.Dispose();

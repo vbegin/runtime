@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -41,15 +42,8 @@ namespace System.Formats.Tar
                 TarHelpers.ThrowIfEntryTypeNotSupported(entryType, format);
             }
 
-            _header = default;
-            _header._format = format;
-
             // Default values for fields shared by all supported formats
-            _header._name = entryName;
-            _header._mode = TarHelpers.GetDefaultMode(entryType);
-            _header._mTime = DateTimeOffset.UtcNow;
-            _header._typeFlag = entryType;
-            _header._linkName = string.Empty;
+            _header = new TarHeader(format, entryName, TarHelpers.GetDefaultMode(entryType), DateTimeOffset.UtcNow, entryType);
         }
 
         // Constructor called when converting an entry to the selected format.
@@ -57,41 +51,16 @@ namespace System.Formats.Tar
         {
             if (other is PaxGlobalExtendedAttributesTarEntry)
             {
-                throw new InvalidOperationException(SR.TarCannotConvertPaxGlobalExtendedAttributesEntry);
+                throw new ArgumentException(SR.TarCannotConvertPaxGlobalExtendedAttributesEntry, nameof(other));
             }
 
-            TarEntryType compatibleEntryType;
-            if (other.Format is TarEntryFormat.V7 && other.EntryType is TarEntryType.V7RegularFile && format is TarEntryFormat.Ustar or TarEntryFormat.Pax or TarEntryFormat.Gnu)
-            {
-                compatibleEntryType = TarEntryType.RegularFile;
-            }
-            else if (other.Format is TarEntryFormat.Ustar or TarEntryFormat.Pax or TarEntryFormat.Gnu && other.EntryType is TarEntryType.RegularFile && format is TarEntryFormat.V7)
-            {
-                compatibleEntryType = TarEntryType.V7RegularFile;
-            }
-            else
-            {
-                compatibleEntryType = other.EntryType;
-            }
+            TarEntryType compatibleEntryType = TarHelpers.GetCorrectTypeFlagForFormat(format, other.EntryType);
 
-            TarHelpers.ThrowIfEntryTypeNotSupported(compatibleEntryType, format);
+            TarHelpers.ThrowIfEntryTypeNotSupported(compatibleEntryType, format, nameof(other));
 
             _readerOfOrigin = other._readerOfOrigin;
 
-            _header = default;
-            _header._format = format;
-
-            _header._name = other._header._name;
-            _header._mode = other._header._mode;
-            _header._uid = other._header._uid;
-            _header._gid = other._header._gid;
-            _header._size = other._header._size;
-            _header._mTime = other._header._mTime;
-            _header._checksum = 0;
-            _header._typeFlag = compatibleEntryType;
-            _header._linkName = other._header._linkName;
-
-            _header._dataStream = other._header._dataStream;
+            _header = new TarHeader(format, compatibleEntryType, other._header);
         }
 
         /// <summary>
@@ -123,15 +92,13 @@ namespace System.Formats.Tar
         /// A timestamps that represents the last time the contents of the file represented by this entry were modified.
         /// </summary>
         /// <remarks>In Unix platforms, this timestamp is commonly known as <c>mtime</c>.</remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The specified value is larger than <see cref="DateTimeOffset.UnixEpoch"/>.</exception>
         public DateTimeOffset ModificationTime
         {
             get => _header._mTime;
             set
             {
-                if (value < DateTimeOffset.UnixEpoch)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfLessThan(value, DateTimeOffset.UnixEpoch);
                 _header._mTime = value;
             }
         }
@@ -145,16 +112,19 @@ namespace System.Formats.Tar
         /// <summary>
         /// When the <see cref="EntryType"/> indicates a <see cref="TarEntryType.SymbolicLink"/> or a <see cref="TarEntryType.HardLink"/>, this property returns the link target path of such link.
         /// </summary>
-        /// <exception cref="InvalidOperationException">Cannot set the link name if the entry type is not <see cref="TarEntryType.HardLink"/> or <see cref="TarEntryType.SymbolicLink"/>.</exception>
+        /// <exception cref="InvalidOperationException">The entry type is not <see cref="TarEntryType.HardLink"/> or <see cref="TarEntryType.SymbolicLink"/>.</exception>
+        /// <exception cref="ArgumentNullException">The specified value is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">The specified value is empty.</exception>
         public string LinkName
         {
-            get => _header._linkName;
+            get => _header._linkName ?? string.Empty;
             set
             {
                 if (_header._typeFlag is not TarEntryType.HardLink and not TarEntryType.SymbolicLink)
                 {
                     throw new InvalidOperationException(SR.TarEntryHardLinkOrSymLinkExpected);
                 }
+                ArgumentException.ThrowIfNullOrEmpty(value);
                 _header._linkName = value;
             }
         }
@@ -165,10 +135,12 @@ namespace System.Formats.Tar
         /// <remarks>The value in this field has no effect on Windows platforms.</remarks>
         public UnixFileMode Mode
         {
-            get => (UnixFileMode)_header._mode;
+            // Some paths do not use the setter, and we want to return valid UnixFileMode.
+            // This mask only keeps the least significant 12 bits.
+            get => (UnixFileMode)(_header._mode & (int)TarHelpers.ValidUnixFileModes);
             set
             {
-                if ((int)value is < 0 or > 4095) // 4095 in decimal is 7777 in octal
+                if ((value & ~TarHelpers.ValidUnixFileModes) != 0) // throw on invalid UnixFileModes
                 {
                     throw new ArgumentOutOfRangeException(nameof(value));
                 }
@@ -208,7 +180,8 @@ namespace System.Formats.Tar
         /// <para>Elevation is required to extract a <see cref="TarEntryType.BlockDevice"/> or <see cref="TarEntryType.CharacterDevice"/> to disk.</para>
         /// <para>Symbolic links can be recreated using <see cref="File.CreateSymbolicLink(string, string)"/>, <see cref="Directory.CreateSymbolicLink(string, string)"/> or <see cref="FileSystemInfo.CreateAsSymbolicLink(string)"/>.</para>
         /// <para>Hard links can only be extracted when using <see cref="TarFile.ExtractToDirectory(Stream, string, bool)"/> or <see cref="TarFile.ExtractToDirectory(string, string, bool)"/>.</para></remarks>
-        /// <exception cref="ArgumentException"><paramref name="destinationFileName"/> is <see langword="null"/> or empty.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="destinationFileName"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="destinationFileName"/> is empty.</exception>
         /// <exception cref="IOException"><para>The parent directory of <paramref name="destinationFileName"/> does not exist.</para>
         /// <para>-or-</para>
         /// <para><paramref name="overwrite"/> is <see langword="false"/> and a file already exists in <paramref name="destinationFileName"/>.</para>
@@ -223,7 +196,7 @@ namespace System.Formats.Tar
             ArgumentException.ThrowIfNullOrEmpty(destinationFileName);
             if (EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink or TarEntryType.GlobalExtendedAttributes)
             {
-                throw new InvalidOperationException(string.Format(SR.TarEntryTypeNotSupportedForExtracting, EntryType));
+                throw new InvalidOperationException(SR.Format(SR.TarEntryTypeNotSupportedForExtracting, EntryType));
             }
             ExtractToFileInternal(destinationFileName, linkTargetPath: null, overwrite);
         }
@@ -237,7 +210,8 @@ namespace System.Formats.Tar
         /// <returns>A task that represents the asynchronous extraction operation.</returns>
         /// <remarks><para>Files of type <see cref="TarEntryType.BlockDevice"/>, <see cref="TarEntryType.CharacterDevice"/> or <see cref="TarEntryType.Fifo"/> can only be extracted in Unix platforms.</para>
         /// <para>Elevation is required to extract a <see cref="TarEntryType.BlockDevice"/> or <see cref="TarEntryType.CharacterDevice"/> to disk.</para></remarks>
-        /// <exception cref="ArgumentException"><paramref name="destinationFileName"/> is <see langword="null"/> or empty.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="destinationFileName"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="destinationFileName"/> is empty.</exception>
         /// <exception cref="IOException"><para>The parent directory of <paramref name="destinationFileName"/> does not exist.</para>
         /// <para>-or-</para>
         /// <para><paramref name="overwrite"/> is <see langword="false"/> and a file already exists in <paramref name="destinationFileName"/>.</para>
@@ -256,7 +230,7 @@ namespace System.Formats.Tar
             ArgumentException.ThrowIfNullOrEmpty(destinationFileName);
             if (EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink or TarEntryType.GlobalExtendedAttributes)
             {
-                return Task.FromException(new InvalidOperationException(string.Format(SR.TarEntryTypeNotSupportedForExtracting, EntryType)));
+                return Task.FromException(new InvalidOperationException(SR.Format(SR.TarEntryTypeNotSupportedForExtracting, EntryType)));
             }
             return ExtractToFileInternalAsync(destinationFileName, linkTargetPath: null, overwrite, cancellationToken);
         }
@@ -268,9 +242,8 @@ namespace System.Formats.Tar
         /// <para>Sets a new stream that represents the data section, if it makes sense for the <see cref="EntryType"/> to contain data; if a stream already existed, the old stream gets disposed before substituting it with the new stream. Setting a <see langword="null"/> stream is allowed.</para></value>
         /// <remarks>If you write data to this data stream, make sure to rewind it to the desired start position before writing this entry into an archive using <see cref="TarWriter.WriteEntry(TarEntry)"/>.</remarks>
         /// <exception cref="InvalidOperationException">Setting a data section is not supported because the <see cref="EntryType"/> is not <see cref="TarEntryType.RegularFile"/> (or <see cref="TarEntryType.V7RegularFile"/> for an archive of <see cref="TarEntryFormat.V7"/> format).</exception>
-        /// <exception cref="IOException"><para>Cannot set an unreadable stream.</para>
-        /// <para>-or-</para>
-        /// <para>An I/O problem occurred.</para></exception>
+        /// <exception cref="ArgumentException">Cannot set an unreadable stream.</exception>
+        /// <exception cref="IOException">An I/O problem occurred.</exception>
         public Stream? DataStream
         {
             get => _header._dataStream;
@@ -278,12 +251,12 @@ namespace System.Formats.Tar
             {
                 if (!IsDataStreamSetterSupported())
                 {
-                    throw new InvalidOperationException(string.Format(SR.TarEntryDoesNotSupportDataStream, Name, EntryType));
+                    throw new InvalidOperationException(SR.Format(SR.TarEntryDoesNotSupportDataStream, Name, EntryType));
                 }
 
                 if (value != null && !value.CanRead)
                 {
-                    throw new IOException(SR.IO_NotSupported_UnreadableStream);
+                    throw new ArgumentException(SR.IO_NotSupported_UnreadableStream, nameof(value));
                 }
 
                 if (_readerOfOrigin != null)
@@ -312,42 +285,44 @@ namespace System.Formats.Tar
         internal abstract bool IsDataStreamSetterSupported();
 
         // Extracts the current entry to a location relative to the specified directory.
-        internal void ExtractRelativeToDirectory(string destinationDirectoryPath, bool overwrite)
+        internal void ExtractRelativeToDirectory(string destinationDirectoryPath, bool overwrite, SortedDictionary<string, UnixFileMode>? pendingModes, Stack<(string, DateTimeOffset)> directoryModificationTimes)
         {
-            (string fileDestinationPath, string? linkTargetPath) = GetDestinationAndLinkPaths(destinationDirectoryPath);
+            (string destinationFullPath, string? linkTargetPath) = GetDestinationAndLinkPaths(destinationDirectoryPath);
 
             if (EntryType == TarEntryType.Directory)
             {
-                Directory.CreateDirectory(fileDestinationPath);
+                TarHelpers.CreateDirectory(destinationFullPath, Mode, pendingModes);
+                TarHelpers.UpdatePendingModificationTimes(directoryModificationTimes, destinationFullPath, ModificationTime);
             }
             else
             {
                 // If it is a file, create containing directory.
-                Directory.CreateDirectory(Path.GetDirectoryName(fileDestinationPath)!);
-                ExtractToFileInternal(fileDestinationPath, linkTargetPath, overwrite);
+                TarHelpers.CreateDirectory(Path.GetDirectoryName(destinationFullPath)!, mode: null, pendingModes);
+                ExtractToFileInternal(destinationFullPath, linkTargetPath, overwrite);
             }
         }
 
         // Asynchronously extracts the current entry to a location relative to the specified directory.
-        internal Task ExtractRelativeToDirectoryAsync(string destinationDirectoryPath, bool overwrite, CancellationToken cancellationToken)
+        internal Task ExtractRelativeToDirectoryAsync(string destinationDirectoryPath, bool overwrite, SortedDictionary<string, UnixFileMode>? pendingModes, Stack<(string, DateTimeOffset)> directoryModificationTimes, CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 return Task.FromCanceled(cancellationToken);
             }
 
-            (string fileDestinationPath, string? linkTargetPath) = GetDestinationAndLinkPaths(destinationDirectoryPath);
+            (string destinationFullPath, string? linkTargetPath) = GetDestinationAndLinkPaths(destinationDirectoryPath);
 
             if (EntryType == TarEntryType.Directory)
             {
-                Directory.CreateDirectory(fileDestinationPath);
+                TarHelpers.CreateDirectory(destinationFullPath, Mode, pendingModes);
+                TarHelpers.UpdatePendingModificationTimes(directoryModificationTimes, destinationFullPath, ModificationTime);
                 return Task.CompletedTask;
             }
             else
             {
                 // If it is a file, create containing directory.
-                Directory.CreateDirectory(Path.GetDirectoryName(fileDestinationPath)!);
-                return ExtractToFileInternalAsync(fileDestinationPath, linkTargetPath, overwrite, cancellationToken);
+                TarHelpers.CreateDirectory(Path.GetDirectoryName(destinationFullPath)!, mode: null, pendingModes);
+                return ExtractToFileInternalAsync(destinationFullPath, linkTargetPath, overwrite, cancellationToken);
             }
         }
 
@@ -357,45 +332,65 @@ namespace System.Formats.Tar
             Debug.Assert(!string.IsNullOrEmpty(destinationDirectoryPath));
             Debug.Assert(Path.IsPathFullyQualified(destinationDirectoryPath));
 
-            destinationDirectoryPath = Path.TrimEndingDirectorySeparator(destinationDirectoryPath);
-
-            string? fileDestinationPath = GetSanitizedFullPath(destinationDirectoryPath, Name);
+            string name = ArchivingUtils.SanitizeEntryFilePath(Name, preserveDriveRoot: true);
+            string? fileDestinationPath = GetFullDestinationPath(
+                                                destinationDirectoryPath,
+                                                Path.IsPathFullyQualified(name) ? name : Path.Join(destinationDirectoryPath, name));
             if (fileDestinationPath == null)
             {
-                throw new IOException(string.Format(SR.TarExtractingResultsFileOutside, Name, destinationDirectoryPath));
+                throw new IOException(SR.Format(SR.TarExtractingResultsFileOutside, name, destinationDirectoryPath));
             }
 
             string? linkTargetPath = null;
-            if (EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink)
+            if (EntryType is TarEntryType.SymbolicLink)
             {
-                if (string.IsNullOrEmpty(LinkName))
+                // LinkName is an absolute path, or path relative to the fileDestinationPath directory.
+                // We don't check if the LinkName is empty. In that case, creation of the link will fail because link targets can't be empty.
+                string linkName = ArchivingUtils.SanitizeEntryFilePath(LinkName, preserveDriveRoot: true);
+                string? linkDestination = GetFullDestinationPath(
+                                            destinationDirectoryPath,
+                                            Path.IsPathFullyQualified(linkName) ? linkName : Path.Join(Path.GetDirectoryName(fileDestinationPath), linkName));
+                if (linkDestination is null)
                 {
-                    throw new FormatException(SR.TarEntryHardLinkOrSymlinkLinkNameEmpty);
+                    throw new IOException(SR.Format(SR.TarExtractingResultsLinkOutside, linkName, destinationDirectoryPath));
                 }
-
-                linkTargetPath = GetSanitizedFullPath(destinationDirectoryPath, LinkName);
-                if (linkTargetPath == null)
+                // Use the linkName for creating the symbolic link.
+                linkTargetPath = linkName;
+            }
+            else if (EntryType is TarEntryType.HardLink)
+            {
+                // LinkName is path relative to the destinationDirectoryPath.
+                // We don't check if the LinkName is empty. In that case, creation of the link will fail because a hard link can't target a directory.
+                string linkName = ArchivingUtils.SanitizeEntryFilePath(LinkName, preserveDriveRoot: false);
+                string? linkDestination = GetFullDestinationPath(
+                                            destinationDirectoryPath,
+                                            Path.Join(destinationDirectoryPath, linkName));
+                if (linkDestination is null)
                 {
-                    throw new IOException(string.Format(SR.TarExtractingResultsLinkOutside, LinkName, destinationDirectoryPath));
+                    throw new IOException(SR.Format(SR.TarExtractingResultsLinkOutside, linkName, destinationDirectoryPath));
                 }
+                // Use the target path for creating the hard link.
+                linkTargetPath = linkDestination;
             }
 
             return (fileDestinationPath, linkTargetPath);
         }
 
-        // If the path can be extracted in the specified destination directory, returns the full path with sanitized file name. Otherwise, returns null.
-        private static string? GetSanitizedFullPath(string destinationDirectoryFullPath, string path)
+        // Returns the full destination path if the path is the destinationDirectory or a subpath. Otherwise, returns null.
+        private static string? GetFullDestinationPath(string destinationDirectoryFullPath, string qualifiedPath)
         {
-            string fullyQualifiedPath = Path.IsPathFullyQualified(path) ? path : Path.Combine(destinationDirectoryFullPath, path);
-            string normalizedPath = Path.GetFullPath(fullyQualifiedPath); // Removes relative segments
-            string sanitizedPath = Path.Join(Path.GetDirectoryName(normalizedPath), ArchivingUtils.SanitizeEntryFilePath(Path.GetFileName(normalizedPath)));
-            return sanitizedPath.StartsWith(destinationDirectoryFullPath, PathInternal.StringComparison) ? sanitizedPath : null;
+            Debug.Assert(Path.IsPathFullyQualified(qualifiedPath), $"{qualifiedPath} is not qualified");
+            Debug.Assert(PathInternal.EndsInDirectorySeparator(destinationDirectoryFullPath), "caller must ensure the path ends with a separator.");
+
+            string fullPath = Path.GetFullPath(qualifiedPath); // Removes relative segments
+
+            return fullPath.StartsWith(destinationDirectoryFullPath, PathInternal.StringComparison) ? fullPath : null;
         }
 
         // Extracts the current entry into the filesystem, regardless of the entry type.
         private void ExtractToFileInternal(string filePath, string? linkTargetPath, bool overwrite)
         {
-            VerifyPathsForEntryType(filePath, linkTargetPath, overwrite);
+            VerifyDestinationPath(filePath, overwrite);
 
             if (EntryType is TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.ContiguousFile)
             {
@@ -414,7 +409,7 @@ namespace System.Formats.Tar
             {
                 return Task.FromCanceled(cancellationToken);
             }
-            VerifyPathsForEntryType(filePath, linkTargetPath, overwrite);
+            VerifyDestinationPath(filePath, overwrite);
 
             if (EntryType is TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.ContiguousFile)
             {
@@ -435,7 +430,19 @@ namespace System.Formats.Tar
             {
                 case TarEntryType.Directory:
                 case TarEntryType.DirectoryList:
-                    Directory.CreateDirectory(filePath);
+                    // Mode must only be used for the leaf directory.
+                    // VerifyDestinationPath ensures we're only creating a leaf.
+                    Debug.Assert(Directory.Exists(Path.GetDirectoryName(filePath)));
+                    Debug.Assert(!Directory.Exists(filePath));
+
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        Directory.CreateDirectory(filePath, Mode);
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(filePath);
+                    }
                     break;
 
                 case TarEntryType.SymbolicLink:
@@ -473,18 +480,18 @@ namespace System.Formats.Tar
                 case TarEntryType.SparseFile:
                 case TarEntryType.TapeVolume:
                 default:
-                    throw new InvalidOperationException(string.Format(SR.TarEntryTypeNotSupportedForExtracting, EntryType));
+                    throw new InvalidOperationException(SR.Format(SR.TarEntryTypeNotSupportedForExtracting, EntryType));
             }
         }
 
-        // Verifies if the specified paths make sense for the current type of entry.
-        private void VerifyPathsForEntryType(string filePath, string? linkTargetPath, bool overwrite)
+        // Verifies there's a writable destination.
+        private static void VerifyDestinationPath(string filePath, bool overwrite)
         {
             string? directoryPath = Path.GetDirectoryName(filePath);
             // If the destination contains a directory segment, need to check that it exists
             if (!string.IsNullOrEmpty(directoryPath) && !Path.Exists(directoryPath))
             {
-                throw new IOException(string.Format(SR.IO_PathNotFound_NoPathName, filePath));
+                throw new IOException(SR.Format(SR.IO_PathNotFound_Path, filePath));
             }
 
             if (!Path.Exists(filePath))
@@ -495,44 +502,15 @@ namespace System.Formats.Tar
             // We never want to overwrite a directory, so we always throw
             if (Directory.Exists(filePath))
             {
-                throw new IOException(string.Format(SR.IO_AlreadyExists_Name, filePath));
+                throw new IOException(SR.Format(SR.IO_AlreadyExists_Name, filePath));
             }
 
             // A file exists at this point
             if (!overwrite)
             {
-                throw new IOException(string.Format(SR.IO_AlreadyExists_Name, filePath));
+                throw new IOException(SR.Format(SR.IO_AlreadyExists_Name, filePath));
             }
             File.Delete(filePath);
-
-            if (EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink)
-            {
-                if (!string.IsNullOrEmpty(linkTargetPath))
-                {
-                    string? targetDirectoryPath = Path.GetDirectoryName(linkTargetPath);
-                    // If the destination target contains a directory segment, need to check that it exists
-                    if (!string.IsNullOrEmpty(targetDirectoryPath) && !Path.Exists(targetDirectoryPath))
-                    {
-                        throw new IOException(string.Format(SR.TarSymbolicLinkTargetNotExists, filePath, linkTargetPath));
-                    }
-
-                    if (EntryType is TarEntryType.HardLink)
-                    {
-                        if (!Path.Exists(linkTargetPath))
-                        {
-                            throw new IOException(string.Format(SR.TarHardLinkTargetNotExists, filePath, linkTargetPath));
-                        }
-                        else if (Directory.Exists(linkTargetPath))
-                        {
-                            throw new IOException(string.Format(SR.TarHardLinkToDirectoryNotAllowed, filePath, linkTargetPath));
-                        }
-                    }
-                }
-                else
-                {
-                    throw new FormatException(SR.TarEntryHardLinkOrSymlinkLinkNameEmpty);
-                }
-            }
         }
 
         // Extracts the current entry as a regular file into the specified destination.
@@ -548,7 +526,7 @@ namespace System.Formats.Tar
                 DataStream?.CopyTo(fs);
             }
 
-            ArchivingUtils.AttemptSetLastWriteTime(destinationFileName, ModificationTime);
+            AttemptSetLastWriteTime(destinationFileName, ModificationTime);
         }
 
         // Asynchronously extracts the current entry as a regular file into the specified destination.
@@ -561,7 +539,7 @@ namespace System.Formats.Tar
 
             // Rely on FileStream's ctor for further checking destinationFileName parameter
             FileStream fs = new FileStream(destinationFileName, CreateFileStreamOptions(isAsync: true));
-            await using (fs)
+            await using (fs.ConfigureAwait(false))
             {
                 if (DataStream != null)
                 {
@@ -570,7 +548,19 @@ namespace System.Formats.Tar
                 }
             }
 
-            ArchivingUtils.AttemptSetLastWriteTime(destinationFileName, ModificationTime);
+            AttemptSetLastWriteTime(destinationFileName, ModificationTime);
+        }
+
+        private static void AttemptSetLastWriteTime(string destinationFileName, DateTimeOffset lastWriteTime)
+        {
+            try
+            {
+                File.SetLastWriteTime(destinationFileName, lastWriteTime.UtcDateTime);
+            }
+            catch
+            {
+                // Some OSes like Android might not support setting the last write time, the extraction should not fail because of that
+            }
         }
 
         private FileStreamOptions CreateFileStreamOptions(bool isAsync)

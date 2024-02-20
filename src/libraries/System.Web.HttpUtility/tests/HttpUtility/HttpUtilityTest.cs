@@ -284,6 +284,20 @@ namespace System.Web.Tests
             });
         }
 
+        [Fact]
+        public void HtmlEncode_IHtmlString_UseToHtmlString()
+        {
+            Assert.Equal(string.Empty, HttpUtility.HtmlEncode(new ActionHtmlString(() => null)));
+            Assert.Equal(string.Empty, HttpUtility.HtmlEncode(new ActionHtmlString(() => string.Empty)));
+            Assert.Equal("<", HttpUtility.HtmlEncode(new ActionHtmlString(() => "<")));
+            Assert.Throws<FormatException>(() => HttpUtility.HtmlEncode(new ActionHtmlString(() => throw new FormatException())));
+        }
+
+        private sealed class ActionHtmlString(Func<string> toHtmlString) : IHtmlString
+        {
+            public string ToHtmlString() => toHtmlString();
+        }
+
         #endregion HtmlEncode
 
         #region JavaScriptStringEncode
@@ -778,6 +792,7 @@ namespace System.Web.Tests
         [InlineData("foo&bar")]
         [InlineData("foo&name=bar")]
         [InlineData("name=bar&foo&foo")]
+        [InlineData("_return_fields%2b=extattrs&name%3a=somename.somedomain.local")]
         public void ParseAndToStringMaintainAllKeyValuePairs(string input)
         {
             var values = HttpUtility.ParseQueryString(input);

@@ -187,7 +187,13 @@ namespace System.IO.Compression
         /// </summary>
         public sealed class ZLibStreamHandle : SafeHandle
         {
-            public enum State { NotInitialized, InitializedForDeflate, InitializedForInflate, Disposed }
+            public enum State
+            {
+                NotInitialized,
+                InitializedForDeflate,
+                InitializedForInflate,
+                Disposed
+            }
 
             private ZStream _zStream;
 
@@ -286,17 +292,6 @@ namespace System.IO.Compression
             }
 
 
-            public unsafe ErrorCode DeflateReset()
-            {
-                EnsureNotDisposed();
-                EnsureState(State.InitializedForDeflate);
-
-                fixed (ZStream* stream = &_zStream)
-                {
-                    return Interop.ZLib.DeflateReset(stream);
-                }
-            }
-
             public unsafe ErrorCode DeflateEnd()
             {
                 EnsureNotDisposed();
@@ -339,17 +334,6 @@ namespace System.IO.Compression
             }
 
 
-            public unsafe ErrorCode InflateReset()
-            {
-                EnsureNotDisposed();
-                EnsureState(State.InitializedForInflate);
-
-                fixed (ZStream* stream = &_zStream)
-                {
-                    return Interop.ZLib.InflateReset(stream);
-                }
-            }
-
             public unsafe ErrorCode InflateEnd()
             {
                 EnsureNotDisposed();
@@ -365,7 +349,7 @@ namespace System.IO.Compression
             }
 
             // This can work even after XxflateEnd().
-            public string GetErrorMessage() => _zStream.msg != ZNullPtr ? Marshal.PtrToStringAnsi(_zStream.msg)! : string.Empty;
+            public string GetErrorMessage() => _zStream.msg != ZNullPtr ? Marshal.PtrToStringUTF8(_zStream.msg)! : string.Empty;
         }
 
         public static ErrorCode CreateZLibStreamForDeflate(out ZLibStreamHandle zLibStreamHandle, CompressionLevel level,

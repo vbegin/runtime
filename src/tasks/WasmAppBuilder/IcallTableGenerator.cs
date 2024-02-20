@@ -3,9 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -13,18 +10,18 @@ using System.Text.Json;
 using System.Reflection;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
+using WasmAppBuilder;
 
 internal sealed class IcallTableGenerator
 {
     public string[]? Cookies { get; private set; }
 
     private List<Icall> _icalls = new List<Icall>();
-    private List<string> _signatures = new List<string>();
+    private readonly HashSet<string> _signatures = new();
     private Dictionary<string, IcallClass> _runtimeIcalls = new Dictionary<string, IcallClass>();
 
-    private TaskLoggingHelper Log { get; set; }
-
-    public IcallTableGenerator(TaskLoggingHelper log) => Log = log;
+    private LogAdapter Log { get; set; }
+    private readonly Func<string, string> _fixupSymbolName;
 
     //
     // Given the runtime generated icall table, and a set of assemblies, generate
@@ -32,40 +29,32 @@ internal sealed class IcallTableGenerator
     // The runtime icall table should be generated using
     // mono --print-icall-table
     //
-    public IEnumerable<string> GenIcallTable(string? runtimeIcallTableFile, string[] assemblies, string? outputPath)
+    public IcallTableGenerator(string? runtimeIcallTableFile, Func<string, string> fixupSymbolName, LogAdapter log)
     {
-        _icalls.Clear();
-        _signatures.Clear();
-
+        Log = log;
+        _fixupSymbolName = fixupSymbolName;
         if (runtimeIcallTableFile != null)
             ReadTable(runtimeIcallTableFile);
+    }
 
-        var resolver = new PathAssemblyResolver(assemblies);
-        using var mlc = new MetadataLoadContext(resolver, "System.Private.CoreLib");
-        foreach (var aname in assemblies)
-        {
-            var a = mlc.LoadFromAssemblyPath(aname);
-            foreach (var type in a.GetTypes())
-                ProcessType(type);
-        }
+    public void ScanAssembly(Assembly asm)
+    {
+        foreach (Type type in asm.GetTypes())
+            ProcessType(type);
+    }
 
+    public IEnumerable<string> Generate(string? outputPath)
+    {
         if (outputPath != null)
         {
-            string tmpFileName = Path.GetTempFileName();
-            try
-            {
-                using (var w = File.CreateText(tmpFileName))
-                    EmitTable(w);
+            using TempFileName tmpFileName = new();
+            using (var w = File.CreateText(tmpFileName.Path))
+                EmitTable(w);
 
-                if (Utils.CopyIfDifferent(tmpFileName, outputPath, useHash: false))
-                    Log.LogMessage(MessageImportance.Low, $"Generating icall table to '{outputPath}'.");
-                else
-                    Log.LogMessage(MessageImportance.Low, $"Icall table in {outputPath} is unchanged.");
-            }
-            finally
-            {
-                File.Delete(tmpFileName);
-            }
+            if (Utils.CopyIfDifferent(tmpFileName.Path, outputPath, useHash: false))
+                Log.LogMessage(MessageImportance.Low, $"Generating icall table to '{outputPath}'.");
+            else
+                Log.LogMessage(MessageImportance.Low, $"Icall table in {outputPath} is unchanged.");
         }
 
         return _signatures;
@@ -86,7 +75,7 @@ internal sealed class IcallTableGenerator
             if (assembly == "System.Private.CoreLib")
                 aname = "corlib";
             else
-                aname = assembly.Replace(".", "_");
+                aname = _fixupSymbolName(assembly);
             w.WriteLine($"#define ICALL_TABLE_{aname} 1\n");
 
             w.WriteLine($"static int {aname}_icall_indexes [] = {{");
@@ -102,9 +91,9 @@ internal sealed class IcallTableGenerator
                 w.WriteLine(string.Format("{0},", icall.Func));
             }
             w.WriteLine("};");
-            w.WriteLine($"static uint8_t {aname}_icall_handles [] = {{");
+            w.WriteLine($"static uint8_t {aname}_icall_flags [] = {{");
             foreach (var icall in sorted)
-                w.WriteLine(string.Format("{0},", icall.Handles ? "1" : "0"));
+                w.WriteLine(string.Format("{0},", icall.Flags));
             w.WriteLine("};");
         }
     }
@@ -133,8 +122,9 @@ internal sealed class IcallTableGenerator
                 string name = nameElem.GetString()!;
                 string func = icall_j.GetProperty("func").GetString()!;
                 bool handles = icall_j.GetProperty("handles").GetBoolean();
+                int flags = icall_j.TryGetProperty ("flags", out var _) ? int.Parse (icall_j.GetProperty("flags").GetString()!) : 0;
 
-                icallClass.Icalls.Add(name, new Icall(name, func, handles));
+                icallClass.Icalls.Add(name, new Icall(name, func, handles, flags));
             }
         }
     }
@@ -146,7 +136,15 @@ internal sealed class IcallTableGenerator
             if ((method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) == 0)
                 continue;
 
-            AddSignature(type, method);
+            try
+            {
+                AddSignature(type, method);
+            }
+            catch (Exception ex) when (ex is not LogAsErrorException)
+            {
+                Log.Warning("WASM0001", $"Could not get icall, or callbacks for method '{type.FullName}::{method.Name}' because '{ex.Message}'");
+                continue;
+            }
 
             var className = method.DeclaringType!.FullName!;
             if (!_runtimeIcalls.ContainsKey(className))
@@ -162,12 +160,13 @@ internal sealed class IcallTableGenerator
             if (icall == null)
             {
                 string? methodSig = BuildSignature(method, className);
-                if (methodSig != null && icallClass.Icalls.ContainsKey(methodSig))
-                    icall = icallClass.Icalls[methodSig];
+                if (methodSig != null)
+                    icallClass.Icalls.TryGetValue(methodSig, out icall);
+
+                if (icall == null)
+                    // Registered at runtime
+                    continue;
             }
-            if (icall == null)
-                // Registered at runtime
-                continue;
 
             icall.Method = method;
             icall.TokenIndex = (int)method.MetadataToken & 0xffffff;
@@ -195,7 +194,7 @@ internal sealed class IcallTableGenerator
                 }
                 catch (NotImplementedException nie)
                 {
-                    Log.LogWarning($"Failed to generate icall function for method '[{method.DeclaringType!.Assembly.GetName().Name}] {className}::{method.Name}'" +
+                    Log.Warning("WASM0001", $"Failed to generate icall function for method '[{method.DeclaringType!.Assembly.GetName().Name}] {className}::{method.Name}'" +
                                     $" because type '{nie.Message}' is not supported for parameter named '{par.Name}'. Ignoring.");
                     return null;
                 }
@@ -208,14 +207,14 @@ internal sealed class IcallTableGenerator
 
         void AddSignature(Type type, MethodInfo method)
         {
-            string? signature = SignatureMapper.MethodToSignature(method);
+            string? signature = SignatureMapper.MethodToSignature(method, Log);
             if (signature == null)
             {
                 throw new LogAsErrorException($"Unsupported parameter type in method '{type.FullName}.{method.Name}'");
             }
 
-            Log.LogMessage(MessageImportance.Normal, $"[icall] Adding signature {signature} for method '{type.FullName}.{method.Name}'");
-            _signatures.Add(signature);
+            if (_signatures.Add(signature))
+                Log.LogMessage(MessageImportance.Low, $"Adding icall signature {signature} for method '{type.FullName}.{method.Name}'");
         }
     }
 
@@ -236,6 +235,10 @@ internal sealed class IcallTableGenerator
         {
             AppendType(sb, t.GetElementType()!);
             sb.Append('*');
+        }
+        else if (t.IsEnum)
+        {
+            AppendType(sb, Enum.GetUnderlyingType(t));
         }
         else
         {
@@ -303,10 +306,11 @@ internal sealed class IcallTableGenerator
 
     private sealed class Icall : IComparable<Icall>
     {
-        public Icall(string name, string func, bool handles)
+        public Icall(string name, string func, bool handles, int flags)
         {
             Name = name;
             Func = func;
+            Flags = flags;
             Handles = handles;
             TokenIndex = 0;
         }
@@ -315,6 +319,7 @@ internal sealed class IcallTableGenerator
         public string Func;
         public string? Assembly;
         public bool Handles;
+        public int Flags;
         public int TokenIndex;
         public MethodInfo? Method;
 

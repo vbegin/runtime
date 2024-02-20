@@ -2,10 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Xml.Schema;
+using System.Xml.Tests;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaValidatorApiTests
 {
     // ===================== ValidateText =====================
 
@@ -35,7 +36,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -142,7 +143,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -165,7 +166,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 
@@ -197,7 +198,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -268,7 +269,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -287,7 +288,7 @@ namespace System.Xml.Tests
             catch (Exception) // Replace with concrete exception type
             {
                 // Verify exception ????
-                Assert.True(false);
+                Assert.Fail();
             }
 
             return;
@@ -462,7 +463,7 @@ namespace System.Xml.Tests
             {
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -487,7 +488,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -568,7 +569,7 @@ namespace System.Xml.Tests
                     break;
 
                 default:
-                    Assert.True(false);
+                    Assert.Fail();
                     break;
             }
 
@@ -611,7 +612,7 @@ namespace System.Xml.Tests
                     try
                     {
                         val.ValidateEndElement(info);
-                        Assert.True(false);
+                        Assert.Fail();
                     }
                     catch (XmlSchemaValidationException e)
                     {
@@ -629,7 +630,7 @@ namespace System.Xml.Tests
                 try
                 {
                     val.ValidateEndElement(info);
-                    Assert.True(false);
+                    Assert.Fail();
                 }
                 catch (XmlSchemaValidationException e)
                 {
@@ -724,7 +725,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 
@@ -854,7 +855,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

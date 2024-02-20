@@ -727,7 +727,7 @@ namespace System.Xml.Xsl.Xslt
                     case XslNodeType.LiteralAttribute: result = CompileLiteralAttribute(node); break;
                     case XslNodeType.LiteralElement: result = CompileLiteralElement(node); break;
                     case XslNodeType.Message: result = CompileMessage(node); break;
-                    case XslNodeType.Nop: result = CompileNop(node); break;
+                    case XslNodeType.Nop: result = CompileNop(); break;
                     case XslNodeType.Number: result = CompileNumber((Number)node); break;
                     //              case XslNodeType.Otherwise:         wrapped by Choose
                     //              case XslNodeType.Param:             already compiled by CompileProtoTemplate()
@@ -781,7 +781,7 @@ namespace System.Xml.Xsl.Xslt
             return CompileInstructions(node.Content);
         }
 
-        private QilNode CompileNop(XslNode node)
+        private QilNode CompileNop()
         {
             return _f.Nop(_f.Sequence());
         }
@@ -946,7 +946,7 @@ namespace System.Xml.Xsl.Xslt
                 else
                 {
                     nsUri = (string)(QilLiteral)qilNs;
-                    // if both name and ns are non AVT and this ns is already bind to the same prefix we can avoid reseting ns management
+                    // if both name and ns are non AVT and this ns is already bind to the same prefix we can avoid resetting ns management
                     explicitNamespace = true;
                 }
                 // Check the case <xsl:attribute name="foo:xmlns" namespace=""/>
@@ -1054,14 +1054,14 @@ namespace System.Xml.Xsl.Xslt
             return result;
         }
 
-        [return: NotNullIfNotNull("avt")]
+        [return: NotNullIfNotNull(nameof(avt))]
         private QilNode? CompileStringAvt(string? avt)
         {
             if (avt == null)
             {
                 return null;
             }
-            if (avt.AsSpan().IndexOfAny('{', '}') < 0)
+            if (!avt.AsSpan().ContainsAny('{', '}'))
             {
                 return _f.String(avt);
             }
@@ -1071,7 +1071,7 @@ namespace System.Xml.Xsl.Xslt
         private QilNode CompileTextAvt(string avt)
         {
             Debug.Assert(avt != null);
-            if (avt.AsSpan().IndexOfAny('{', '}') < 0)
+            if (!avt.AsSpan().ContainsAny('{', '}'))
             {
                 return _f.TextCtor(_f.String(avt));
             }
@@ -1516,7 +1516,7 @@ namespace System.Xml.Xsl.Xslt
 
         // REVIEW: Can we handle both sort's and with-param's in the document order?
         // CompileSorts() creates helper variables in varHelper
-        private QilNode? CompileSorts(IList<XslNode> content, ref LoopFocus parentLoop)
+        private QilList? CompileSorts(IList<XslNode> content, ref LoopFocus parentLoop)
         {
             QilList keyList = _f.BaseFactory.SortKeyList();
 
@@ -1681,7 +1681,7 @@ namespace System.Xml.Xsl.Xslt
         /// returning "1" if AVT evaluates to value1, or "0" if AVT evaluates to value0 or any other value.
         /// If AVT evaluates to neither value0 nor value1 and fwdCompat == false, an error is reported.
         /// </returns>
-        [return: NotNullIfNotNull("attName")]
+        [return: NotNullIfNotNull(nameof(attName))]
         private QilNode CompileOrderAttribute(string attName, string? attValue, string value0, string value1, bool fwdCompat)
         {
             QilNode? result = CompileStringAvt(attValue);
@@ -2061,7 +2061,7 @@ namespace System.Xml.Xsl.Xslt
             return result;
         }
 
-        private QilNode CompileGroupingSizeAttribute(string? attValue, bool fwdCompat)
+        private QilNode CompileGroupingSizeAttribute(string? attValue)
         {
             QilNode? result = CompileStringAvt(attValue);
 
@@ -2128,7 +2128,7 @@ namespace System.Xml.Xsl.Xslt
                 CompileLangAttributeToLcid(num.Lang, fwdCompat),
                 CompileLetterValueAttribute(num.LetterValue, fwdCompat),
                 CompileGroupingSeparatorAttribute(num.GroupingSeparator, fwdCompat),
-                CompileGroupingSizeAttribute(num.GroupingSize, fwdCompat)
+                CompileGroupingSizeAttribute(num.GroupingSize)
             ));
         }
 
@@ -2563,7 +2563,7 @@ namespace System.Xml.Xsl.Xslt
         // Returns true if formalArgs maps 1:1 with actual args.
         // Formally this is n*n algorithm. We can optimize it by calculationg "signature"
         // of the function as sum of all hashes of its args names.
-        private static bool FillupInvokeArgs(IList<QilNode> formalArgs, IList<XslNode> actualArgs, QilList invokeArgs)
+        private static bool FillupInvokeArgs(QilList formalArgs, IList<XslNode> actualArgs, QilList invokeArgs)
         {
             if (actualArgs.Count != formalArgs.Count)
             {

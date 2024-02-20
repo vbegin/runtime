@@ -4,12 +4,12 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Xml.XPath;
 using System.Xml.Schema;
+using System.Xml.XPath;
 using System.Xml.Xsl.Qil;
 using System.Xml.Xsl.XPath;
-using System.Diagnostics.CodeAnalysis;
 using T = System.Xml.Xsl.XmlQueryTypeFactory;
 
 namespace System.Xml.Xsl.Xslt
@@ -61,7 +61,7 @@ namespace System.Xml.Xsl.Xslt
             filter.Variable.Binding = newBinding;
         }
 
-        [return: NotNullIfNotNull("result")]
+        [return: NotNullIfNotNull(nameof(result))]
         public QilNode? EndBuild(QilNode? result)
         {
             Debug.Assert(_inTheBuild, "StartBuild() wasn't called");

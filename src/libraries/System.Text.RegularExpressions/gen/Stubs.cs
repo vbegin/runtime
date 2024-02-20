@@ -1,13 +1,12 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using System.Buffers;
 using System.Collections;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
+
+#pragma warning disable IDE0060
 
 // This file provides helpers used to help compile some Regex source code (e.g. RegexParser) as part of the netstandard2.0 generator assembly.
 
@@ -27,7 +26,7 @@ namespace System.Text
         {
             var chars = new char[stringBuilder.Length];
             stringBuilder.CopyTo(0, chars, 0, chars.Length);
-            return new[] { new ReadOnlyMemory<char>(chars) };
+            return [new ReadOnlyMemory<char>(chars)];
         }
     }
 }
@@ -58,11 +57,26 @@ namespace System
             return length;
         }
     }
+
+    internal static class CharExtensions
+    {
+        /// <summary>Gets whether the specified character is an ASCII letter.</summary>
+        public static bool IsAsciiLetter(char c) =>
+            (uint)((c | 0x20) - 'a') <= 'z' - 'a';
+    }
 }
 
 namespace System.Buffers
 {
     internal delegate void SpanAction<T, in TArg>(Span<T> span, TArg arg);
+}
+
+namespace System.Numerics
+{
+    internal static class BitOperations
+    {
+        public static bool IsPow2(int value) => (value & (value - 1)) == 0 && value > 0;
+    }
 }
 
 namespace System.Threading

@@ -4,7 +4,7 @@
 using OLEDB.Test.ModuleCore;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public abstract class TCWriteBuffer
     {
@@ -54,7 +54,7 @@ namespace System.Xml.Tests
                 }
             }
             w.Flush();
-            Assert.True(false, "Expected exception");
+            Assert.Fail("Expected exception");
         }
 
         public byte[] StringToByteArray(string src)

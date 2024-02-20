@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Text;
-using System.Globalization;
-using System.Xml.Schema;
-using System.Diagnostics;
 using System.Collections;
-using System.Text.RegularExpressions;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml.Schema;
 
 namespace System.Xml
 {
@@ -33,7 +33,7 @@ namespace System.Xml
     /// </devdoc>
     public partial class XmlConvert
     {
-        internal static char[] crt = new char[] { '\n', '\r', '\t' };
+        private const string Crt = "\t\n\r";
 
         /// <devdoc>
         ///    <para>
@@ -42,7 +42,7 @@ namespace System.Xml
         ///       DataColumn names, that contain characters that are not permitted in
         ///       XML names to valid names.</para>
         /// </devdoc>
-        [return: NotNullIfNotNull("name")]
+        [return: NotNullIfNotNull(nameof(name))]
         public static string? EncodeName(string? name)
         {
             return EncodeName(name, true/*Name_not_NmToken*/, false/*Local?*/);
@@ -52,7 +52,7 @@ namespace System.Xml
         ///    <para> Verifies the name is valid
         ///       according to production [7] in the XML spec.</para>
         /// </devdoc>
-        [return: NotNullIfNotNull("name")]
+        [return: NotNullIfNotNull(nameof(name))]
         public static string? EncodeNmToken(string? name)
         {
             return EncodeName(name, false/*Name_not_NmToken*/, false/*Local?*/);
@@ -62,7 +62,7 @@ namespace System.Xml
         ///    <para>Converts names, such as DataTable or DataColumn names, that contain
         ///       characters that are not permitted in XML names to valid names.</para>
         /// </devdoc>
-        [return: NotNullIfNotNull("name")]
+        [return: NotNullIfNotNull(nameof(name))]
         public static string? EncodeLocalName(string? name)
         {
             return EncodeName(name, true/*Name_not_NmToken*/, true/*Local?*/);
@@ -72,7 +72,7 @@ namespace System.Xml
         ///    <para>
         ///       Transforms an XML name into an object name (such as DataTable or DataColumn).</para>
         /// </devdoc>
-        [return: NotNullIfNotNull("name")]
+        [return: NotNullIfNotNull(nameof(name))]
         public static string? DecodeName(string? name)
         {
             if (string.IsNullOrEmpty(name))
@@ -167,7 +167,7 @@ namespace System.Xml
             }
         }
 
-        [return: NotNullIfNotNull("name")]
+        [return: NotNullIfNotNull(nameof(name))]
         private static string? EncodeName(string? name, /*Name_not_NmToken*/ bool first, bool local)
         {
             if (string.IsNullOrEmpty(name))
@@ -280,10 +280,10 @@ namespace System.Xml
 
         private const int EncodedCharLength = 7; // ("_xFFFF_".Length);
 
-        [RegexGenerator("_[Xx][0-9a-fA-F]{4}(?:_|[0-9a-fA-F]{4}_)")]
+        [GeneratedRegex("_[Xx][0-9a-fA-F]{4}(?:_|[0-9a-fA-F]{4}_)")]
         private static partial Regex DecodeCharRegex();
 
-        [RegexGenerator("(?<=_)[Xx][0-9a-fA-F]{4}(?:_|[0-9a-fA-F]{4}_)")]
+        [GeneratedRegex("(?<=_)[Xx][0-9a-fA-F]{4}(?:_|[0-9a-fA-F]{4}_)")]
         private static partial Regex EncodeCharRegex();
 
         private static int FromHex(char digit)
@@ -291,16 +291,9 @@ namespace System.Xml
             return HexConverter.FromChar(digit);
         }
 
-        internal static byte[] FromBinHexString(string s)
+        internal static byte[] FromBinHexString(ReadOnlySpan<char> s, bool allowOddCount)
         {
-            return FromBinHexString(s, true);
-        }
-
-        internal static byte[] FromBinHexString(string s, bool allowOddCount)
-        {
-            ArgumentNullException.ThrowIfNull(s);
-
-            return BinHexDecoder.Decode(s.AsSpan(), allowOddCount);
+            return BinHexDecoder.Decode(s, allowOddCount);
         }
 
         internal static string ToBinHexString(byte[] inArray)
@@ -318,12 +311,7 @@ namespace System.Xml
         /// </devdoc>
         public static string VerifyName(string name)
         {
-            ArgumentNullException.ThrowIfNull(name);
-
-            if (name.Length == 0)
-            {
-                throw new ArgumentNullException(nameof(name), SR.Xml_EmptyName);
-            }
+            ArgumentException.ThrowIfNullOrEmpty(name);
 
             // parse name
             int endPos = ValidateNames.ParseNameNoNamespaces(name, 0);
@@ -381,12 +369,7 @@ namespace System.Xml
 
         internal static string VerifyNCName(string name, ExceptionType exceptionType)
         {
-            ArgumentNullException.ThrowIfNull(name);
-
-            if (name.Length == 0)
-            {
-                throw new ArgumentNullException(nameof(name), SR.Xml_EmptyLocalName);
-            }
+            ArgumentException.ThrowIfNullOrEmpty(name);
 
             int end = ValidateNames.ParseNCName(name, 0);
 
@@ -415,7 +398,7 @@ namespace System.Xml
         ///    <para>
         ///    </para>
         /// </devdoc>
-        [return: NotNullIfNotNull("token")]
+        [return: NotNullIfNotNull(nameof(token))]
         public static string? VerifyTOKEN(string? token)
         {
             if (string.IsNullOrEmpty(token))
@@ -425,7 +408,7 @@ namespace System.Xml
 
             if (token.StartsWith(' ') ||
                 token.EndsWith(' ') ||
-                token.IndexOfAny(crt) >= 0 ||
+                token.AsSpan().ContainsAny(Crt) ||
                 token.Contains("  "))
             {
                 throw new XmlException(SR.Sch_NotTokenString, token);
@@ -442,7 +425,7 @@ namespace System.Xml
 
             if (token.StartsWith(' ') ||
                 token.EndsWith(' ') ||
-                token.IndexOfAny(crt) >= 0 ||
+                token.AsSpan().ContainsAny(Crt) ||
                 token.Contains("  "))
             {
                 return new XmlException(SR.Sch_NotTokenString, token);
@@ -481,7 +464,7 @@ namespace System.Xml
 
         internal static Exception? TryVerifyNMTOKEN(string name)
         {
-            if (name == null || name.Length == 0)
+            if (string.IsNullOrEmpty(name))
             {
                 return new XmlException(SR.Xml_EmptyName, string.Empty);
             }
@@ -497,7 +480,7 @@ namespace System.Xml
 
         internal static Exception? TryVerifyNormalizedString(string str)
         {
-            if (str.IndexOfAny(crt) != -1)
+            if (str.AsSpan().ContainsAny(Crt))
             {
                 return new XmlSchemaException(SR.Sch_NotNormalizedString, str);
             }
@@ -523,7 +506,7 @@ namespace System.Xml
 
             // returns the position of invalid character or -1
             int pos = XmlCharType.IsPublicId(publicId);
-            if (pos != -1)
+            if (pos >= 0)
             {
                 throw CreateInvalidCharException(publicId, pos, ExceptionType.XmlException);
             }
@@ -579,7 +562,7 @@ namespace System.Xml
             return XmlCharType.IsHighSurrogate(highChar) && XmlCharType.IsLowSurrogate(lowChar);
         }
 
-        // Valid PUBLIC ID character - as defined in XML 1.0 spec (fifth edition) production [13] PublidChar
+        // Valid PUBLIC ID character - as defined in XML 1.0 spec (fifth edition) production [13] PubidChar
         public static bool IsPublicIdChar(char ch)
         {
             return XmlCharType.IsPubidChar(ch);
@@ -761,28 +744,35 @@ namespace System.Xml
 
         public static bool ToBoolean(string s)
         {
-            s = TrimString(s);
-            if (s == "1" || s == "true") return true;
-            if (s == "0" || s == "false") return false;
-            throw new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Boolean"));
+            switch (s.AsSpan().Trim(WhitespaceChars))
+            {
+                case "1":
+                case "true":
+                    return true;
+                case "0":
+                case "false":
+                    return false;
+                default:
+                    throw new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Boolean"));
+            }
         }
 
         internal static Exception? TryToBoolean(string s, out bool result)
         {
-            s = TrimString(s);
-            if (s == "0" || s == "false")
+            switch (s.AsSpan().Trim(WhitespaceChars))
             {
-                result = false;
-                return null;
+                case "0":
+                case "false":
+                    result = false;
+                    return null;
+                case "1":
+                case "true":
+                    result = true;
+                    return null;
+                default:
+                    result = false;
+                    return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Boolean"));
             }
-            else if (s == "1" || s == "true")
-            {
-                result = true;
-                return null;
-            }
-
-            result = false;
-            return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Boolean"));
         }
 
         public static char ToChar(string s)
@@ -963,143 +953,150 @@ namespace System.Xml
 
         public static float ToSingle(string s)
         {
-            s = TrimString(s);
-            if (s == "-INF") return float.NegativeInfinity;
-            if (s == "INF") return float.PositiveInfinity;
-            float f = float.Parse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, NumberFormatInfo.InvariantInfo);
-            if (f == 0 && s[0] == '-')
-            {
-                return -0f;
-            }
+            ArgumentNullException.ThrowIfNull(s);
 
-            return f;
+            ReadOnlySpan<char> value = s.AsSpan().Trim(WhitespaceChars);
+            switch (value)
+            {
+                case "-INF":
+                    return float.NegativeInfinity;
+                case "INF":
+                    return float.PositiveInfinity;
+                default:
+                    float f = float.Parse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, NumberFormatInfo.InvariantInfo);
+                    if (f == 0 && value[0] == '-')
+                    {
+                        return -0f;
+                    }
+
+                    return f;
+            }
         }
 
         internal static Exception? TryToSingle(string s, out float result)
         {
-            s = TrimString(s);
-            if (s == "-INF")
+            ReadOnlySpan<char> value = s.AsSpan().Trim(WhitespaceChars);
+            switch (value)
             {
-                result = float.NegativeInfinity;
-                return null;
-            }
-            else if (s == "INF")
-            {
-                result = float.PositiveInfinity;
-                return null;
-            }
-            else if (!float.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, NumberFormatInfo.InvariantInfo, out result))
-            {
-                return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Single"));
-            }
+                case "-INF":
+                    result = float.NegativeInfinity;
+                    return null;
+                case "INF":
+                    result = float.PositiveInfinity;
+                    return null;
+                default:
+                    if (!float.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, NumberFormatInfo.InvariantInfo, out result))
+                    {
+                        return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Single"));
+                    }
+                    if (result == 0 && value[0] == '-')
+                    {
+                        result = -0f;
+                    }
 
-            if (result == 0 && s[0] == '-')
-            {
-                result = -0f;
+                    return null;
             }
-
-            return null;
         }
 
         public static double ToDouble(string s)
         {
-            s = TrimString(s);
-            if (s == "-INF") return double.NegativeInfinity;
-            if (s == "INF") return double.PositiveInfinity;
+            ArgumentNullException.ThrowIfNull(s);
 
-            double dVal = double.Parse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite, NumberFormatInfo.InvariantInfo);
-            if (dVal == 0 && s[0] == '-')
+            ReadOnlySpan<char> value = s.AsSpan().Trim(WhitespaceChars);
+            switch (value)
             {
-                return -0d;
-            }
+                case "-INF":
+                    return double.NegativeInfinity;
+                case "INF":
+                    return double.PositiveInfinity;
+                default:
+                    double dVal = double.Parse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite, NumberFormatInfo.InvariantInfo);
+                    if (dVal == 0 && value[0] == '-')
+                    {
+                        return -0d;
+                    }
 
-            return dVal;
+                    return dVal;
+            }
         }
 
         internal static Exception? TryToDouble(string s, out double result)
         {
-            s = TrimString(s);
-            if (s == "-INF")
+            ReadOnlySpan<char> value = s.AsSpan().Trim(WhitespaceChars);
+            switch (value)
             {
-                result = double.NegativeInfinity;
-                return null;
-            }
-            else if (s == "INF")
-            {
-                result = double.PositiveInfinity;
-                return null;
-            }
-            else if (!double.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, NumberFormatInfo.InvariantInfo, out result))
-            {
-                return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Double"));
-            }
+                case "-INF":
+                    result = double.NegativeInfinity;
+                    return null;
+                case "INF":
+                    result = double.PositiveInfinity;
+                    return null;
+                default:
+                    if (!double.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, NumberFormatInfo.InvariantInfo, out result))
+                    {
+                        return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Double"));
+                    }
 
-            if (result == 0 && s[0] == '-')
-            {
-                result = -0d;
-            }
+                    if (result == 0 && value[0] == '-')
+                    {
+                        result = -0d;
+                    }
 
-            return null;
+                    return null;
+            }
         }
 
         internal static double ToXPathDouble(object? o)
         {
-            if (o is string str)
+            switch (o)
             {
-                str = TrimString(str);
-                if (str.Length != 0 && str[0] != '+')
-                {
-                    double d;
-                    if (double.TryParse(str, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowTrailingWhite, NumberFormatInfo.InvariantInfo, out d))
+                case string str:
                     {
-                        return d;
+                        ArgumentNullException.ThrowIfNull(str);
+
+                        ReadOnlySpan<char> value = str.AsSpan().Trim(WhitespaceChars);
+                        if (value.Length != 0 && value[0] != '+')
+                        {
+                            if (double.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowTrailingWhite, NumberFormatInfo.InvariantInfo, out double d))
+                            {
+                                return d;
+                            }
+                        }
+                        return double.NaN;
                     }
-                }
-                return double.NaN;
-            }
+                case double oDouble:
+                    return oDouble;
+                case bool oBool:
+                    return oBool ? 1.0 : 0.0;
+                default:
+                    try
+                    {
+                        return Convert.ToDouble(o, NumberFormatInfo.InvariantInfo);
+                    }
+                    catch (FormatException)
+                    {
+                    }
+                    catch (OverflowException)
+                    {
+                    }
+                    catch (ArgumentNullException) { }
 
-            if (o is double oDouble)
-            {
-                return oDouble;
+                    return double.NaN;
             }
-
-            if (o is bool oBool)
-            {
-                return oBool ? 1.0 : 0.0;
-            }
-
-            try
-            {
-                return Convert.ToDouble(o, NumberFormatInfo.InvariantInfo);
-            }
-            catch (FormatException)
-            {
-            }
-            catch (OverflowException)
-            {
-            }
-            catch (ArgumentNullException) { }
-
-            return double.NaN;
         }
 
         internal static string? ToXPathString(object? value)
         {
-            if (value is string s)
+            switch (value)
             {
-                return s;
-            }
-            else if (value is double)
-            {
-                return ((double)value).ToString("R", NumberFormatInfo.InvariantInfo);
-            }
-            else if (value is bool)
-            {
-                return (bool)value ? "true" : "false";
-            }
-            else
-            {
-                return Convert.ToString(value, NumberFormatInfo.InvariantInfo);
+                case string s:
+                    return s;
+                case double d:
+                    return d.ToString("R", NumberFormatInfo.InvariantInfo);
+                case bool b:
+                    return b ? "true" : "false";
+                default:
+                    return Convert.ToString(value, NumberFormatInfo.InvariantInfo);
             }
         }
 
@@ -1312,7 +1309,7 @@ namespace System.Xml
             {
                 // string.Empty is a valid uri but not "   "
                 s = TrimString(s);
-                if (s.Length == 0 || s.IndexOf("##", StringComparison.Ordinal) != -1)
+                if (s.Length == 0 || s.Contains("##"))
                 {
                     throw new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Uri"));
                 }
@@ -1334,7 +1331,7 @@ namespace System.Xml
             if (s != null && s.Length > 0)
             { //string.Empty is a valid uri but not "   "
                 s = TrimString(s);
-                if (s.Length == 0 || s.IndexOf("##", StringComparison.Ordinal) != -1)
+                if (s.Length == 0 || s.Contains("##"))
                 {
                     return new FormatException(SR.Format(SR.XmlConvert_BadFormat, s, "Uri"));
                 }
@@ -1345,25 +1342,6 @@ namespace System.Xml
             }
 
             return null;
-        }
-
-        // Compares the given character interval and string and returns true if the characters are identical
-        internal static bool StrEqual(char[]? chars, int strPos1, int strLen1, string str2)
-        {
-            if (strLen1 != str2.Length)
-            {
-                return false;
-            }
-
-            Debug.Assert(chars != null);
-
-            int i = 0;
-            while (i < strLen1 && chars[strPos1 + i] == str2[i])
-            {
-                i++;
-            }
-
-            return i == strLen1;
         }
 
         // XML whitespace characters, <spec>http://www.w3.org/TR/REC-xml#NT-S</spec>
@@ -1415,7 +1393,7 @@ namespace System.Xml
 
         internal static void VerifyCharData(string? data, ExceptionType invCharExceptionType, ExceptionType invSurrogateExceptionType)
         {
-            if (data == null || data.Length == 0)
+            if (string.IsNullOrEmpty(data))
             {
                 return;
             }
@@ -1656,6 +1634,174 @@ namespace System.Xml
         internal static Exception CreateInvalidNameCharException(string name, int index, ExceptionType exceptionType)
         {
             return CreateException(index == 0 ? SR.Xml_BadStartNameChar : SR.Xml_BadNameChar, XmlException.BuildCharExceptionArgs(name, index), exceptionType, 0, index + 1);
+        }
+
+        internal static bool TryFormat(bool value, Span<char> destination, out int charsWritten)
+        {
+            string valueAsString = value ? "true" : "false";
+
+            charsWritten = valueAsString.Length;
+            return valueAsString.TryCopyTo(destination);
+        }
+
+        internal static bool TryFormat(char value, Span<char> destination, out int charsWritten)
+        {
+            charsWritten = 1;
+            if (destination.Length < 1) return false;
+
+            destination[0] = value;
+            return true;
+        }
+
+        internal static bool TryFormat(decimal value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, NumberFormatInfo.InvariantInfo);
+        }
+
+        internal static bool TryFormat(sbyte value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(short value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(int value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(long value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(byte value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(ushort value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(uint value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(ulong value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, default, CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryFormat(float value, Span<char> destination, out int charsWritten)
+        {
+            ReadOnlySpan<char> valueSpan;
+
+            if (!float.IsFinite(value))
+            {
+                if (float.IsNaN(value))
+                    valueSpan = "NaN";
+                else
+                    valueSpan = float.IsNegative(value) ? "-INF" : "INF";
+            }
+            else if (IsNegativeZero((double)value))
+            {
+                valueSpan = "-0";
+            }
+            else
+            {
+                return value.TryFormat(destination, out charsWritten, "R", NumberFormatInfo.InvariantInfo);
+            }
+
+            charsWritten = valueSpan.Length;
+            return valueSpan.TryCopyTo(destination);
+        }
+
+        internal static bool TryFormat(double value, Span<char> destination, out int charsWritten)
+        {
+            ReadOnlySpan<char> valueSpan;
+
+            if (!double.IsFinite(value))
+            {
+                if (double.IsNaN(value))
+                    valueSpan = "NaN";
+                else
+                    valueSpan = double.IsNegative(value) ? "-INF" : "INF";
+            }
+            else if (IsNegativeZero(value))
+            {
+                valueSpan = "-0";
+            }
+            else
+            {
+                return value.TryFormat(destination, out charsWritten, "R", NumberFormatInfo.InvariantInfo);
+            }
+
+            charsWritten = valueSpan.Length;
+            return valueSpan.TryCopyTo(destination);
+        }
+
+        internal static bool TryFormat(TimeSpan value, Span<char> destination, out int charsWritten)
+        {
+            return new XsdDuration(value).TryFormat(destination, out charsWritten);
+        }
+
+        internal static bool TryFormat(DateTime value, [StringSyntax(StringSyntaxAttribute.DateTimeFormat)] string format, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, format, DateTimeFormatInfo.InvariantInfo);
+        }
+
+        internal static bool TryFormat(DateTime value, Span<char> destination, out int charsWritten)
+        {
+            return TryFormat(value, XmlDateTimeSerializationMode.RoundtripKind, destination, out charsWritten);
+        }
+
+        internal static bool TryFormat(DateTime value, XmlDateTimeSerializationMode dateTimeOption, Span<char> destination, out int charsWritten)
+        {
+            switch (dateTimeOption)
+            {
+                case XmlDateTimeSerializationMode.Local:
+                    value = SwitchToLocalTime(value);
+                    break;
+
+                case XmlDateTimeSerializationMode.Utc:
+                    value = SwitchToUtcTime(value);
+                    break;
+
+                case XmlDateTimeSerializationMode.Unspecified:
+                    value = new DateTime(value.Ticks, DateTimeKind.Unspecified);
+                    break;
+
+                case XmlDateTimeSerializationMode.RoundtripKind:
+                    break;
+
+                default:
+                    throw new ArgumentException(SR.Format(SR.Sch_InvalidDateTimeOption, dateTimeOption, nameof(dateTimeOption)));
+            }
+
+            XsdDateTime xsdDateTime = new XsdDateTime(value, XsdDateTimeFlags.DateTime);
+            return xsdDateTime.TryFormat(destination, out charsWritten);
+        }
+
+        internal static bool TryFormat(DateTimeOffset value, Span<char> destination, out int charsWritten)
+        {
+            XsdDateTime xsdDateTime = new XsdDateTime(value);
+            return xsdDateTime.TryFormat(destination, out charsWritten);
+        }
+
+        internal static bool TryFormat(DateTimeOffset value, [StringSyntax(StringSyntaxAttribute.DateTimeFormat)] string format, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten, format, DateTimeFormatInfo.InvariantInfo);
+        }
+
+        internal static bool TryFormat(Guid value, Span<char> destination, out int charsWritten)
+        {
+            return value.TryFormat(destination, out charsWritten);
         }
     }
 }

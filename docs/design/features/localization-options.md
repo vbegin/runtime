@@ -2,7 +2,7 @@
 
 The .NET Core host and runtime contain messages that can be displayed to both end-users and developers. Currently, all such messages are displayed in English.
 
-Other managed components built on top of .NET Runtime (e.g. SDK, WinForms, WPF) have already been localized, so a process already exists for handling translation and localizing assets, while the runtime handles satellite assembly loading. The host and runtime are different in that they have messages that originate from native components and must continue to do so. While the runtime does contain some managed resources, this document focusses on localization of native resources.
+Other managed components built on top of .NET Runtime (e.g. SDK, WinForms, WPF) have already been localized, so a process already exists for handling translation and localizing assets, while the runtime handles satellite assembly loading. The host and runtime are different in that they have messages that originate from native components and must continue to do so. While the runtime does contain some managed resources, this document focuses on localization of native resources.
 
 The goal is to support:
 
@@ -158,7 +158,7 @@ Standard methods for native localization use the user's locale. However, managed
 
 All localizable resources need to be in the XLIFF file format (.xlf). New tooling will be required to convert from an untranslated base format to language-specific .xlf files and from the language-specific .xlf files to a format (.rc/.po/.strings, UTF-8/UTF-16) that will be compiled into resource libraries (or deployed directly) for each platform.
 
-The existing [xliff-tasks](https://github.com/dotnet/xliff-tasks) tooling supports conversion between managed resource files (.resx) and .xlf files and building satellite resource libraries. It is all MSBuild-based and has no concept of native resources or build processes. Extending it in a way that works naturally with CMake builds across platforms would be non-trivial.
+The existing [xliff-tasks](https://github.com/dotnet/arcade/blob/main/src/Microsoft.DotNet.XliffTasks/README.md) tooling supports conversion between managed resource files (.resx) and .xlf files and building satellite resource libraries. It is all MSBuild-based and has no concept of native resources or build processes. Extending it in a way that works naturally with CMake builds across platforms would be non-trivial.
 
 It is also an option to create tooling directly integrated in the dotnet/runtime repo itself. This would not be a generic and reusable component outside of the dotnet/runtime repo and its build system.
 
@@ -199,7 +199,7 @@ At run time, the .NET Core host/runtime will find and load the resource DLL from
 
 #### Linux-specific
 
-The development language (English) strings will be compiled into the host and runtime directly. The langage-specific .xlf files will be converted into .po files and then .mo files. Those binary .mo files will be laid out in a language-specific subfolder. For example:
+The development language (English) strings will be compiled into the host and runtime directly. The language-specific .xlf files will be converted into .po files and then .mo files. Those binary .mo files will be laid out in a language-specific subfolder. For example:
 
 ```
 host/fxr/<version>
@@ -239,7 +239,7 @@ The `CFCopyLocalizedStringFromTableInBundle` API will be used to retrieve the ap
 
 #### Custom solution
 
-The development language (English) strings will be compiled into the host and runtime directly. The langage-specific `.xlf` files will be converted into a chosen storage format. Those files will be laid out in a language-specific subfolder. For example:
+The development language (English) strings will be compiled into the host and runtime directly. The language-specific `.xlf` files will be converted into a chosen storage format. Those files will be laid out in a language-specific subfolder. For example:
 
 ```
 host/fxr/<version>
@@ -297,7 +297,7 @@ Since localization would not be needed by all applications, localized resources 
 
 ### Packaging and deployment
 
-WPF and WinForms always include all languanges in an install. Does the host/runtime do the same or have separate language packs? How are they delivered (e.g. single installer with runtime and options for different languages, separate installer for languages with options for different languanges, separate installer per language)?
+WPF and WinForms always include all languages in an install. Does the host/runtime do the same or have separate language packs? How are they delivered (e.g. single installer with runtime and options for different languages, separate installer for languages with options for different languages, separate installer per language)?
 
 ### SDK
 

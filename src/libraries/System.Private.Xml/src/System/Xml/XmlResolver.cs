@@ -2,13 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.IO;
-using System.Text;
-using System.Security;
-using System.Net;
-using System.Threading.Tasks;
-using System.Runtime.Versioning;
 using System.Diagnostics;
+using System.IO;
+using System.Net;
+using System.Runtime.Versioning;
+using System.Security;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace System.Xml
 {
@@ -28,7 +28,12 @@ namespace System.Xml
                                           string? role,
                                           Type? ofObjectToReturn);
 
-
+        public virtual Task<object> GetEntityAsync(Uri absoluteUri,
+                                                   string? role,
+                                                   Type? ofObjectToReturn)
+        {
+            throw new NotImplementedException();
+        }
 
         /// <devdoc>
         ///    <para>[To be supplied.]</para>
@@ -47,7 +52,7 @@ namespace System.Xml
             }
             else
             {
-                if (relativeUri == null || relativeUri.Length == 0)
+                if (string.IsNullOrEmpty(relativeUri))
                 {
                     return baseUri;
                 }

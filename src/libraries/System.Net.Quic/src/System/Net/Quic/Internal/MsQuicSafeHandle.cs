@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Quic;
 
@@ -20,7 +21,8 @@ internal unsafe class MsQuicSafeHandle : SafeHandle
     };
 
     private readonly delegate* unmanaged[Cdecl]<QUIC_HANDLE*, void> _releaseAction;
-    private readonly string _traceId;
+    private string? _traceId;
+    private readonly SafeHandleType _type;
 
     public override bool IsInvalid => handle == IntPtr.Zero;
 
@@ -30,7 +32,7 @@ internal unsafe class MsQuicSafeHandle : SafeHandle
         : base((IntPtr)handle, ownsHandle: true)
     {
         _releaseAction = releaseAction;
-        _traceId = $"[{s_typeName[(int)safeHandleType]}][0x{DangerousGetHandle():X11}]";
+        _type = safeHandleType;
 
         if (NetEventSource.Log.IsEnabled())
         {
@@ -38,10 +40,25 @@ internal unsafe class MsQuicSafeHandle : SafeHandle
         }
     }
 
+    public MsQuicSafeHandle(QUIC_HANDLE* handle, SafeHandleType safeHandleType)
+        : this(
+            handle,
+            safeHandleType switch
+            {
+                SafeHandleType.Registration => MsQuicApi.Api.ApiTable->RegistrationClose,
+                SafeHandleType.Configuration => MsQuicApi.Api.ApiTable->ConfigurationClose,
+                SafeHandleType.Listener => MsQuicApi.Api.ApiTable->ListenerClose,
+                SafeHandleType.Connection => MsQuicApi.Api.ApiTable->ConnectionClose,
+                SafeHandleType.Stream => MsQuicApi.Api.ApiTable->StreamClose,
+                _ => throw new ArgumentException($"Unexpected value: {safeHandleType}", nameof(safeHandleType))
+            },
+            safeHandleType) { }
+
     protected override bool ReleaseHandle()
     {
-        _releaseAction(QuicHandle);
+        QUIC_HANDLE* quicHandle = QuicHandle;
         SetHandle(IntPtr.Zero);
+        _releaseAction(quicHandle);
 
         if (NetEventSource.Log.IsEnabled())
         {
@@ -51,7 +68,7 @@ internal unsafe class MsQuicSafeHandle : SafeHandle
         return true;
     }
 
-    public override string ToString() => _traceId;
+    public override string ToString() => _traceId ??= $"[{s_typeName[(int)_type]}][0x{DangerousGetHandle():X11}]";
 }
 
 internal enum SafeHandleType
@@ -74,36 +91,39 @@ internal sealed class MsQuicContextSafeHandle : MsQuicSafeHandle
     /// <summary>
     /// Optional parent safe handle, used to increment/decrement reference count with the lifetime of this instance.
     /// </summary>
-    private MsQuicSafeHandle? _parent;
+    private readonly MsQuicSafeHandle? _parent;
 
-    public unsafe MsQuicContextSafeHandle(QUIC_HANDLE* handle, GCHandle context, delegate* unmanaged[Cdecl]<QUIC_HANDLE*, void> releaseAction, SafeHandleType safeHandleType, MsQuicSafeHandle? parent = null)
-        : base(handle, releaseAction, safeHandleType)
+    /// <summary>
+    /// Additional, dependent object to be disposed only after the safe handle gets released.
+    /// </summary>
+    private IDisposable? _disposable;
+
+    public IDisposable Disposable
+    {
+        set
+        {
+            Debug.Assert(_disposable is null);
+            _disposable = value;
+        }
+    }
+
+    public unsafe MsQuicContextSafeHandle(QUIC_HANDLE* handle, GCHandle context, SafeHandleType safeHandleType, MsQuicSafeHandle? parent = null)
+        : base(handle, safeHandleType)
     {
         _context = context;
-        _parent = parent;
-        if (_parent is not null)
+        if (parent is not null)
         {
-            bool release = false;
-            _parent.DangerousAddRef(ref release);
-            if (!release)
+            bool success = false;
+            parent.DangerousAddRef(ref success);
+            _parent = parent;
+            if (NetEventSource.Log.IsEnabled())
             {
-                if (NetEventSource.Log.IsEnabled())
-                {
-                    NetEventSource.Error(this, $"{this} {_parent} ref count not incremented");
-                }
-                _parent = null;
-            }
-            else
-            {
-                if (NetEventSource.Log.IsEnabled())
-                {
-                    NetEventSource.Info(this, $"{this} {_parent} ref count incremented");
-                }
+                NetEventSource.Info(this, $"{this} {_parent} ref count incremented");
             }
         }
     }
 
-    protected override bool ReleaseHandle()
+    protected override unsafe bool ReleaseHandle()
     {
         base.ReleaseHandle();
         if (_context.IsAllocated)
@@ -118,6 +138,7 @@ internal sealed class MsQuicContextSafeHandle : MsQuicSafeHandle
                 NetEventSource.Info(this, $"{this} {_parent} ref count decremented");
             }
         }
+        _disposable?.Dispose();
         return true;
     }
 }

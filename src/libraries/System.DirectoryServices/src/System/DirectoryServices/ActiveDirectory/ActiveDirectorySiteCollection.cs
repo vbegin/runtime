@@ -1,8 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.InteropServices;
 using System.Collections;
+using System.Runtime.InteropServices;
 
 namespace System.DirectoryServices.ActiveDirectory
 {
@@ -174,7 +174,7 @@ namespace System.DirectoryServices.ActiveDirectory
             }
         }
 
-#pragma warning disable CS8765 // Nullability doesn't match overriden member
+#pragma warning disable CS8765 // Nullability doesn't match overridden member
         protected override void OnInsertComplete(int index, object value)
 #pragma warning restore CS8765
         {
@@ -193,7 +193,7 @@ namespace System.DirectoryServices.ActiveDirectory
             }
         }
 
-#pragma warning disable CS8765 // Nullability doesn't match overriden member
+#pragma warning disable CS8765 // Nullability doesn't match overridden member
         protected override void OnRemoveComplete(int index, object value)
 #pragma warning restore CS8765
         {
@@ -209,7 +209,7 @@ namespace System.DirectoryServices.ActiveDirectory
             }
         }
 
-#pragma warning disable CS8765 // Nullability doesn't match overriden member
+#pragma warning disable CS8765 // Nullability doesn't match overridden member
         protected override void OnSetComplete(int index, object oldValue, object newValue)
 #pragma warning restore CS8765
         {

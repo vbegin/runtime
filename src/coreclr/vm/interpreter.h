@@ -60,7 +60,7 @@ typedef SIZE_T NativePtr;
 
 #define NYI_INTERP(msg) _ASSERTE_MSG(false, msg)
 // I wanted to define NYI_INTERP as the following in retail:
-//   #define NYI_INTERP(msg) _ASSERTE_ALL_BUILDS(__FILE__, false)
+//   #define NYI_INTERP(msg) _ASSERTE_ALL_BUILDS(false)
 // but doing so gave a very odd unreachable code error.
 
 
@@ -148,7 +148,7 @@ class InterpreterType
     // low-order bits of a "real" CORINFO_CLASS_HANDLE are zero, then use them as follows:
     //    0x0 ==> if "ci" is a non-struct CORINFO_TYPE_* value, m_tp contents are (ci << 2).
     //    0x1, 0x3 ==> is a CORINFO_CLASS_HANDLE "sh" for a struct type, or'd with 0x1 and possibly 0x2.
-    //       0x2 is added to indicate that an instance does not fit in a INT64 stack slot on the plaform, and
+    //       0x2 is added to indicate that an instance does not fit in a INT64 stack slot on the platform, and
     //         should be referenced via a level of indirection.
     //    0x2 (exactly) indicates that it is a "native struct type".
     //
@@ -414,11 +414,13 @@ struct CORINFO_SIG_INFO_SMALL
     unsigned                numArgs : 16;
     CorInfoCallConv         callConv: 8;
     CorInfoType             retType : 8;
+    bool                    fHasThis;
 
     CorInfoCallConv     getCallConv()       { return CorInfoCallConv((callConv & CORINFO_CALLCONV_MASK)); }
-    bool                hasThis()           { return ((callConv & CORINFO_CALLCONV_HASTHIS) != 0); }
+    bool                hasThis()           { return fHasThis; }
     bool                hasExplicitThis()   { return ((callConv & CORINFO_CALLCONV_EXPLICITTHIS) != 0); }
-    unsigned            totalILArgs()       { return (numArgs + hasThis()); }
+    bool                hasImplicitThis()   { return hasThis() && !hasExplicitThis(); }
+    unsigned            totalILArgs()       { return (numArgs + (hasImplicitThis() ? 1 : 0)); }
     bool                isVarArg()          { return ((getCallConv() == CORINFO_CALLCONV_VARARG) || (getCallConv() == CORINFO_CALLCONV_NATIVEVARARG)); }
     bool                hasTypeArg()        { return ((callConv & CORINFO_CALLCONV_PARAMTYPE) != 0); }
 
@@ -428,9 +430,16 @@ struct CORINFO_SIG_INFO_SMALL
         return retTypeClass == csis.retTypeClass
             && numArgs == csis.numArgs
             && callConv == csis.callConv
-            && retType == csis.retType;
+            && retType == csis.retType
+            && fHasThis == csis.fHasThis;
     }
 #endif // _DEBUG
+
+    static bool ComputeHasThis(MethodDesc* pMD)
+    {
+        MetaSig sig(pMD);
+        return ArgIterator(&sig, pMD).HasThis();
+    }
 };
 
 struct CallSiteCacheData
@@ -539,7 +548,7 @@ typedef InterpreterCache<size_t, ILOffsetToItemCache*> GenericContextToInnerCach
 
 #endif // DACCESS_COMPILE
 
-// This is the information that the intepreter stub provides to the
+// This is the information that the interpreter stub provides to the
 // interpreter about the method being interpreted.
 struct InterpreterMethodInfo
 {
@@ -647,7 +656,7 @@ struct InterpreterMethodInfo
 
 
     // This is an array of size at least "m_numArgs", such that entry "i" describes the "i'th"
-    // arg in the "m_ilArgs" array passed to the intepreter: that is, the ArgDesc contains the type, stack-normal type,
+    // arg in the "m_ilArgs" array passed to the interpreter: that is, the ArgDesc contains the type, stack-normal type,
     // and offset in the "m_ilArgs" array of that argument.  In addition, has extra entries if "m_hasGenericsContextArg"
     // and/or "m_hasRetBuffArg" are true, giving the offset of those arguments -- the offsets of those arguments
     // are in that order in the array.  (The corresponding types should be NativeInt.)
@@ -723,14 +732,6 @@ class InterpreterCEEInfo: public CEEInfo
     CEEJitInfo m_jitInfo;
 public:
     InterpreterCEEInfo(CORINFO_METHOD_HANDLE meth): CEEInfo((MethodDesc*)meth), m_jitInfo((MethodDesc*)meth, NULL, NULL, CORJIT_FLAGS::CORJIT_FLAG_SPEED_OPT) { }
-
-    // Certain methods are unimplemented by CEEInfo (they hit an assert).  They are implemented by CEEJitInfo, yet
-    // don't seem to require any of the CEEJitInfo state we can't provide.  For those case, delegate to the "partial"
-    // CEEJitInfo m_jitInfo.
-    void addActiveDependency(CORINFO_MODULE_HANDLE moduleFrom,CORINFO_MODULE_HANDLE moduleTo)
-    {
-        m_jitInfo.addActiveDependency(moduleFrom, moduleTo);
-    }
 };
 
 extern INT64 F_CALL_CONV InterpretMethod(InterpreterMethodInfo* methInfo, BYTE* ilArgs, void* stubContext);
@@ -828,7 +829,7 @@ public:
         {
             if (methInfo_->m_localDescs[i].m_type.IsLargeStruct(&m_interpCeeInfo))
             {
-                void* structPtr = ArgSlotEndianessFixup(reinterpret_cast<ARG_SLOT*>(FixedSizeLocalSlot(i)), sizeof(void**));
+                void* structPtr = ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(FixedSizeLocalSlot(i)), sizeof(void**));
                 *reinterpret_cast<void**>(structPtr) = LargeStructLocalSlot(i);
             }
         }
@@ -912,6 +913,16 @@ public:
     OBJECTREF* GetAddressOfSecurityObject() { return &m_securityObject; }
 
     void*      GetParamTypeArg() { return m_genericsCtxtArg; }
+
+    // Also see namedintrinsiclist.h
+    enum InterpreterNamedIntrinsics : unsigned short
+    {
+        NI_Illegal = 0,
+        NI_System_StubHelpers_GetStubContext,
+        NI_System_Runtime_InteropService_MemoryMarshal_GetArrayDataReference,
+    };
+    static InterpreterNamedIntrinsics getNamedIntrinsicID(CEEInfo* info, CORINFO_METHOD_HANDLE methodHnd);
+    static const char* getMethodName(CEEInfo* info, CORINFO_METHOD_HANDLE hnd, const char** className, const char** namespaceName = NULL, const char **enclosingClassName = NULL);
 
 private:
     // Architecture-dependent helpers.
@@ -1003,6 +1014,8 @@ private:
         static const int MaxNumFPRegArgSlots = 4;
 #endif
 #elif defined(HOST_LOONGARCH64)
+        static const int MaxNumFPRegArgSlots = 8;
+#elif defined(HOST_RISCV64)
         static const int MaxNumFPRegArgSlots = 8;
 #endif
 
@@ -1212,23 +1225,23 @@ private:
     template<typename T>
     __forceinline T* OpStackGetAddr(unsigned ind)
     {
-        return reinterpret_cast<T*>(ArgSlotEndianessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStackX[ind].m_val), sizeof(T)));
+        return reinterpret_cast<T*>(ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStackX[ind].m_val), sizeof(T)));
     }
 
     __forceinline void* OpStackGetAddr(unsigned ind, size_t sz)
     {
-        return ArgSlotEndianessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStackX[ind].m_val), sz);
+        return ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStackX[ind].m_val), sz);
     }
 #else
     template<typename T>
     __forceinline T* OpStackGetAddr(unsigned ind)
     {
-        return reinterpret_cast<T*>(ArgSlotEndianessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStack[ind]), sizeof(T)));
+        return reinterpret_cast<T*>(ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStack[ind]), sizeof(T)));
     }
 
     __forceinline void* OpStackGetAddr(unsigned ind, size_t sz)
     {
-        return ArgSlotEndianessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStack[ind]), sz);
+        return ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(&m_operandStack[ind]), sz);
     }
 #endif
 
@@ -1237,7 +1250,7 @@ private:
         _ASSERTE(sz <= sizeof(INT64));
 
         INT64 ret = 0;
-        memcpy(ArgSlotEndianessFixup(reinterpret_cast<ARG_SLOT*>(&ret), sz), src, sz);
+        memcpy(ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(&ret), sz), src, sz);
         return ret;
     }
 
@@ -1776,6 +1789,7 @@ private:
     void DoGetTypeFromHandle();
     void DoSIMDHwAccelerated();
     void DoGetIsSupported();
+    void DoGetArrayDataReference();
 
     // Returns the proper generics context for use in resolving tokens ("precise" in the sense of including generic instantiation
     // information).
@@ -2063,6 +2077,8 @@ unsigned short Interpreter::NumberOfIntegerRegArgs() { return 4; }
 #elif defined(HOST_ARM64)
 unsigned short Interpreter::NumberOfIntegerRegArgs() { return 8; }
 #elif defined(HOST_LOONGARCH64)
+unsigned short Interpreter::NumberOfIntegerRegArgs() { return 8; }
+#elif defined(HOST_RISCV64)
 unsigned short Interpreter::NumberOfIntegerRegArgs() { return 8; }
 #else
 #error Unsupported architecture.

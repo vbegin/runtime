@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Reflection;
 using System.IO;
+using Xunit;
 
 class InstanceFieldTest : MyClass
 {
@@ -48,7 +49,7 @@ static class OpenClosedDelegateExtension
     }
 }
 
-class Program
+public class Program
 {
     static void TestVirtualMethodCalls()
     {
@@ -65,8 +66,18 @@ class Program
             // Make sure the constrained call to ToString doesn't box
             var mystruct = new MyStructWithVirtuals();
             mystruct.ToString();
-            Assert.AreEqual(mystruct.X, "Overriden");
+            Assert.AreEqual(mystruct.X, "Overridden");
         }
+    }
+
+    static void TestThrowHelpers()
+    {
+        try
+        {
+            MyClass.ThrowIOE();
+            // JIT is not allowed to assume Throw() will always be "no-return"
+        }
+        catch (InvalidOperationException) {}
     }
 
     static void TestMovedVirtualMethods()
@@ -414,6 +425,13 @@ class Program
             Assert.AreEqual(value[i], (byte)(9 - i));
     }
 
+    // public constructor, so we run something when loading from byte array in the test below
+    public Program()
+    {
+        // do something in the constructor to see if it works
+        TestVirtualMethodCalls();
+    }
+
     static void TestLoadR2RImageFromByteArray()
     {
         Assembly assembly1 = typeof(Program).Assembly;
@@ -422,6 +440,8 @@ class Program
         Assembly assembly2 = Assembly.Load(array);
 
         Assert.AreEqual(assembly2.FullName, assembly1.FullName);
+
+        assembly2.CreateInstance("Program");
     }
 
     [MethodImplAttribute(MethodImplOptions.NoInlining)]
@@ -432,12 +452,28 @@ class Program
         Assert.AreEqual(ILInliningTest.TestDifferentIntValue(), actualMethodCallResult);
     }
 
+    private class CallDefaultVsExactStaticVirtual<T> where T : IDefaultVsExactStaticVirtual
+    {
+        public static string CallMethodOnGenericType() => T.Method();
+    }
+
+    [MethodImplAttribute(MethodImplOptions.NoInlining)]
+    static void TestDefaultVsExactStaticVirtualMethodImplementation()
+    {
+        Assert.AreEqual(CallDefaultVsExactStaticVirtual<DefaultVsExactStaticVirtualClass>.CallMethodOnGenericType(), "DefaultVsExactStaticVirtualMethod");
+        // Naively one would expect that the following should do, however Roslyn fails to compile it claiming that the type DVESVC doesn't contain 'Method':
+        // Assert.AreEqual(DefaultVsExactStaticVirtualClass.Method(), "DefaultVsExactStaticVirtualMethod");
+    }
+
     static void RunAllTests()
     {
         Console.WriteLine("TestVirtualMethodCalls");
         TestVirtualMethodCalls();
         Console.WriteLine("TestMovedVirtualMethod");
         TestMovedVirtualMethods();
+
+        Console.WriteLine("TestThrowHelpers");
+        TestThrowHelpers();
 
         Console.WriteLine("TestConstrainedMethodCalls");
         TestConstrainedMethodCalls();
@@ -513,16 +549,19 @@ class Program
         Console.WriteLine("RVAFieldTest");
         RVAFieldTest();
 
-//        Disable for https://github.com/dotnet/runtime/issues/71507
-//        Console.WriteLine("TestLoadR2RImageFromByteArray");
-//        TestLoadR2RImageFromByteArray();
+        Console.WriteLine("TestLoadR2RImageFromByteArray");
+        TestLoadR2RImageFromByteArray();
 
         Console.WriteLine("TestILBodyChange");
         TestILBodyChange();
+        
+        Console.WriteLine("TestDefaultVsExactStaticVirtualMethodImplementation");
+        TestDefaultVsExactStaticVirtualMethodImplementation();
+        
         ILInliningVersioningTest<LocallyDefinedStructure>.RunAllTests(typeof(Program).Assembly);
     }
 
-    static int Main()
+    public static int Main()
     {
         // Run all tests 3x times to exercise both slow and fast paths work
         for (int i = 0; i < 3; i++)

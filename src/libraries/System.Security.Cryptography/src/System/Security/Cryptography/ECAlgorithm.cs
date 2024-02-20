@@ -1,9 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Internal.Cryptography;
 using System.Formats.Asn1;
 using System.Security.Cryptography.Asn1;
+using Internal.Cryptography;
 
 namespace System.Security.Cryptography
 {
@@ -17,6 +17,12 @@ namespace System.Security.Cryptography
         {
             Oids.EcPublicKey,
             // ECDH and ECMQV are not valid in this context.
+        };
+
+        private protected static readonly KeySizes[] s_defaultKeySizes =
+        {
+            new KeySizes(minSize: 256, maxSize: 384, skipSize: 128),
+            new KeySizes(minSize: 521, maxSize: 521, skipSize: 0),
         };
 
         /// <summary>

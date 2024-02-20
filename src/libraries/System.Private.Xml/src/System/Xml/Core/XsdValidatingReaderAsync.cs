@@ -1,17 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.IO;
-using System.Text;
-using System.Xml.Schema;
-using System.Xml.XPath;
-using System.Diagnostics;
-using System.Globalization;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Runtime.Versioning;
-
+using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Schema;
+using System.Xml.XPath;
 
 namespace System.Xml
 {
@@ -92,7 +91,7 @@ namespace System.Xml
             {
                 if (xmlType != null)
                 {
-                    // special-case convertions to DateTimeOffset; typedValue is by default a DateTime
+                    // special-case conversions to DateTimeOffset; typedValue is by default a DateTime
                     // which cannot preserve time zone, so we need to convert from the original string
                     if (returnType == typeof(DateTimeOffset) && xmlType.Datatype is Datatype_dateTimeBase)
                     {
@@ -192,7 +191,7 @@ namespace System.Xml
             {
                 if (xmlType != null)
                 {
-                    // special-case convertions to DateTimeOffset; typedValue is by default a DateTime
+                    // special-case conversions to DateTimeOffset; typedValue is by default a DateTime
                     // which cannot preserve time zone, so we need to convert from the original string
                     if (returnType == typeof(DateTimeOffset) && xmlType.Datatype is Datatype_dateTimeBase)
                     {
@@ -506,13 +505,13 @@ namespace System.Xml
 
                 case XmlNodeType.Whitespace:
                 case XmlNodeType.SignificantWhitespace:
-                    _validator.ValidateWhitespace(GetStringValue);
-                    break;
+
+                    return ValidateWhitespace(GetValueAsync(), _validator);
 
                 case XmlNodeType.Text:          // text inside a node
                 case XmlNodeType.CDATA:         // <![CDATA[...]]>
-                    _validator.ValidateText(GetStringValue);
-                    break;
+
+                    return ValidateText(GetValueAsync(), _validator);
 
                 case XmlNodeType.EndElement:
 
@@ -534,6 +533,10 @@ namespace System.Xml
             }
 
             return Task.CompletedTask;
+
+            static async Task ValidateWhitespace(Task<string> t, XmlSchemaValidator validator) => validator.ValidateWhitespace(await t.ConfigureAwait(false));
+
+            static async Task ValidateText(Task<string> t, XmlSchemaValidator validator) => validator.ValidateText(await t.ConfigureAwait(false));
         }
 
         private async Task ProcessElementEventAsync()
@@ -867,12 +870,12 @@ namespace System.Xml
 
                         case XmlNodeType.Text:
                         case XmlNodeType.CDATA:
-                            _validator.ValidateText(GetStringValue);
+                            _validator.ValidateText(await GetValueAsync().ConfigureAwait(false));
                             break;
 
                         case XmlNodeType.Whitespace:
                         case XmlNodeType.SignificantWhitespace:
-                            _validator.ValidateWhitespace(GetStringValue);
+                            _validator.ValidateWhitespace(await GetValueAsync().ConfigureAwait(false));
                             break;
 
                         case XmlNodeType.Comment:

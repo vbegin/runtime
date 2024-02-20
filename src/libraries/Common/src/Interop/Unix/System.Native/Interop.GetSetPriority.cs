@@ -2,8 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 internal static partial class Interop
 {
@@ -32,7 +32,7 @@ internal static partial class Interop
         internal static int GetPriority(PriorityWhich which, int who, out int priority)
         {
             priority = GetPriority(which, who);
-            return Marshal.GetLastWin32Error();
+            return Marshal.GetLastPInvokeError();
         }
 
         internal static System.Diagnostics.ThreadPriorityLevel GetThreadPriorityFromNiceValue(int nice)

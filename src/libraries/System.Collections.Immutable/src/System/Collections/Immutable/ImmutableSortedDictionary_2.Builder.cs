@@ -178,12 +178,12 @@ namespace System.Collections.Immutable
                 get
                 {
                     TValue value;
-                    if (this.TryGetValue(key, out value!))
+                    if (!this.TryGetValue(key, out value!))
                     {
-                        return value;
+                        ThrowHelper.ThrowKeyNotFoundException(key);
                     }
 
-                    throw new KeyNotFoundException(SR.Format(SR.Arg_KeyNotFoundWithKey, key.ToString()));
+                    return value;
                 }
 
                 set
@@ -303,9 +303,9 @@ namespace System.Collections.Immutable
                     Requires.NotNull(value, nameof(value));
                     if (value != _keyComparer)
                     {
-                        var newRoot = Node.EmptyNode;
+                        ImmutableSortedDictionary<TKey, TValue>.Node newRoot = Node.EmptyNode;
                         int count = 0;
-                        foreach (var item in this)
+                        foreach (KeyValuePair<TKey, TValue> item in this)
                         {
                             bool mutated;
                             newRoot = newRoot.Add(item.Key, item.Value, value, _valueComparer, out mutated);
@@ -576,7 +576,7 @@ namespace System.Collections.Immutable
             {
                 Requires.NotNull(items, nameof(items));
 
-                foreach (var pair in items)
+                foreach (KeyValuePair<TKey, TValue> pair in items)
                 {
                     this.Add(pair);
                 }
@@ -590,7 +590,7 @@ namespace System.Collections.Immutable
             {
                 Requires.NotNull(keys, nameof(keys));
 
-                foreach (var key in keys)
+                foreach (TKey key in keys)
                 {
                     this.Remove(key);
                 }

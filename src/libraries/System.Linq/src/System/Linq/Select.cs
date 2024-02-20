@@ -32,9 +32,12 @@ namespace System.Linq
             {
                 if (source is TSource[] array)
                 {
-                    return array.Length == 0 ?
-                        Empty<TResult>() :
-                        new SelectArrayIterator<TSource, TResult>(array, selector);
+                    if (array.Length == 0)
+                    {
+                        return [];
+                    }
+
+                    return new SelectArrayIterator<TSource, TResult>(array, selector);
                 }
 
                 if (source is List<TSource> list)
@@ -58,8 +61,10 @@ namespace System.Linq
             return new SelectEnumerableIterator<TSource, TResult>(source, selector);
         }
 
+#pragma warning disable IDE0060 // https://github.com/dotnet/roslyn-analyzers/issues/6177
         static partial void CreateSelectIPartitionIterator<TResult, TSource>(
             Func<TSource, TResult> selector, IPartition<TSource> partition, [NotNull] ref IEnumerable<TResult>? result);
+#pragma warning restore IDE0060
 
         public static IEnumerable<TResult> Select<TSource, TResult>(this IEnumerable<TSource> source, Func<TSource, int, TResult> selector)
         {
@@ -71,6 +76,11 @@ namespace System.Linq
             if (selector == null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.selector);
+            }
+
+            if (IsEmptyArray(source))
+            {
+                return [];
             }
 
             return SelectIterator(source, selector);
@@ -176,15 +186,17 @@ namespace System.Linq
 
             public override bool MoveNext()
             {
-                if (_state < 1 | _state == _source.Length + 1)
+                TSource[] source = _source;
+                int index = _state - 1;
+                if ((uint)index < (uint)source.Length)
                 {
-                    Dispose();
-                    return false;
+                    _state++;
+                    _current = _selector(source[index]);
+                    return true;
                 }
 
-                int index = _state++ - 1;
-                _current = _selector(_source[index]);
-                return true;
+                Dispose();
+                return false;
             }
 
             public override IEnumerable<TResult2> Select<TResult2>(Func<TResult, TResult2> selector) =>

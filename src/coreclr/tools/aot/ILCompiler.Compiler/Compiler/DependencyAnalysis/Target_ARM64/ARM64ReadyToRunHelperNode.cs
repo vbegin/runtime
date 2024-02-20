@@ -23,7 +23,7 @@ namespace ILCompiler.DependencyAnalysis
                         MethodDesc targetMethod = (MethodDesc)Target;
 
                         Debug.Assert(!targetMethod.OwningType.IsInterface);
-                        Debug.Assert(!targetMethod.CanMethodBeInSealedVTable());
+                        Debug.Assert(!targetMethod.CanMethodBeInSealedVTable(factory));
 
                         int pointerSize = factory.Target.PointerSize;
 
@@ -56,8 +56,8 @@ namespace ILCompiler.DependencyAnalysis
                         {
                             // We need to trigger the cctor before returning the base. It is stored at the beginning of the non-GC statics region.
                             encoder.EmitSUB(encoder.TargetRegister.Arg3, encoder.TargetRegister.Result, NonGCStaticsNode.GetClassConstructorContextSize(factory.Target));
-                            encoder.EmitLDR(encoder.TargetRegister.Arg2, encoder.TargetRegister.Arg3, (short)factory.Target.PointerSize);
-                            encoder.EmitCMP(encoder.TargetRegister.Arg2, 1);
+                            encoder.EmitLDR(encoder.TargetRegister.Arg2, encoder.TargetRegister.Arg3);
+                            encoder.EmitCMP(encoder.TargetRegister.Arg2, 0);
                             encoder.EmitRETIfEqual();
 
                             encoder.EmitMOV(encoder.TargetRegister.Arg1, encoder.TargetRegister.Result);
@@ -71,30 +71,39 @@ namespace ILCompiler.DependencyAnalysis
                 case ReadyToRunHelperId.GetThreadStaticBase:
                     {
                         MetadataType target = (MetadataType)Target;
-                        encoder.EmitMOV(encoder.TargetRegister.Arg2, factory.TypeThreadStaticIndex(target));
-
-                        // First arg: address of the TypeManager slot that provides the helper with
-                        // information about module index and the type manager instance (which is used
-                        // for initialization on first access).
-                        encoder.EmitLDR(encoder.TargetRegister.Arg0, encoder.TargetRegister.Arg2);
-
-                        // Second arg: index of the type in the ThreadStatic section of the modules
-                        encoder.EmitLDR(encoder.TargetRegister.Arg1, encoder.TargetRegister.Arg2, factory.Target.PointerSize);
-
-                        if (!factory.PreinitializationManager.HasLazyStaticConstructor(target))
+                        ISortableSymbolNode index = factory.TypeThreadStaticIndex(target);
+                        if (index is TypeThreadStaticIndexNode ti && ti.IsInlined)
                         {
-                            encoder.EmitJMP(factory.HelperEntrypoint(HelperEntrypoint.GetThreadStaticBaseForType));
+                            throw new NotImplementedException();
                         }
                         else
                         {
-                            encoder.EmitMOV(encoder.TargetRegister.Arg2, factory.TypeNonGCStaticsSymbol(target));
-                            encoder.EmitSUB(encoder.TargetRegister.Arg2, NonGCStaticsNode.GetClassConstructorContextSize(factory.Target));
+                            encoder.EmitMOV(encoder.TargetRegister.Arg2, index);
 
-                            encoder.EmitLDR(encoder.TargetRegister.Arg3, encoder.TargetRegister.Arg2, (short)factory.Target.PointerSize);
-                            encoder.EmitCMP(encoder.TargetRegister.Arg3, 1);
-                            encoder.EmitJE(factory.HelperEntrypoint(HelperEntrypoint.GetThreadStaticBaseForType));
+                            // First arg: address of the TypeManager slot that provides the helper with
+                            // information about module index and the type manager instance (which is used
+                            // for initialization on first access).
+                            encoder.EmitLDR(encoder.TargetRegister.Arg0, encoder.TargetRegister.Arg2);
 
-                            encoder.EmitJMP(factory.HelperEntrypoint(HelperEntrypoint.EnsureClassConstructorRunAndReturnThreadStaticBase));
+                            // Second arg: index of the type in the ThreadStatic section of the modules
+                            encoder.EmitLDR(encoder.TargetRegister.Arg1, encoder.TargetRegister.Arg2, factory.Target.PointerSize);
+
+                            ISymbolNode helper = factory.HelperEntrypoint(HelperEntrypoint.GetThreadStaticBaseForType);
+                            if (!factory.PreinitializationManager.HasLazyStaticConstructor(target))
+                            {
+                                encoder.EmitJMP(helper);
+                            }
+                            else
+                            {
+                                encoder.EmitMOV(encoder.TargetRegister.Arg2, factory.TypeNonGCStaticsSymbol(target));
+                                encoder.EmitSUB(encoder.TargetRegister.Arg2, NonGCStaticsNode.GetClassConstructorContextSize(factory.Target));
+
+                                encoder.EmitLDR(encoder.TargetRegister.Arg3, encoder.TargetRegister.Arg2);
+                                encoder.EmitCMP(encoder.TargetRegister.Arg3, 0);
+                                encoder.EmitJE(helper);
+
+                                encoder.EmitJMP(factory.HelperEntrypoint(HelperEntrypoint.EnsureClassConstructorRunAndReturnThreadStaticBase));
+                            }
                         }
                     }
                     break;
@@ -115,8 +124,8 @@ namespace ILCompiler.DependencyAnalysis
                             // We need to trigger the cctor before returning the base. It is stored at the beginning of the non-GC statics region.
                             encoder.EmitMOV(encoder.TargetRegister.Arg2, factory.TypeNonGCStaticsSymbol(target));
                             encoder.EmitSUB(encoder.TargetRegister.Arg2, NonGCStaticsNode.GetClassConstructorContextSize(factory.Target));
-                            encoder.EmitLDR(encoder.TargetRegister.Arg3, encoder.TargetRegister.Arg2, (short)factory.Target.PointerSize);
-                            encoder.EmitCMP(encoder.TargetRegister.Arg3, 1);
+                            encoder.EmitLDR(encoder.TargetRegister.Arg3, encoder.TargetRegister.Arg2);
+                            encoder.EmitCMP(encoder.TargetRegister.Arg3, 0);
                             encoder.EmitRETIfEqual();
 
                             encoder.EmitMOV(encoder.TargetRegister.Arg1, encoder.TargetRegister.Result);
@@ -133,7 +142,7 @@ namespace ILCompiler.DependencyAnalysis
 
                         if (target.TargetNeedsVTableLookup)
                         {
-                            Debug.Assert(!target.TargetMethod.CanMethodBeInSealedVTable());
+                            Debug.Assert(!target.TargetMethod.CanMethodBeInSealedVTable(factory));
 
                             encoder.EmitLDR(encoder.TargetRegister.Arg2, encoder.TargetRegister.Arg1);
 
@@ -166,12 +175,12 @@ namespace ILCompiler.DependencyAnalysis
 
                 case ReadyToRunHelperId.ResolveVirtualFunction:
                     {
-                        // Not tested
-                        encoder.EmitINT3();
-
                         MethodDesc targetMethod = (MethodDesc)Target;
                         if (targetMethod.OwningType.IsInterface)
                         {
+                            // Not tested
+                            encoder.EmitINT3();
+
                             encoder.EmitMOV(encoder.TargetRegister.Arg1, factory.InterfaceDispatchCell(targetMethod));
                             encoder.EmitJMP(factory.ExternSymbol("RhpResolveInterfaceMethod"));
                         }
@@ -182,7 +191,7 @@ namespace ILCompiler.DependencyAnalysis
 
                             encoder.EmitLDR(encoder.TargetRegister.Result, encoder.TargetRegister.Arg0);
 
-                            Debug.Assert(!targetMethod.CanMethodBeInSealedVTable());
+                            Debug.Assert(!targetMethod.CanMethodBeInSealedVTable(factory));
 
                             int slot = VirtualMethodSlotHelper.GetVirtualMethodSlot(factory, targetMethod, targetMethod.OwningType);
                             Debug.Assert(slot != -1);

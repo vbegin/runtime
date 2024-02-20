@@ -17,7 +17,9 @@ namespace System
     public readonly struct Int128
         : IBinaryInteger<Int128>,
           IMinMaxValue<Int128>,
-          ISignedNumber<Int128>
+          ISignedNumber<Int128>,
+          IUtf8SpanFormattable,
+          IBinaryIntegerParseAndFormatInfo<Int128>
     {
         internal const int Size = 16;
 
@@ -118,75 +120,56 @@ namespace System
             return Number.TryFormatInt128(this, format, provider, destination, out charsWritten);
         }
 
-        public static Int128 Parse(string s)
+        /// <inheritdoc cref="IUtf8SpanFormattable.TryFormat" />
+        public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, [StringSyntax(StringSyntaxAttribute.NumericFormat)] ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
         {
-            ArgumentNullException.ThrowIfNull(s);
-            return Number.ParseInt128(s, NumberStyles.Integer, NumberFormatInfo.CurrentInfo);
+            return Number.TryFormatInt128(this, format, provider, utf8Destination, out bytesWritten);
         }
 
-        public static Int128 Parse(string s, NumberStyles style)
-        {
-            ArgumentNullException.ThrowIfNull(s);
-            NumberFormatInfo.ValidateParseStyleInteger(style);
-            return Number.ParseInt128(s, style, NumberFormatInfo.CurrentInfo);
-        }
+        public static Int128 Parse(string s) => Parse(s, NumberStyles.Integer, provider: null);
 
-        public static Int128 Parse(string s, IFormatProvider? provider)
-        {
-            ArgumentNullException.ThrowIfNull(s);
-            return Number.ParseInt128(s, NumberStyles.Integer, NumberFormatInfo.GetInstance(provider));
-        }
+        public static Int128 Parse(string s, NumberStyles style) => Parse(s, style, provider: null);
+
+        public static Int128 Parse(string s, IFormatProvider? provider) => Parse(s, NumberStyles.Integer, provider);
 
         public static Int128 Parse(string s, NumberStyles style, IFormatProvider? provider)
         {
-            ArgumentNullException.ThrowIfNull(s);
-            NumberFormatInfo.ValidateParseStyleInteger(style);
-            return Number.ParseInt128(s, style, NumberFormatInfo.GetInstance(provider));
+            if (s is null) { ThrowHelper.ThrowArgumentNullException(ExceptionArgument.s); }
+            return Parse(s.AsSpan(), style, provider);
         }
 
         public static Int128 Parse(ReadOnlySpan<char> s, NumberStyles style = NumberStyles.Integer, IFormatProvider? provider = null)
         {
             NumberFormatInfo.ValidateParseStyleInteger(style);
-            return Number.ParseInt128(s, style, NumberFormatInfo.GetInstance(provider));
+            return Number.ParseBinaryInteger<char, Int128>(s, style, NumberFormatInfo.GetInstance(provider));
         }
 
-        public static bool TryParse([NotNullWhen(true)] string? s, out Int128 result)
-        {
-            if (s is not null)
-            {
-                return Number.TryParseInt128IntegerStyle(s, NumberStyles.Integer, NumberFormatInfo.CurrentInfo, out result) == Number.ParsingStatus.OK;
-            }
-            else
-            {
-                result = default;
-                return false;
-            }
-        }
+        public static bool TryParse([NotNullWhen(true)] string? s, out Int128 result) => TryParse(s, NumberStyles.Integer, provider: null, out result);
 
-        public static bool TryParse(ReadOnlySpan<char> s, out Int128 result)
-        {
-            return Number.TryParseInt128IntegerStyle(s, NumberStyles.Integer, NumberFormatInfo.CurrentInfo, out result) == Number.ParsingStatus.OK;
-        }
+        public static bool TryParse(ReadOnlySpan<char> s, out Int128 result) => TryParse(s, NumberStyles.Integer, provider: null, out result);
+
+        /// <summary>Tries to convert a UTF-8 character span containing the string representation of a number to its 128-bit signed integer equivalent.</summary>
+        /// <param name="utf8Text">A span containing the UTF-8 characters representing the number to convert.</param>
+        /// <param name="result">When this method returns, contains the 128-bit signed integer value equivalent to the number contained in <paramref name="utf8Text" /> if the conversion succeeded, or zero if the conversion failed. This parameter is passed uninitialized; any value originally supplied in result will be overwritten.</param>
+        /// <returns><c>true</c> if <paramref name="utf8Text" /> was converted successfully; otherwise, false.</returns>
+        public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Int128 result) => TryParse(utf8Text, NumberStyles.Integer, provider: null, out result);
 
         public static bool TryParse([NotNullWhen(true)] string? s, NumberStyles style, IFormatProvider? provider, out Int128 result)
         {
             NumberFormatInfo.ValidateParseStyleInteger(style);
 
-            if (s is not null)
+            if (s is null)
             {
-                return Number.TryParseInt128(s, style, NumberFormatInfo.GetInstance(provider), out result) == Number.ParsingStatus.OK;
-            }
-            else
-            {
-                result = default;
+                result = 0;
                 return false;
             }
+            return Number.TryParseBinaryInteger(s.AsSpan(), style, NumberFormatInfo.GetInstance(provider), out result) == Number.ParsingStatus.OK;
         }
 
         public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out Int128 result)
         {
             NumberFormatInfo.ValidateParseStyleInteger(style);
-            return Number.TryParseInt128(s, style, NumberFormatInfo.GetInstance(provider), out result) == Number.ParsingStatus.OK;
+            return Number.TryParseBinaryInteger(s, style, NumberFormatInfo.GetInstance(provider), out result) == Number.ParsingStatus.OK;
         }
 
         //
@@ -759,12 +742,17 @@ namespace System
 
         /// <inheritdoc cref="IBinaryInteger{TSelf}.LeadingZeroCount(TSelf)" />
         public static Int128 LeadingZeroCount(Int128 value)
+            => LeadingZeroCountAsInt32(value);
+
+        /// <summary>Computes the number of leading zero bits in this value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int LeadingZeroCountAsInt32(Int128 value)
         {
             if (value._upper == 0)
             {
-                return 64 + ulong.LeadingZeroCount(value._lower);
+                return 64 + BitOperations.LeadingZeroCount(value._lower);
             }
-            return ulong.LeadingZeroCount(value._upper);
+            return BitOperations.LeadingZeroCount(value._upper);
         }
 
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
@@ -789,6 +777,173 @@ namespace System
             return ulong.TrailingZeroCount(value._lower);
         }
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.TryReadBigEndian(ReadOnlySpan{byte}, bool, out TSelf)" />
+        static bool IBinaryInteger<Int128>.TryReadBigEndian(ReadOnlySpan<byte> source, bool isUnsigned, out Int128 value)
+        {
+            Int128 result = default;
+
+            if (source.Length != 0)
+            {
+                // Propagate the most significant bit so we have `0` or `-1`
+                sbyte sign = (sbyte)(source[0]);
+                sign >>= 31;
+                Debug.Assert((sign == 0) || (sign == -1));
+
+                // We need to also track if the input data is unsigned
+                isUnsigned |= (sign == 0);
+
+                if (isUnsigned && sbyte.IsNegative(sign) && (source.Length >= Size))
+                {
+                    // When we are unsigned and the most significant bit is set, we are a large positive
+                    // and therefore definitely out of range
+
+                    value = result;
+                    return false;
+                }
+
+                if (source.Length > Size)
+                {
+                    if (source[..^Size].ContainsAnyExcept((byte)sign))
+                    {
+                        // When we are unsigned and have any non-zero leading data or signed with any non-set leading
+                        // data, we are a large positive/negative, respectively, and therefore definitely out of range
+
+                        value = result;
+                        return false;
+                    }
+
+                    if (isUnsigned == sbyte.IsNegative((sbyte)source[^Size]))
+                    {
+                        // When the most significant bit of the value being set/clear matches whether we are unsigned
+                        // or signed then we are a large positive/negative and therefore definitely out of range
+
+                        value = result;
+                        return false;
+                    }
+                }
+
+                ref byte sourceRef = ref MemoryMarshal.GetReference(source);
+
+                if (source.Length >= Size)
+                {
+                    sourceRef = ref Unsafe.Add(ref sourceRef, source.Length - Size);
+
+                    // We have at least 16 bytes, so just read the ones we need directly
+                    result = Unsafe.ReadUnaligned<Int128>(ref sourceRef);
+
+                    if (BitConverter.IsLittleEndian)
+                    {
+                        result = BinaryPrimitives.ReverseEndianness(result);
+                    }
+                }
+                else
+                {
+                    // We have between 1 and 15 bytes, so construct the relevant value directly
+                    // since the data is in Big Endian format, we can just read the bytes and
+                    // shift left by 8-bits for each subsequent part
+
+                    for (int i = 0; i < source.Length; i++)
+                    {
+                        result <<= 8;
+                        result |= Unsafe.Add(ref sourceRef, i);
+                    }
+
+                    if (!isUnsigned)
+                    {
+                        result |= ((One << ((Size * 8) - 1)) >> (((Size - source.Length) * 8) - 1));
+                    }
+                }
+            }
+
+            value = result;
+            return true;
+        }
+
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.TryReadLittleEndian(ReadOnlySpan{byte}, bool, out TSelf)" />
+        static bool IBinaryInteger<Int128>.TryReadLittleEndian(ReadOnlySpan<byte> source, bool isUnsigned, out Int128 value)
+        {
+            Int128 result = default;
+
+            if (source.Length != 0)
+            {
+                // Propagate the most significant bit so we have `0` or `-1`
+                sbyte sign = (sbyte)(source[^1]);
+                sign >>= 31;
+                Debug.Assert((sign == 0) || (sign == -1));
+
+                // We need to also track if the input data is unsigned
+                isUnsigned |= (sign == 0);
+
+                if (isUnsigned && sbyte.IsNegative(sign) && (source.Length >= Size))
+                {
+                    // When we are unsigned and the most significant bit is set, we are a large positive
+                    // and therefore definitely out of range
+
+                    value = result;
+                    return false;
+                }
+
+                if (source.Length > Size)
+                {
+                    if (source[Size..].ContainsAnyExcept((byte)sign))
+                    {
+                        // When we are unsigned and have any non-zero leading data or signed with any non-set leading
+                        // data, we are a large positive/negative, respectively, and therefore definitely out of range
+
+                        value = result;
+                        return false;
+                    }
+
+                    if (isUnsigned == sbyte.IsNegative((sbyte)source[Size - 1]))
+                    {
+                        // When the most significant bit of the value being set/clear matches whether we are unsigned
+                        // or signed then we are a large positive/negative and therefore definitely out of range
+
+                        value = result;
+                        return false;
+                    }
+                }
+
+                ref byte sourceRef = ref MemoryMarshal.GetReference(source);
+
+                if (source.Length >= Size)
+                {
+                    // We have at least 16 bytes, so just read the ones we need directly
+                    result = Unsafe.ReadUnaligned<Int128>(ref sourceRef);
+
+                    if (!BitConverter.IsLittleEndian)
+                    {
+                        result = BinaryPrimitives.ReverseEndianness(result);
+                    }
+                }
+                else
+                {
+                    // We have between 1 and 15 bytes, so construct the relevant value directly
+                    // since the data is in Little Endian format, we can just read the bytes and
+                    // shift left by 8-bits for each subsequent part, then reverse endianness to
+                    // ensure the order is correct. This is more efficient than iterating in reverse
+                    // due to current JIT limitations
+
+                    for (int i = 0; i < source.Length; i++)
+                    {
+                        result <<= 8;
+                        result |= Unsafe.Add(ref sourceRef, i);
+                    }
+
+                    result <<= ((Size - source.Length) * 8);
+                    result = BinaryPrimitives.ReverseEndianness(result);
+
+                    if (!isUnsigned)
+                    {
+                        result |= ((One << ((Size * 8) - 1)) >> (((Size - source.Length) * 8) - 1));
+                    }
+                }
+            }
+
+            value = result;
+            return true;
+        }
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.GetShortestBitLength()" />
         int IBinaryInteger<Int128>.GetShortestBitLength()
         {
@@ -796,11 +951,11 @@ namespace System
 
             if (IsPositive(value))
             {
-                return (Size * 8) - BitOperations.LeadingZeroCount(value);
+                return (Size * 8) - LeadingZeroCountAsInt32(value);
             }
             else
             {
-                return (Size * 8) + 1 - BitOperations.LeadingZeroCount(~value);
+                return (Size * 8) + 1 - LeadingZeroCountAsInt32(~value);
             }
         }
 
@@ -989,7 +1144,7 @@ namespace System
             }
 
             // We simplify the logic here by just doing unsigned division on the
-            // one's complement representation and then taking the correct sign.
+            // two's complement representation and then taking the correct sign.
 
             ulong sign = (left._upper ^ right._upper) & (1UL << 63);
 
@@ -1005,17 +1160,13 @@ namespace System
 
             UInt128 result = (UInt128)(left) / (UInt128)(right);
 
-            if (result == 0U)
-            {
-                sign = 0;
-            }
-            else if (sign != 0)
+            if (sign != 0)
             {
                 result = ~result + 1U;
             }
 
             return new Int128(
-                result.Upper | sign,
+                result.Upper,
                 result.Lower
             );
         }
@@ -1060,36 +1211,8 @@ namespace System
         /// <inheritdoc cref="IModulusOperators{TSelf, TOther, TResult}.op_Modulus(TSelf, TOther)" />
         public static Int128 operator %(Int128 left, Int128 right)
         {
-            // We simplify the logic here by just doing unsigned modulus on the
-            // one's complement representation and then taking the correct sign.
-
-            ulong sign = (left._upper ^ right._upper) & (1UL << 63);
-
-            if (IsNegative(left))
-            {
-                left = ~left + 1U;
-            }
-
-            if (IsNegative(right))
-            {
-                right = ~right + 1U;
-            }
-
-            UInt128 result = (UInt128)(left) % (UInt128)(right);
-
-            if (result == 0U)
-            {
-                sign = 0;
-            }
-            else if (sign != 0)
-            {
-                result = ~result + 1U;
-            }
-
-            return new Int128(
-                result.Upper | sign,
-                result.Lower
-            );
+            Int128 quotient = left / right;
+            return left - (quotient * right);
         }
 
         //
@@ -1106,76 +1229,43 @@ namespace System
         /// <inheritdoc cref="IMultiplyOperators{TSelf, TOther, TResult}.op_Multiply(TSelf, TOther)" />
         public static Int128 operator *(Int128 left, Int128 right)
         {
-            // We simplify the logic here by just doing unsigned multiplication on
-            // the one's complement representation and then taking the correct sign.
-
-            ulong sign = (left._upper ^ right._upper) & (1UL << 63);
-
-            if (IsNegative(left))
-            {
-                left = ~left + 1U;
-            }
-
-            if (IsNegative(right))
-            {
-                right = ~right + 1U;
-            }
-
-            UInt128 result = (UInt128)(left) * (UInt128)(right);
-
-            if (result == 0U)
-            {
-                sign = 0;
-            }
-            else if (sign != 0)
-            {
-                result = ~result + 1U;
-            }
-
-            return new Int128(
-                result.Upper | sign,
-                result.Lower
-            );
+            // Multiplication is the same for signed and unsigned provided the "upper" bits aren't needed
+            return (Int128)((UInt128)(left) * (UInt128)(right));
         }
 
         /// <inheritdoc cref="IMultiplyOperators{TSelf, TOther, TResult}.op_CheckedMultiply(TSelf, TOther)" />
         public static Int128 operator checked *(Int128 left, Int128 right)
         {
-            // We simplify the logic here by just doing unsigned multiplication on
-            // the one's complement representation and then taking the correct sign.
+            Int128 upper = BigMul(left, right, out Int128 lower);
 
-            ulong sign = (left._upper ^ right._upper) & (1UL << 63);
-
-            if (IsNegative(left))
+            if (((upper != 0) || (lower < 0)) && ((~upper != 0) || (lower >= 0)))
             {
-                left = ~left + 1U;
-            }
+                // The upper bits can safely be either Zero or AllBitsSet
+                // where the former represents a positive value and the
+                // latter a negative value.
+                //
+                // However, when the upper bits are Zero, we also need to
+                // confirm the lower bits are positive, otherwise we have
+                // a positive value greater than MaxValue and should throw
+                //
+                // Likewise, when the upper bits are AllBitsSet, we also
+                // need to confirm the lower bits are negative, otherwise
+                // we have a large negative value less than MinValue and
+                // should throw.
 
-            if (IsNegative(right))
-            {
-                right = ~right + 1U;
-            }
-
-            UInt128 result = checked((UInt128)(left) * (UInt128)(right));
-
-            if ((long)(result.Upper) < 0)
-            {
                 ThrowHelper.ThrowOverflowException();
             }
 
-            if (result == 0U)
-            {
-                sign = 0;
-            }
-            else if (sign != 0)
-            {
-                result = ~result + 1U;
-            }
+            return lower;
+        }
 
-            return new Int128(
-                result.Upper | sign,
-                result.Lower
-            );
+        internal static Int128 BigMul(Int128 left, Int128 right, out Int128 lower)
+        {
+            // This follows the same logic as is used in `long Math.BigMul(long, long, out long)`
+
+            UInt128 upper = UInt128.BigMul((UInt128)(left), (UInt128)(right), out UInt128 ulower);
+            lower = (Int128)(ulower);
+            return (Int128)(upper) - ((left >> 127) & right) - ((right >> 127) & left);
         }
 
         //
@@ -1698,7 +1788,7 @@ namespace System
 
         /// <inheritdoc cref="INumberBase{TSelf}.TryConvertToChecked{TOther}(TSelf, out TOther)" />
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static bool INumberBase<Int128>.TryConvertToChecked<TOther>(Int128 value, [NotNullWhen(true)] out TOther result)
+        static bool INumberBase<Int128>.TryConvertToChecked<TOther>(Int128 value, [MaybeNullWhen(false)] out TOther result)
         {
             // In order to reduce overall code duplication and improve the inlinabilty of these
             // methods for the corelib types we have `ConvertFrom` handle the same sign and
@@ -1759,14 +1849,14 @@ namespace System
             }
             else
             {
-                result = default!;
+                result = default;
                 return false;
             }
         }
 
         /// <inheritdoc cref="INumberBase{TSelf}.TryConvertToSaturating{TOther}(TSelf, out TOther)" />
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static bool INumberBase<Int128>.TryConvertToSaturating<TOther>(Int128 value, [NotNullWhen(true)] out TOther result)
+        static bool INumberBase<Int128>.TryConvertToSaturating<TOther>(Int128 value, [MaybeNullWhen(false)] out TOther result)
         {
             // In order to reduce overall code duplication and improve the inlinabilty of these
             // methods for the corelib types we have `ConvertFrom` handle the same sign and
@@ -1814,7 +1904,8 @@ namespace System
             }
             else if (typeof(TOther) == typeof(ulong))
             {
-                ulong actualResult = (value <= 0) ? ulong.MinValue : (ulong)value;
+                ulong actualResult = (value >= ulong.MaxValue) ? ulong.MaxValue :
+                                     (value <= ulong.MinValue) ? ulong.MinValue : (ulong)value;
                 result = (TOther)(object)actualResult;
                 return true;
             }
@@ -1833,14 +1924,14 @@ namespace System
             }
             else
             {
-                result = default!;
+                result = default;
                 return false;
             }
         }
 
         /// <inheritdoc cref="INumberBase{TSelf}.TryConvertToTruncating{TOther}(TSelf, out TOther)" />
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static bool INumberBase<Int128>.TryConvertToTruncating<TOther>(Int128 value, [NotNullWhen(true)] out TOther result)
+        static bool INumberBase<Int128>.TryConvertToTruncating<TOther>(Int128 value, [MaybeNullWhen(false)] out TOther result)
         {
             // In order to reduce overall code duplication and improve the inlinabilty of these
             // methods for the corelib types we have `ConvertFrom` handle the same sign and
@@ -1902,7 +1993,7 @@ namespace System
             }
             else
             {
-                result = default!;
+                result = default;
                 return false;
             }
         }
@@ -1911,6 +2002,7 @@ namespace System
         // IParsable
         //
 
+        /// <inheritdoc cref="IParsable{TSelf}.TryParse(string?, IFormatProvider?, out TSelf)" />
         public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Int128 result) => TryParse(s, NumberStyles.Integer, provider, out result);
 
         //
@@ -1964,7 +2056,7 @@ namespace System
                 // and so the lower bits are just the upper shifted by the remaining
                 // masked amount
 
-                ulong lower = value._upper >> shiftAmount;
+                ulong lower = (ulong)((long)value._upper >> shiftAmount);
                 ulong upper = (ulong)((long)value._upper >> 63);
 
                 return new Int128(upper, lower);
@@ -2089,5 +2181,49 @@ namespace System
 
         /// <inheritdoc cref="IUnaryPlusOperators{TSelf, TResult}.op_UnaryPlus(TSelf)" />
         public static Int128 operator +(Int128 value) => value;
+
+        //
+        // IUtf8SpanParsable
+        //
+
+        /// <inheritdoc cref="INumberBase{TSelf}.Parse(ReadOnlySpan{byte}, NumberStyles, IFormatProvider?)" />
+        public static Int128 Parse(ReadOnlySpan<byte> utf8Text, NumberStyles style = NumberStyles.Integer, IFormatProvider? provider = null)
+        {
+            NumberFormatInfo.ValidateParseStyleInteger(style);
+            return Number.ParseBinaryInteger<byte, Int128>(utf8Text, style, NumberFormatInfo.GetInstance(provider));
+        }
+
+        /// <inheritdoc cref="INumberBase{TSelf}.TryParse(ReadOnlySpan{byte}, NumberStyles, IFormatProvider?, out TSelf)" />
+        public static bool TryParse(ReadOnlySpan<byte> utf8Text, NumberStyles style, IFormatProvider? provider, out Int128 result)
+        {
+            NumberFormatInfo.ValidateParseStyleInteger(style);
+            return Number.TryParseBinaryInteger(utf8Text, style, NumberFormatInfo.GetInstance(provider), out result) == Number.ParsingStatus.OK;
+        }
+
+        /// <inheritdoc cref="IUtf8SpanParsable{TSelf}.Parse(ReadOnlySpan{byte}, IFormatProvider?)" />
+        public static Int128 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text, NumberStyles.Integer, provider);
+
+        /// <inheritdoc cref="IUtf8SpanParsable{TSelf}.TryParse(ReadOnlySpan{byte}, IFormatProvider?, out TSelf)" />
+        public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Int128 result) => TryParse(utf8Text, NumberStyles.Integer, provider, out result);
+
+        //
+        // IBinaryIntegerParseAndFormatInfo
+        //
+
+        static bool IBinaryIntegerParseAndFormatInfo<Int128>.IsSigned => true;
+
+        static int IBinaryIntegerParseAndFormatInfo<Int128>.MaxDigitCount => 39; // 170_141_183_460_469_231_731_687_303_715_884_105_727
+
+        static int IBinaryIntegerParseAndFormatInfo<Int128>.MaxHexDigitCount => 32; // 0x7FFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF
+
+        static Int128 IBinaryIntegerParseAndFormatInfo<Int128>.MaxValueDiv10 => new Int128(0x0CCC_CCCC_CCCC_CCCC, 0xCCCC_CCCC_CCCC_CCCC);
+
+        static string IBinaryIntegerParseAndFormatInfo<Int128>.OverflowMessage => SR.Overflow_Int128;
+
+        static bool IBinaryIntegerParseAndFormatInfo<Int128>.IsGreaterThanAsUnsigned(Int128 left, Int128 right) => (UInt128)(left) > (UInt128)(right);
+
+        static Int128 IBinaryIntegerParseAndFormatInfo<Int128>.MultiplyBy10(Int128 value) => value * 10;
+
+        static Int128 IBinaryIntegerParseAndFormatInfo<Int128>.MultiplyBy16(Int128 value) => value * 16;
     }
 }

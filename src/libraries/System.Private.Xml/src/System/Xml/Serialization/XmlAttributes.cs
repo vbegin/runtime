@@ -1,8 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Reflection;
 using System.ComponentModel;
+using System.Reflection;
 
 namespace System.Xml.Serialization
 {
@@ -76,6 +76,7 @@ namespace System.Xml.Serialization
         /// </devdoc>
         public XmlAttributes(ICustomAttributeProvider provider)
         {
+            ArgumentNullException.ThrowIfNull(provider);
             object[] attrs = provider.GetCustomAttributes(false);
 
             // most generic <any/> matches everything
@@ -97,7 +98,7 @@ namespace System.Xml.Serialization
                 }
                 else if (attrs[i] is XmlAnyElementAttribute any)
                 {
-                    if ((any.Name == null || any.Name.Length == 0) && any.GetNamespaceSpecified() && any.Namespace == null)
+                    if (string.IsNullOrEmpty(any.Name) && any.GetNamespaceSpecified() && any.Namespace == null)
                     {
                         // ignore duplicate wildcards
                         wildcard = any;

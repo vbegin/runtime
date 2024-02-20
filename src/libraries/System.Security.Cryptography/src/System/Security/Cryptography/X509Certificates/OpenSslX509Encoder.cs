@@ -235,13 +235,14 @@ namespace System.Security.Cryptography.X509Certificates
 
         public override void DecodeX509EnhancedKeyUsageExtension(byte[] encoded, out OidCollection usages)
         {
-            OidCollection oids = new OidCollection();
+            OidCollection oids;
 
             using (SafeEkuExtensionHandle eku = Interop.Crypto.DecodeExtendedKeyUsage(encoded, encoded.Length))
             {
                 Interop.Crypto.CheckValidOpenSslHandle(eku);
 
                 int count = Interop.Crypto.GetX509EkuFieldCount(eku);
+                oids = new OidCollection(count);
 
                 for (int i = 0; i < count; i++)
                 {
@@ -261,9 +262,9 @@ namespace System.Security.Cryptography.X509Certificates
             usages = oids;
         }
 
-        private static RSA BuildRsaPublicKey(byte[] encodedData)
+        private static RSAOpenSsl BuildRsaPublicKey(byte[] encodedData)
         {
-            RSA rsa = new RSAOpenSsl();
+            var rsa = new RSAOpenSsl();
             try
             {
                 rsa.ImportRSAPublicKey(new ReadOnlySpan<byte>(encodedData), out _);
@@ -276,7 +277,7 @@ namespace System.Security.Cryptography.X509Certificates
             return rsa;
         }
 
-        private static DSA BuildDsaPublicKey(byte[] encodedKeyValue, byte[] encodedParameters)
+        private static DSAOpenSsl BuildDsaPublicKey(byte[] encodedKeyValue, byte[] encodedParameters)
         {
             SubjectPublicKeyInfoAsn spki = new SubjectPublicKeyInfoAsn
             {
@@ -287,7 +288,7 @@ namespace System.Security.Cryptography.X509Certificates
             AsnWriter writer = new AsnWriter(AsnEncodingRules.DER);
             spki.Encode(writer);
 
-            DSA dsa = new DSAOpenSsl();
+            DSAOpenSsl dsa = new DSAOpenSsl();
             try
             {
                 dsa.ImportSubjectPublicKeyInfo(writer.Encode(), out _);

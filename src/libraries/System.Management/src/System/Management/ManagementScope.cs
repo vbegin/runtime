@@ -2,11 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.ComponentModel;
-using System.Runtime.InteropServices;
+using System.ComponentModel.Design.Serialization;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
-using System.ComponentModel.Design.Serialization;
+using System.Runtime.InteropServices;
 using System.Security;
 using Microsoft.Win32;
 
@@ -290,7 +290,9 @@ namespace System.Management
         static WmiNetUtilsHelper()
         {
             RegistryKey netFrameworkSubKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\.NETFramework\");
-            string netFrameworkInstallRoot = (string)netFrameworkSubKey?.GetValue("InstallRoot");
+            string netFrameworkInstallRoot = (string)netFrameworkSubKey?.GetValue(RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ?
+                "InstallRootArm64" :
+                "InstallRoot");
 
             if (netFrameworkInstallRoot == null)
             {
@@ -311,7 +313,7 @@ namespace System.Management
             if (hModule == IntPtr.Zero)
             {
                 // This is unlikely, so having the TypeInitializationException wrapping it is fine.
-                throw new Win32Exception(Marshal.GetLastWin32Error(), SR.Format(SR.LoadLibraryFailed, wminet_utilsPath));
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), SR.Format(SR.LoadLibraryFailed, wminet_utilsPath));
             }
 
             if (LoadDelegate(ref ResetSecurity_f, hModule, "ResetSecurity") &&
@@ -1500,7 +1502,7 @@ namespace System.Management
         ///      Converts the given object to another type.  The most common types to convert
         ///      are to and from a string object.  The default implementation will make a call
         ///      to ToString on the object if the object is valid and if the destination
-        ///      type is string.  If this cannot convert to the desitnation type, this will
+        ///      type is string.  If this cannot convert to the destination type, this will
         ///      throw a NotSupportedException.
         /// </summary>
         /// <param name='context'>An ITypeDescriptorContext that provides a format context.</param>

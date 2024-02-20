@@ -8,20 +8,22 @@
 // functionality (in particular there is no rank violation checking).
 //
 
+#ifndef __Crst_h__
+#define __Crst_h__
+
 enum CrstType
 {
     CrstHandleTable,
-    CrstDispatchCache,
     CrstAllocHeap,
-    CrstGenericInstHashtab,
-    CrstMemAccessMgr,
     CrstInterfaceDispatchGlobalLists,
     CrstStressLog,
     CrstRestrictedCallouts,
     CrstGcStressControl,
-    CrstSuspendEE,
-    CrstCastCache,
+    CrstThreadStore,
     CrstYieldProcessorNormalized,
+    CrstEventPipe,
+    CrstEventPipeConfig,
+    CrstGcEvent,
 };
 
 enum CrstFlags
@@ -125,3 +127,5 @@ public:
         return m_pLock;
     }
 };
+
+#endif //__Crst_h__

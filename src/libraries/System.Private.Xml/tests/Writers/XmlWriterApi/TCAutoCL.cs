@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCAutoCL
     {
@@ -38,7 +38,7 @@ namespace System.Xml.Tests
                 w.Dispose();
             }
             CError.WriteLine("Conformance level = Document did not take effect");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -74,7 +74,7 @@ namespace System.Xml.Tests
                 w.Dispose();
             }
             CError.WriteLine("Conformance level = Document did not take effect");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -102,7 +102,7 @@ namespace System.Xml.Tests
                 w.Dispose();
             }
             CError.WriteLine("Conformance level = Document did not take effect");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]

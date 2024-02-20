@@ -493,7 +493,7 @@ get_relations_from_previous_bb (MonoVariableRelationsEvaluationArea *area, MonoB
 			symmetric_relation = MONO_SYMMETRIC_RELATION (branch_relation);
 
 			/* FIXME: Other compare opcodes */
-			if (compare->opcode == OP_ICOMPARE) {
+			if (compare->opcode == OP_ICOMPARE && compare->sreg1 != compare->sreg2) {
 				relations->relation1.variable = compare->sreg1;
 				relations->relation1.relation.relation = branch_relation;
 				relations->relation1.relation.related_value.type = MONO_VARIABLE_SUMMARIZED_VALUE;
@@ -546,9 +546,15 @@ apply_change_to_evaluation_area (MonoVariableRelationsEvaluationArea *area, Mono
 static void
 remove_change_from_evaluation_area (MonoAdditionalVariableRelation *change)
 {
-	if (change->insertion_point != NULL) {
-		change->insertion_point->next = change->relation.next;
-		change->relation.next = NULL;
+	//change->relation.relation = MONO_ANY_RELATION;
+	MonoSummarizedValueRelation *rel = change->insertion_point;
+	while (rel) {
+		if (rel->next == &(change->relation)) {
+			rel->next = rel->next->next;
+			break;
+		} else {
+			rel = rel->next;
+		}
 	}
 }
 
@@ -957,7 +963,7 @@ evaluate_relation_with_target_variable (MonoVariableRelationsEvaluationArea *are
 			}
 		} else {
 			if (TRACE_ABC_REMOVAL) {
-				printf ("Recursivity rejected (some relation in the cycle is not a defintion)\n");
+				printf ("Recursivity rejected (some relation in the cycle is not a definition)\n");
 			}
 		}
 		break;

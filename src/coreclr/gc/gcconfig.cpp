@@ -7,14 +7,24 @@
 
 #define BOOL_CONFIG(name, unused_private_key, unused_public_key, default, unused_doc) \
   bool GCConfig::Get##name() { return s_##name; }                                     \
+  bool GCConfig::Get##name(bool defaultValue)                                         \
+  {                                                                                   \
+      return s_##name##Provided ? s_##name : defaultValue;                            \
+  }                                                                                   \
   void GCConfig::Set##name(bool value) { s_Updated##name = value; }                   \
   bool GCConfig::s_##name = default;                                                  \
+  bool GCConfig::s_##name##Provided = false;                                          \
   bool GCConfig::s_Updated##name = default;
 
 #define INT_CONFIG(name, unused_private_key, unused_public_key, default, unused_doc)  \
   int64_t GCConfig::Get##name() { return s_##name; }                                  \
-  void GCConfig::Set##name(int64_t value) { s_Updated##name = value; }              \
+  int64_t GCConfig::Get##name(int64_t defaultValue)                                   \
+  {                                                                                   \
+      return s_##name##Provided ? s_##name : defaultValue;                            \
+  }                                                                                   \
+  void GCConfig::Set##name(int64_t value) { s_Updated##name = value; }                \
   int64_t GCConfig::s_##name = default;                                               \
+  bool GCConfig::s_##name##Provided = false;                                          \
   int64_t GCConfig::s_Updated##name = default;
 
 // String configs are not cached because 1) they are rare and
@@ -36,7 +46,7 @@ GC_CONFIGURATION_KEYS
 
 void GCConfig::EnumerateConfigurationValues(void* context, ConfigurationValueFunc configurationValueFunc)
 {
-#define INT_CONFIG(name, unused_private_key, public_key, default, unused_doc) \
+#define INT_CONFIG(name, unused_private_key, public_key, unused_default, unused_doc) \
     configurationValueFunc(context, (void*)(#name), (void*)(public_key), GCConfigurationType::Int64, static_cast<int64_t>(s_Updated##name));
     
 #define STRING_CONFIG(name, private_key, public_key, unused_doc)                     \
@@ -47,7 +57,7 @@ void GCConfig::EnumerateConfigurationValues(void* context, ConfigurationValueFun
         configurationValueFunc(context, (void*)(#name), (void*)(public_key), GCConfigurationType::StringUtf8, reinterpret_cast<int64_t>(resultStr)); \
     }
 
-#define BOOL_CONFIG(name, unused_private_key, public_key, default, unused_doc) \
+#define BOOL_CONFIG(name, unused_private_key, public_key, unused_default, unused_doc) \
     configurationValueFunc(context, (void*)(#name), (void*)(public_key), GCConfigurationType::Boolean, static_cast<int64_t>(s_Updated##name));
 
 GC_CONFIGURATION_KEYS
@@ -57,13 +67,27 @@ GC_CONFIGURATION_KEYS
 #undef STRING_CONFIG
 }
 
+void GCConfig::RefreshHeapHardLimitSettings()
+{
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimit", "System.GC.HeapHardLimit", &s_GCHeapHardLimit); s_UpdatedGCHeapHardLimit = s_GCHeapHardLimit;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitPercent", "System.GC.HeapHardLimitPercent", &s_GCHeapHardLimitPercent); s_UpdatedGCHeapHardLimitPercent = s_GCHeapHardLimitPercent;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitSOH", "System.GC.HeapHardLimitSOH", &s_GCHeapHardLimitSOH); s_UpdatedGCHeapHardLimitSOH = s_GCHeapHardLimitSOH;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitLOH", "System.GC.HeapHardLimitLOH", &s_GCHeapHardLimitLOH); s_UpdatedGCHeapHardLimitLOH = s_GCHeapHardLimitLOH;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitPOH", "System.GC.HeapHardLimitPOH", &s_GCHeapHardLimitPOH); s_UpdatedGCHeapHardLimitPOH = s_GCHeapHardLimitPOH;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitSOHPercent", "System.GC.HeapHardLimitSOHPercent", &s_GCHeapHardLimitSOHPercent); s_UpdatedGCHeapHardLimitSOHPercent = s_GCHeapHardLimitSOHPercent;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitLOHPercent", "System.GC.HeapHardLimitLOHPercent", &s_GCHeapHardLimitLOHPercent); s_UpdatedGCHeapHardLimitLOHPercent = s_GCHeapHardLimitLOHPercent;
+    GCToEEInterface::GetIntConfigValue("GCHeapHardLimitPOHPercent", "System.GC.HeapHardLimitPOHPercent", &s_GCHeapHardLimitPOHPercent); s_UpdatedGCHeapHardLimitPOHPercent = s_GCHeapHardLimitPOHPercent;
+}
+
 void GCConfig::Initialize()
 {
-#define BOOL_CONFIG(name, private_key, public_key, default, unused_doc)          \
-    GCToEEInterface::GetBooleanConfigValue(private_key, public_key, &s_##name);
-
-#define INT_CONFIG(name, private_key, public_key, default, unused_doc)           \
-    GCToEEInterface::GetIntConfigValue(private_key, public_key, &s_##name);
+#define BOOL_CONFIG(name, private_key, public_key, unused_default, unused_doc)                       \
+    s_##name##Provided = GCToEEInterface::GetBooleanConfigValue(private_key, public_key, &s_##name); \
+    s_Updated##name = s_##name; 
+    
+#define INT_CONFIG(name, private_key, public_key, unused_default, unused_doc)                    \
+    s_##name##Provided = GCToEEInterface::GetIntConfigValue(private_key, public_key, &s_##name); \
+    s_Updated##name = s_##name;                                                                  \
 
 #define STRING_CONFIG(unused_name, unused_private_key, unused_public_key, unused_doc)
 

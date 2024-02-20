@@ -7,8 +7,6 @@ namespace System.Xml.Linq
 {
     internal sealed class XNodeReader : XmlReader, IXmlLineInfo
     {
-        private static readonly char[] s_WhitespaceChars = new char[] { ' ', '\t', '\n', '\r' };
-
         // The reader position is encoded by the tuple (source, parent).
         // Lazy text uses (instance, parent element). Attribute value
         // uses (instance, parent attribute). End element uses (instance,
@@ -430,7 +428,7 @@ namespace System.Xml.Linq
                         XAttribute? a = e.Attribute(name);
                         if (a != null)
                         {
-                            switch (a.Value.Trim(s_WhitespaceChars))
+                            switch (a.Value.AsSpan().Trim(" \t\n\r"))
                             {
                                 case "preserve":
                                     return XmlSpace.Preserve;
@@ -559,10 +557,7 @@ namespace System.Xml.Linq
                 throw new InvalidOperationException(SR.InvalidOperation_ExpectedInteractive);
             }
 
-            if (index < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(index));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
 
             XElement? e = GetElementInAttributeScope();
             if (e != null)
@@ -699,7 +694,7 @@ namespace System.Xml.Linq
             {
                 return;
             }
-            if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
             XElement? e = GetElementInAttributeScope();
             if (e != null)
             {
@@ -1073,9 +1068,9 @@ namespace System.Xml.Linq
             get { return _state == ReadState.Interactive; }
         }
 
-        private static XmlNameTable CreateNameTable()
+        private static NameTable CreateNameTable()
         {
-            XmlNameTable nameTable = new NameTable();
+            var nameTable = new NameTable();
             nameTable.Add(string.Empty);
             nameTable.Add(XNamespace.xmlnsPrefixNamespace);
             nameTable.Add(XNamespace.xmlPrefixNamespace);

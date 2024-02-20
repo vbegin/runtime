@@ -123,10 +123,10 @@ namespace System.Xml.Xsl.Xslt
             }
         }
 
-        internal struct ModeName
+        internal readonly struct ModeName
         {
-            public QilName Mode;
-            public QilName Name;
+            public readonly QilName Mode;
+            public readonly QilName Name;
 
             public ModeName(QilName mode, QilName name)
             {
@@ -262,7 +262,7 @@ namespace System.Xml.Xsl.Xslt
             }
         }
 
-        private void FillModeFlags(Dictionary<QilName, XslFlags> parentModeFlags, Stylesheet sheet)
+        private static void FillModeFlags(Dictionary<QilName, XslFlags> parentModeFlags, Stylesheet sheet)
         {
             // Recursion: Process all imports to calculate ModeFlags for apply-import in this sheet
             foreach (Stylesheet import in sheet.Imports!)
@@ -1054,7 +1054,7 @@ namespace System.Xml.Xsl.Xslt
             }
 
             [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
-                Justification = "Supressing warning about not having the RequiresUnreferencedCode attribute since xsl Scripts are " +
+                Justification = "Suppressing warning about not having the RequiresUnreferencedCode attribute since xsl Scripts are " +
                 "not supported in .NET Core")]
             public XslFlags Function(string prefix, string name, IList<XslFlags> args)
             {
@@ -1139,7 +1139,7 @@ namespace System.Xml.Xsl.Xslt
                             XmlExtensionFunction? scrFunc = _compiler.Scripts.ResolveFunction(name, ns, args.Count, default(NullErrorHelper));
                             if (scrFunc != null)
                             {
-                                XmlQueryType xt = scrFunc.XmlReturnType;
+                                XmlQueryType? xt = scrFunc.XmlReturnType;
                                 if (xt == TypeFactory.StringX)
                                 {
                                     funcFlags = XslFlags.String;

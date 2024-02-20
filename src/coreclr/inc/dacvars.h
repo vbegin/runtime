@@ -75,7 +75,7 @@
 
 #define UNKNOWN_POINTER_TYPE SIZE_T
 
-DEFINE_DACVAR_VOLATILE(PTR_RangeSection, ExecutionManager__m_CodeRangeList, ExecutionManager::m_CodeRangeList)
+DEFINE_DACVAR(PTR_RangeSectionMap, ExecutionManager__g_codeRangeMap, ExecutionManager::g_codeRangeMap)
 DEFINE_DACVAR(PTR_EECodeManager, ExecutionManager__m_pDefaultCodeMan, ExecutionManager::m_pDefaultCodeMan)
 DEFINE_DACVAR_VOLATILE(LONG, ExecutionManager__m_dwReaderCount, ExecutionManager::m_dwReaderCount)
 DEFINE_DACVAR_VOLATILE(LONG, ExecutionManager__m_dwWriterLock, ExecutionManager::m_dwWriterLock)
@@ -94,25 +94,10 @@ DEFINE_DACVAR(PTR_StubLinkStubManager, StubLinkStubManager__g_pManager, StubLink
 DEFINE_DACVAR(PTR_ThunkHeapStubManager, ThunkHeapStubManager__g_pManager, ThunkHeapStubManager::g_pManager)
 DEFINE_DACVAR(PTR_JumpStubStubManager, JumpStubStubManager__g_pManager, JumpStubStubManager::g_pManager)
 DEFINE_DACVAR(PTR_RangeSectionStubManager, RangeSectionStubManager__g_pManager, RangeSectionStubManager::g_pManager)
-DEFINE_DACVAR(PTR_DelegateInvokeStubManager, DelegateInvokeStubManager__g_pManager, DelegateInvokeStubManager::g_pManager)
 DEFINE_DACVAR(PTR_VirtualCallStubManagerManager, VirtualCallStubManagerManager__g_pManager, VirtualCallStubManagerManager::g_pManager)
 DEFINE_DACVAR(PTR_CallCountingStubManager, CallCountingStubManager__g_pManager, CallCountingStubManager::g_pManager)
 
 DEFINE_DACVAR(PTR_ThreadStore, ThreadStore__s_pThreadStore, ThreadStore::s_pThreadStore)
-
-DEFINE_DACVAR(int, ThreadpoolMgr__cpuUtilization, ThreadpoolMgr::cpuUtilization)
-DEFINE_DACVAR(ThreadpoolMgr::ThreadCounter, ThreadpoolMgr__WorkerCounter, ThreadpoolMgr::WorkerCounter)
-DEFINE_DACVAR(int, ThreadpoolMgr__MinLimitTotalWorkerThreads, ThreadpoolMgr::MinLimitTotalWorkerThreads)
-DEFINE_DACVAR(DWORD, ThreadpoolMgr__MaxLimitTotalWorkerThreads, ThreadpoolMgr::MaxLimitTotalWorkerThreads)
-DEFINE_DACVAR(UNKNOWN_POINTER_TYPE /*PTR_WorkRequest*/, ThreadpoolMgr__WorkRequestHead, ThreadpoolMgr::WorkRequestHead)  // PTR_WorkRequest is not defined. So use a pointer type
-DEFINE_DACVAR(UNKNOWN_POINTER_TYPE  /*PTR_WorkRequest*/, ThreadpoolMgr__WorkRequestTail, ThreadpoolMgr::WorkRequestTail) //
-DEFINE_DACVAR(ThreadpoolMgr::ThreadCounter, ThreadpoolMgr__CPThreadCounter, ThreadpoolMgr::CPThreadCounter)
-DEFINE_DACVAR(LONG, ThreadpoolMgr__MaxFreeCPThreads, ThreadpoolMgr::MaxFreeCPThreads)
-DEFINE_DACVAR(LONG, ThreadpoolMgr__MaxLimitTotalCPThreads, ThreadpoolMgr::MaxLimitTotalCPThreads)
-DEFINE_DACVAR(LONG, ThreadpoolMgr__MinLimitTotalCPThreads, ThreadpoolMgr::MinLimitTotalCPThreads)
-DEFINE_DACVAR_NO_DUMP(SIZE_T, dac__HillClimbingLog, ::HillClimbingLog)
-DEFINE_DACVAR(int, dac__HillClimbingLogFirstIndex, ::HillClimbingLogFirstIndex)
-DEFINE_DACVAR(int, dac__HillClimbingLogSize, ::HillClimbingLogSize)
 
 DEFINE_DACVAR(PTR_Thread, dac__g_pFinalizerThread, ::g_pFinalizerThread)
 DEFINE_DACVAR(PTR_Thread, dac__g_pSuspensionThread, ::g_pSuspensionThread)
@@ -127,6 +112,13 @@ DEFINE_DACVAR(PTR_SystemDomain, SystemDomain__m_pSystemDomain, SystemDomain::m_p
 DEFINE_DACVAR(DWORD, dac__g_debuggerWordTLSIndex, g_debuggerWordTLSIndex)
 #endif
 DEFINE_DACVAR(DWORD, dac__g_TlsIndex, g_TlsIndex)
+
+#ifdef FEATURE_EH_FUNCLETS
+DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pEHClass, ::g_pEHClass)
+DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pExceptionServicesInternalCallsClass, ::g_pExceptionServicesInternalCallsClass)
+DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pStackFrameIteratorClass, ::g_pStackFrameIteratorClass)
+DEFINE_DACVAR(BOOL, dac__g_isNewExceptionHandlingEnabled, ::g_isNewExceptionHandlingEnabled)
+#endif
 
 DEFINE_DACVAR(PTR_SString, SString__s_Empty, SString::s_Empty)
 
@@ -170,12 +162,14 @@ DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pExecutionEngineExceptionClass, ::g_p
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pDelegateClass, ::g_pDelegateClass)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pMulticastDelegateClass, ::g_pMulticastDelegateClass)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pFreeObjectMethodTable, ::g_pFreeObjectMethodTable)
-DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pOverlappedDataClass, ::g_pOverlappedDataClass)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pValueTypeClass, ::g_pValueTypeClass)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pEnumClass, ::g_pEnumClass)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pThreadClass, ::g_pThreadClass)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pPredefinedArrayTypes, ::g_pPredefinedArrayTypes)
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_TypedReferenceMT, ::g_TypedReferenceMT)
+
+DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pWeakReferenceClass, ::g_pWeakReferenceClass)
+DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pWeakReferenceOfTClass, ::g_pWeakReferenceOfTClass)
 
 #ifdef FEATURE_COMINTEROP
 DEFINE_DACVAR(UNKNOWN_POINTER_TYPE, dac__g_pBaseCOMObject, ::g_pBaseCOMObject)
@@ -240,9 +234,11 @@ DEFINE_DACVAR(TADDR, dac__g_MiniMetaDataBuffAddress, ::g_MiniMetaDataBuffAddress
 
 DEFINE_DACVAR(SIZE_T, dac__g_clrNotificationArguments, ::g_clrNotificationArguments)
 
-#ifdef EnC_SUPPORTED
+#ifdef FEATURE_METADATA_UPDATER
 DEFINE_DACVAR(bool, dac__g_metadataUpdatesApplied, ::g_metadataUpdatesApplied)
 #endif
+
+DEFINE_DACVAR(PTR_WSTR, dac__g_EntryAssemblyPath, ::g_EntryAssemblyPath)
 
 #undef DEFINE_DACVAR
 #undef DEFINE_DACVAR_NO_DUMP

@@ -1,14 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net.Security;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Microsoft.Win32.SafeHandles;
 
 using PAL_KeyAlgorithm = Interop.AndroidCrypto.PAL_KeyAlgorithm;
 using PAL_SSLStreamStatus = Interop.AndroidCrypto.PAL_SSLStreamStatus;
@@ -34,17 +32,20 @@ namespace System.Net
         private ArrayBuffer _inputBuffer = new ArrayBuffer(InitialBufferSize);
         private ArrayBuffer _outputBuffer = new ArrayBuffer(InitialBufferSize);
 
+        public SslStream.JavaProxy SslStreamProxy { get; }
+
         public SafeSslHandle SslContext => _sslContext;
 
-        public SafeDeleteSslContext(SafeFreeSslCredentials credential, SslAuthenticationOptions authOptions)
-            : base(credential)
+        public SafeDeleteSslContext(SslAuthenticationOptions authOptions)
+            : base(IntPtr.Zero)
         {
-            Debug.Assert((credential != null) && !credential.IsInvalid, "Invalid credential used in SafeDeleteSslContext");
+            SslStreamProxy = authOptions.SslStreamProxy
+                ?? throw new ArgumentNullException(nameof(authOptions.SslStreamProxy));
 
             try
             {
-                _sslContext = CreateSslContext(credential);
-                InitializeSslContext(_sslContext, credential, authOptions);
+                _sslContext = CreateSslContext(SslStreamProxy, authOptions);
+                InitializeSslContext(_sslContext, authOptions);
             }
             catch (Exception ex)
             {
@@ -60,8 +61,7 @@ namespace System.Net
         {
             if (disposing)
             {
-                SafeSslHandle sslContext = _sslContext;
-                if (sslContext != null)
+                if (_sslContext is SafeSslHandle sslContext)
                 {
                     _inputBuffer.Dispose();
                     _outputBuffer.Dispose();
@@ -119,17 +119,17 @@ namespace System.Net
 
         internal int BytesReadyForConnection => _outputBuffer.ActiveLength;
 
-        internal byte[]? ReadPendingWrites()
+        internal void ReadPendingWrites(ref ProtocolToken token)
         {
             if (_outputBuffer.ActiveLength == 0)
             {
-                return null;
+                token.Size = 0;
+                token.Payload = null;
+                return;
             }
 
-            byte[] buffer = _outputBuffer.ActiveSpan.ToArray();
+            token.SetPayload(_outputBuffer.ActiveSpan);
             _outputBuffer.Discard(_outputBuffer.ActiveLength);
-
-            return buffer;
         }
 
         internal int ReadPendingWrites(byte[] buf, int offset, int count)
@@ -147,16 +147,16 @@ namespace System.Net
             return limit;
         }
 
-        private static SafeSslHandle CreateSslContext(SafeFreeSslCredentials credential)
+        private static SafeSslHandle CreateSslContext(SslStream.JavaProxy sslStreamProxy, SslAuthenticationOptions authOptions)
         {
-            if (credential.CertificateContext == null)
+            if (authOptions.CertificateContext == null)
             {
-                return Interop.AndroidCrypto.SSLStreamCreate();
+                return Interop.AndroidCrypto.SSLStreamCreate(sslStreamProxy);
             }
 
-            SslStreamCertificateContext context = credential.CertificateContext;
-            X509Certificate2 cert = context.Certificate;
-            Debug.Assert(context.Certificate.HasPrivateKey);
+            SslStreamCertificateContext context = authOptions.CertificateContext;
+            X509Certificate2 cert = context.TargetCertificate;
+            Debug.Assert(context.TargetCertificate.HasPrivateKey);
 
             PAL_KeyAlgorithm algorithm;
             byte[] keyBytes;
@@ -164,14 +164,14 @@ namespace System.Net
             {
                 keyBytes = key.ExportPkcs8PrivateKey();
             }
-            IntPtr[] ptrs = new IntPtr[context.IntermediateCertificates.Length + 1];
+            IntPtr[] ptrs = new IntPtr[context.IntermediateCertificates.Count + 1];
             ptrs[0] = cert.Handle;
-            for (int i = 0; i < context.IntermediateCertificates.Length; i++)
+            for (int i = 0; i < context.IntermediateCertificates.Count; i++)
             {
                 ptrs[i + 1] = context.IntermediateCertificates[i].Handle;
             }
 
-            return Interop.AndroidCrypto.SSLStreamCreateWithCertificates(keyBytes, algorithm, ptrs);
+            return Interop.AndroidCrypto.SSLStreamCreateWithCertificates(sslStreamProxy, keyBytes, algorithm, ptrs);
         }
 
         private static AsymmetricAlgorithm GetPrivateKeyAlgorithm(X509Certificate2 cert, out PAL_KeyAlgorithm algorithm)
@@ -199,10 +199,9 @@ namespace System.Net
 
         private unsafe void InitializeSslContext(
             SafeSslHandle handle,
-            SafeFreeSslCredentials credential,
             SslAuthenticationOptions authOptions)
         {
-            switch (credential.Policy)
+            switch (authOptions.EncryptionPolicy)
             {
                 case EncryptionPolicy.RequireEncryption:
 #pragma warning disable SYSLIB0040 // NoEncryption and AllowNoEncryption are obsolete
@@ -210,7 +209,7 @@ namespace System.Net
                     break;
 #pragma warning restore SYSLIB0040
                 default:
-                    throw new PlatformNotSupportedException(SR.Format(SR.net_encryptionpolicy_notsupported, credential.Policy));
+                    throw new PlatformNotSupportedException(SR.Format(SR.net_encryptionpolicy_notsupported, authOptions.EncryptionPolicy));
             }
 
             bool isServer = authOptions.IsServer;
@@ -224,14 +223,15 @@ namespace System.Net
             // Make sure the class instance is associated to the session and is provided
             // in the Read/Write callback connection parameter
             IntPtr managedContextHandle = GCHandle.ToIntPtr(GCHandle.Alloc(this, GCHandleType.Weak));
-            Interop.AndroidCrypto.SSLStreamInitialize(handle, isServer, managedContextHandle, &ReadFromConnection, &WriteToConnection, InitialBufferSize);
+            string? peerHost = !isServer && !string.IsNullOrEmpty(authOptions.TargetHost) ? authOptions.TargetHost : null;
+            Interop.AndroidCrypto.SSLStreamInitialize(handle, isServer, managedContextHandle, &ReadFromConnection, &WriteToConnection, InitialBufferSize, peerHost);
 
-            if (credential.Protocols != SslProtocols.None)
+            if (authOptions.EnabledSslProtocols != SslProtocols.None)
             {
-                SslProtocols protocolsToEnable = credential.Protocols & s_supportedSslProtocols.Value;
+                SslProtocols protocolsToEnable = authOptions.EnabledSslProtocols & s_supportedSslProtocols.Value;
                 if (protocolsToEnable == 0)
                 {
-                    throw new PlatformNotSupportedException(SR.Format(SR.net_security_sslprotocol_notsupported, credential.Protocols));
+                    throw new PlatformNotSupportedException(SR.Format(SR.net_security_sslprotocol_notsupported, authOptions.EnabledSslProtocols));
                 }
 
                 (int minIndex, int maxIndex) = protocolsToEnable.ValidateContiguous(s_orderedSslProtocols);
@@ -250,7 +250,7 @@ namespace System.Net
                 Interop.AndroidCrypto.SSLStreamRequestClientAuthentication(handle);
             }
 
-            if (!isServer && !string.IsNullOrEmpty(authOptions.TargetHost))
+            if (!isServer && !string.IsNullOrEmpty(authOptions.TargetHost) && !TargetHostNameHelper.IsValidAddress(authOptions.TargetHost))
             {
                 Interop.AndroidCrypto.SSLStreamSetTargetHost(handle, authOptions.TargetHost);
             }

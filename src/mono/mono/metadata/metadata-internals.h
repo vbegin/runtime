@@ -16,7 +16,6 @@
 #include "mono/utils/mono-dl.h"
 #include "mono/utils/monobitset.h"
 #include "mono/utils/mono-property-hash.h"
-#include "mono/utils/mono-value-hash.h"
 #include <mono/utils/mono-error.h>
 #include "mono/utils/mono-conc-hashtable.h"
 #include "mono/utils/refcount.h"
@@ -283,6 +282,12 @@ typedef struct {
 	/* Module entry point is _CorDllMain. */
 	guint8 has_entry_point : 1;
 #endif
+#ifdef ENABLE_WEBCIL
+	/* set to a non-zero value when we load a webcil-in-wasm image.
+	 * Note that in that case MonoImage:raw_data is not equal to MonoImageStorage:raw_data
+	 */
+	int32_t webcil_section_adjustment;
+#endif
 } MonoImageStorage;
 
 struct _MonoImage {
@@ -298,7 +303,7 @@ struct _MonoImage {
 
 	MonoImageStorage *storage;
 
-	/* Aliases storage->raw_data when storage is non-NULL. Otherwise NULL. */
+	/* Points into storage->raw_data when storage is non-NULL. Otherwise NULL. */
 	char *raw_data;
 	guint32 raw_data_len;
 
@@ -461,11 +466,6 @@ struct _MonoImage {
 	 * metadata engine
 	 */
 	void *user_info;
-
-#ifndef DISABLE_DLLMAP
-	/* dll map entries */
-	MonoDllMap *dll_map;
-#endif
 
 	/* interfaces IDs from this image */
 	/* protected by the classes lock */
@@ -656,10 +656,16 @@ struct _MonoMethodSignature {
 	unsigned int  pinvoke             : 1;
 	unsigned int  is_inflated         : 1;
 	unsigned int  has_type_parameters : 1;
-	unsigned int  suppress_gc_transition : 1;
 	unsigned int  marshalling_disabled : 1;
+	uint8_t       ext_callconv; // see MonoExtCallConv
 	MonoType     *params [MONO_ZERO_LEN_ARRAY];
 };
+
+typedef enum {
+  MONO_EXT_CALLCONV_SUPPRESS_GC_TRANSITION = 0x01,
+  MONO_EXT_CALLCONV_SWIFTCALL = 0x02,
+  /// see MonoMethodSignature:ext_callconv - only 8 bits
+} MonoExtCallConv;
 
 /*
  * AOT cache configuration loaded from config files.
@@ -676,6 +682,11 @@ typedef struct {
 } MonoAotCacheConfig;
 
 #define MONO_SIZEOF_METHOD_SIGNATURE (sizeof (struct _MonoMethodSignature) - MONO_ZERO_LEN_ARRAY * SIZEOF_VOID_P)
+
+typedef enum {
+    MONO_CLASS_LOADER_IMMEDIATE_FAILURE, // Used during runtime to indicate that the failure should be reported
+    MONO_CLASS_LOADER_DEFERRED_FAILURE // Used during AOT compilation to defer failure for execution
+} MonoFailureType;
 
 static inline gboolean
 image_is_dynamic (MonoImage *image)
@@ -986,6 +997,7 @@ MonoMethodSignature  *mono_metadata_signature_dup_full (MonoImage *image,MonoMet
 MonoMethodSignature  *mono_metadata_signature_dup_mempool (MonoMemPool *mp, MonoMethodSignature *sig);
 MonoMethodSignature  *mono_metadata_signature_dup_mem_manager (MonoMemoryManager *mem_manager, MonoMethodSignature *sig);
 MonoMethodSignature  *mono_metadata_signature_dup_add_this (MonoImage *image, MonoMethodSignature *sig, MonoClass *klass);
+MonoMethodSignature  *mono_metadata_signature_dup_delegate_invoke_to_target (MonoMethodSignature *sig);
 
 MonoGenericInst *
 mono_get_shared_generic_inst (MonoGenericContainer *container);
@@ -1006,6 +1018,15 @@ gboolean       mono_metadata_generic_inst_equal (gconstpointer ka, gconstpointer
 
 gboolean
 mono_metadata_signature_equal_no_ret (MonoMethodSignature *sig1, MonoMethodSignature *sig2);
+
+gboolean
+mono_metadata_signature_equal_ignore_custom_modifier (MonoMethodSignature *sig1, MonoMethodSignature *sig2);
+
+gboolean
+mono_metadata_signature_equal_vararg (MonoMethodSignature *sig1, MonoMethodSignature *sig2);
+
+gboolean
+mono_metadata_signature_equal_vararg_ignore_custom_modifier (MonoMethodSignature *sig1, MonoMethodSignature *sig2);
 
 MONO_API void
 mono_metadata_field_info_with_mempool (
@@ -1246,6 +1267,23 @@ mono_metadata_table_to_ptr_table (int table_num)
 	default:
 		g_assert_not_reached ();
 	}
+}
+
+uint32_t
+mono_metadata_get_method_params (MonoImage *image, uint32_t method_idx, uint32_t *last_param_out);
+
+void
+mono_set_failure_type (MonoFailureType failure_type);
+
+gboolean
+mono_class_set_deferred_type_load_failure (MonoClass *klass, const char * fmt, ...);
+
+gboolean
+mono_class_set_type_load_failure (MonoClass *klass, const char * fmt, ...);
+
+static inline gboolean
+mono_method_signature_has_ext_callconv (MonoMethodSignature *sig, MonoExtCallConv flags) {
+	return (sig->ext_callconv & flags) != 0;
 }
 
 #endif /* __MONO_METADATA_INTERNALS_H__ */

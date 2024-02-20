@@ -58,7 +58,6 @@ namespace System.Text.Json.Serialization.Tests
 
         [Theory]
         [MemberData(nameof(TypesWithInvalidMembers_WithMembers))]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/71838", typeof(PlatformDetection), nameof(PlatformDetection.IsBrowser), nameof(PlatformDetection.IsMonoAOT))]
         public async Task TypeWithInvalidMember(Type classType, Type invalidMemberType, string invalidMemberName)
         {
             static void ValidateException(InvalidOperationException ex, Type classType, Type invalidMemberType, string invalidMemberName)
@@ -158,9 +157,14 @@ namespace System.Text.Json.Serialization.Tests
         // and typeof(int*) can't be a generic parameter to the generic overload.
         public static IEnumerable<object[]> TypesWithInvalidMembers_WithMembers()
         {
-            yield return new object[] { typeof(Memory<byte>), typeof(Span<byte>), "Span" }; // Contains Span<byte> property.
+            yield return new object[] { typeof(ClassWithSpan), typeof(Span<byte>), "Span" };
 
             yield return new object[] { typeof(ClassWithIntPtr), s_intPtrType, "IntPtr" };
+        }
+
+        private class ClassWithSpan
+        {
+            public Span<byte> Span => Array.Empty<byte>();
         }
 
         private class ClassWithIntPtr

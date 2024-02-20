@@ -7,9 +7,9 @@
 using System.Collections;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.Versioning;
 using System.Xml.XPath;
 using System.Xml.Xsl.Runtime;
-using System.Runtime.Versioning;
 
 namespace System.Xml.Xsl
 {
@@ -83,7 +83,7 @@ namespace System.Xml.Xsl
             Debug.Assert(results != null);
 
             // Ensure that dataSources is always non-null
-            dataSources ??= XmlNullResolver.Singleton;
+            dataSources ??= XmlResolver.ThrowingResolver;
 
             _delExec(new XmlQueryRuntime(_staticData, defaultDocument, dataSources, argumentList, results));
         }

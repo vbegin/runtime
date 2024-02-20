@@ -3,13 +3,13 @@
 
 using System.Collections.Generic;
 using System.ComponentModel.Composition.Primitives;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Internal;
 using Microsoft.Internal.Collections;
-using System.Diagnostics;
 
 namespace System.ComponentModel.Composition.ReflectionModel
 {
@@ -335,7 +335,7 @@ namespace System.ComponentModel.Composition.ReflectionModel
             return arguments;
         }
 
-        // alwayc called under a lock
+        // always called under a lock
         private bool RequiresActivation()
         {
             // If we have any imports then we need activation

@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
 using System.Text;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public class TCWriterWithMemoryStream
     {
@@ -148,7 +148,7 @@ namespace System.Xml.Tests
                 }
                 CError.WriteLine("actual: " + outputXml);
                 CError.Compare(outputXml, "<elem>text</elem>", "wrong xml");
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (Exception e)
             {
@@ -180,7 +180,7 @@ namespace System.Xml.Tests
                 }
                 CError.WriteLine("actual: " + outputXml);
                 CError.Compare(outputXml, "<elem>text</elem>", "wrong xml");
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (Exception e)
             {
@@ -215,7 +215,7 @@ namespace System.Xml.Tests
                 }
                 CError.WriteLine("actual: " + outputXml);
                 CError.Compare(outputXml, "<elem>text</elem>", "wrong xml");
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (Exception e)
             {
@@ -250,7 +250,7 @@ namespace System.Xml.Tests
                 }
                 CError.WriteLine("actual: " + outputXml);
                 CError.Compare(outputXml, "<elem>text</elem>", "wrong xml");
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (Exception e)
             {
@@ -287,7 +287,7 @@ namespace System.Xml.Tests
                         }
                     }
                 }
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (Exception e)
             {
@@ -322,7 +322,7 @@ namespace System.Xml.Tests
                         }
                     }
                 }
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (Exception e)
             {
@@ -362,7 +362,7 @@ namespace System.Xml.Tests
                     }
                 }
 
-                Assert.True(false, "Exception was not thrown");
+                Assert.Fail("Exception was not thrown");
             }
             catch (ObjectDisposedException e)
             {

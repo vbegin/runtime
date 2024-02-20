@@ -4,8 +4,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace System.Text.RegularExpressions.Symbolic
@@ -40,17 +38,7 @@ namespace System.Text.RegularExpressions.Symbolic
         /// Maps state IDs to context-independent information for all states in <see cref="_stateArray"/>.
         /// The first valid entry is at index 1.
         /// </summary>
-        private ContextIndependentState[] _stateInfo;
-
-        /// <summary>Context-independent information available for every state.</summary>
-        [Flags]
-        private enum ContextIndependentState : byte
-        {
-            IsInitial = 1,
-            IsDeadend = 2,
-            IsNullable = 4,
-            CanBeNullable = 8,
-        }
+        private StateFlags[] _stateFlagsArray;
 
         /// <summary>
         /// The transition function for DFA mode.
@@ -74,7 +62,7 @@ namespace System.Text.RegularExpressions.Symbolic
         /// the property that all NFA states are small integers in one interval.
         /// The valid entries are 0 to the size of <see cref="_nfaIdByCoreId"/> - 1.
         /// </summary>
-        private int[] _nfaCoreIdArray = Array.Empty<int>();
+        private int[] _nfaCoreIdArray = [];
 
         /// <summary>
         /// Maps the id of a MatchingState to the NFA state id that it is being identifed with in the NFA.
@@ -89,7 +77,7 @@ namespace System.Text.RegularExpressions.Symbolic
         /// Each list of target states is without repetitions.
         /// If the entry is null then the targets states have not been computed yet.
         /// </summary>
-        private int[]?[] _nfaDelta = Array.Empty<int[]>();
+        private int[]?[] _nfaDelta = [];
 
         /// <summary>
         /// The transition function for <see cref="FindSubcaptures(ReadOnlySpan{char}, int, int, PerThreadData)"/>,
@@ -97,7 +85,7 @@ namespace System.Text.RegularExpressions.Symbolic
         /// Each entry is an array of pairs of target state and effects to be applied when taking the transition.
         /// If the entry is null then the transition has not been computed yet.
         /// </summary>
-        private (int, DerivativeEffect[])[]?[] _capturingNfaDelta = Array.Empty<(int, DerivativeEffect[])[]?>();
+        private (int, DerivativeEffect[])[]?[] _capturingNfaDelta = [];
 
         /// <summary>
         /// Implements a version of <see cref="Array.Resize"/> that is guaranteed to not publish an array before values
@@ -152,19 +140,6 @@ namespace System.Text.RegularExpressions.Symbolic
             return _nfaDelta.AsSpan(nfaState << _mintermsLog, numMinterms);
         }
 
-        /// <summary>Get context-independent information for the given state.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private (bool IsInitial, bool IsDeadend, bool IsNullable, bool CanBeNullable) GetStateInfo(int stateId)
-        {
-            Debug.Assert(stateId > 0);
-
-            ContextIndependentState info = _stateInfo[stateId];
-            return ((info & ContextIndependentState.IsInitial) != 0,
-                    (info & ContextIndependentState.IsDeadend) != 0,
-                    (info & ContextIndependentState.IsNullable) != 0,
-                    (info & ContextIndependentState.CanBeNullable) != 0);
-        }
-
         /// <summary>
         /// Create a state with given node and previous character context.
         /// </summary>
@@ -202,43 +177,13 @@ namespace System.Text.RegularExpressions.Symbolic
                     int newsize = _stateArray.Length * 2;
                     ArrayResizeAndVolatilePublish(ref _stateArray, newsize);
                     ArrayResizeAndVolatilePublish(ref _dfaDelta, newsize << _mintermsLog);
-                    ArrayResizeAndVolatilePublish(ref _stateInfo, newsize);
+                    ArrayResizeAndVolatilePublish(ref _stateFlagsArray, newsize);
                 }
                 _stateArray[state.Id] = state;
-                _stateInfo[state.Id] = BuildStateInfo(state.Id, isInitialState, state.IsDeadend(Solver), state.Node.IsNullable, state.Node.CanBeNullable);
+                _stateFlagsArray[state.Id] = state.BuildStateFlags(Solver, isInitialState);
             }
 
             return state;
-
-            // Assign the context-independent information for the given state
-            static ContextIndependentState BuildStateInfo(int stateId, bool isInitial, bool isDeadend, bool isNullable, bool canBeNullable)
-            {
-                Debug.Assert(stateId > 0);
-                Debug.Assert(!isNullable || canBeNullable);
-
-                ContextIndependentState info = 0;
-
-                if (isInitial)
-                {
-                    info |= ContextIndependentState.IsInitial;
-                }
-
-                if (isDeadend)
-                {
-                    info |= ContextIndependentState.IsDeadend;
-                }
-
-                if (canBeNullable)
-                {
-                    info |= ContextIndependentState.CanBeNullable;
-                    if (isNullable)
-                    {
-                        info |= ContextIndependentState.IsNullable;
-                    }
-                }
-
-                return info;
-            }
         }
 
         /// <summary>

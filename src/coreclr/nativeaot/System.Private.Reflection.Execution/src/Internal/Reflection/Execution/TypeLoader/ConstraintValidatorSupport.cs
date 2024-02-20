@@ -19,7 +19,7 @@ namespace Internal.Reflection.Execution
         //
         // InstantiatedType allows us to use TypeInfo for constraint validation without creating a real TypeInfo.
         // It implements just enough methods for constraint validation to work, and performs type variable substitution
-        // as necesary.
+        // as necessary.
         //
 
         private struct SigTypeContext
@@ -260,11 +260,6 @@ namespace Internal.Reflection.Execution
             return typeof(object) == type;
         }
 
-        private static bool IsSystemValueType(this Type type)
-        {
-            return typeof(ValueType) == type;
-        }
-
         private static bool IsSystemArray(this Type type)
         {
             return typeof(Array) == type;
@@ -289,7 +284,7 @@ namespace Internal.Reflection.Execution
 
             foreach (var ctor in type.GetConstructors())
             {
-                if (!ctor.IsStatic && ctor.IsPublic && ctor.GetParametersNoCopy().Length == 0)
+                if (!ctor.IsStatic && ctor.IsPublic && ctor.GetParametersAsSpan().Length == 0)
                     return true;
             }
             return false;

@@ -19,8 +19,8 @@ namespace System.Text.Json.Serialization.Metadata
         [RequiresDynamicCode(JsonSerializer.SerializationRequiresDynamicCodeMessage)]
         private static JsonConverterFactory[] GetDefaultFactoryConverters()
         {
-            return new JsonConverterFactory[]
-            {
+            return
+            [
                 // Check for disallowed types.
                 new UnsupportedTypeConverterFactory(),
                 // Nullable converter should always be next since it forwards to any nullable type.
@@ -28,18 +28,19 @@ namespace System.Text.Json.Serialization.Metadata
                 new EnumConverterFactory(),
                 new JsonNodeConverterFactory(),
                 new FSharpTypeConverterFactory(),
+                new MemoryConverterFactory(),
                 // IAsyncEnumerable takes precedence over IEnumerable.
                 new IAsyncEnumerableConverterFactory(),
                 // IEnumerable should always be second to last since they can convert any IEnumerable.
                 new IEnumerableConverterFactory(),
                 // Object should always be last since it converts any type.
                 new ObjectConverterFactory()
-            };
+            ];
         }
 
         private static Dictionary<Type, JsonConverter> GetDefaultSimpleConverters()
         {
-            const int NumberOfSimpleConverters = 26;
+            const int NumberOfSimpleConverters = 31;
             var converters = new Dictionary<Type, JsonConverter>(NumberOfSimpleConverters);
 
             // Use a dictionary for simple converters.
@@ -53,6 +54,7 @@ namespace System.Text.Json.Serialization.Metadata
 #if NETCOREAPP
             Add(JsonMetadataServices.DateOnlyConverter);
             Add(JsonMetadataServices.TimeOnlyConverter);
+            Add(JsonMetadataServices.HalfConverter);
 #endif
             Add(JsonMetadataServices.DoubleConverter);
             Add(JsonMetadataServices.DecimalConverter);
@@ -62,6 +64,8 @@ namespace System.Text.Json.Serialization.Metadata
             Add(JsonMetadataServices.Int64Converter);
             Add(JsonMetadataServices.JsonElementConverter);
             Add(JsonMetadataServices.JsonDocumentConverter);
+            Add(JsonMetadataServices.MemoryByteConverter);
+            Add(JsonMetadataServices.ReadOnlyMemoryByteConverter);
             Add(JsonMetadataServices.ObjectConverter);
             Add(JsonMetadataServices.SByteConverter);
             Add(JsonMetadataServices.SingleConverter);
@@ -70,6 +74,10 @@ namespace System.Text.Json.Serialization.Metadata
             Add(JsonMetadataServices.UInt16Converter);
             Add(JsonMetadataServices.UInt32Converter);
             Add(JsonMetadataServices.UInt64Converter);
+#if NET7_0_OR_GREATER
+            Add(JsonMetadataServices.Int128Converter);
+            Add(JsonMetadataServices.UInt128Converter);
+#endif
             Add(JsonMetadataServices.UriConverter);
             Add(JsonMetadataServices.VersionConverter);
 
@@ -78,32 +86,27 @@ namespace System.Text.Json.Serialization.Metadata
             return converters;
 
             void Add(JsonConverter converter) =>
-                converters.Add(converter.TypeToConvert, converter);
+                converters.Add(converter.Type!, converter);
         }
 
-        internal static JsonConverter GetBuiltInConverter(Type typeToConvert)
+        [RequiresUnreferencedCode(JsonSerializer.SerializationUnreferencedCodeMessage)]
+        [RequiresDynamicCode(JsonSerializer.SerializationRequiresDynamicCodeMessage)]
+        private static JsonConverter GetBuiltInConverter(Type typeToConvert)
         {
-            if (s_defaultSimpleConverters == null || s_defaultFactoryConverters == null)
-            {
-                // (De)serialization using serializer's options-based methods has not yet occurred, so the built-in converters are not rooted.
-                // Even though source-gen code paths do not call this method <i.e. JsonSerializerOptions.GetConverter(Type)>, we do not root all the
-                // built-in converters here since we fetch converters for any type included for source generation from the binded context (Priority 1).
-                ThrowHelper.ThrowNotSupportedException_BuiltInConvertersNotRooted(typeToConvert);
-                return null!;
-            }
+            s_defaultSimpleConverters ??= GetDefaultSimpleConverters();
+            s_defaultFactoryConverters ??= GetDefaultFactoryConverters();
 
-            JsonConverter? converter;
-            if (s_defaultSimpleConverters.TryGetValue(typeToConvert, out converter))
+            if (s_defaultSimpleConverters.TryGetValue(typeToConvert, out JsonConverter? converter))
             {
                 return converter;
             }
             else
             {
-                foreach (JsonConverter item in s_defaultFactoryConverters)
+                foreach (JsonConverterFactory factory in s_defaultFactoryConverters)
                 {
-                    if (item.CanConvert(typeToConvert))
+                    if (factory.CanConvert(typeToConvert))
                     {
-                        converter = item;
+                        converter = factory;
                         break;
                     }
                 }
@@ -125,39 +128,26 @@ namespace System.Text.Json.Serialization.Metadata
             return s_defaultSimpleConverters.TryGetValue(typeToConvert, out converter);
         }
 
-        // This method gets the runtime information for a given type or property.
-        // The runtime information consists of the following:
-        // - class type,
-        // - element type (if the type is a collection),
-        // - the converter (either native or custom), if one exists.
         [RequiresUnreferencedCode(JsonSerializer.SerializationUnreferencedCodeMessage)]
         [RequiresDynamicCode(JsonSerializer.SerializationRequiresDynamicCodeMessage)]
-        internal static JsonConverter GetConverterForMember(
-            Type typeToConvert,
-            MemberInfo memberInfo,
-            JsonSerializerOptions options,
-            out JsonConverter? customConverter)
+        private static JsonConverter? GetCustomConverterForMember(Type typeToConvert, MemberInfo memberInfo, JsonSerializerOptions options)
         {
             Debug.Assert(memberInfo is FieldInfo or PropertyInfo);
             Debug.Assert(typeToConvert != null);
 
             JsonConverterAttribute? converterAttribute = memberInfo.GetUniqueCustomAttribute<JsonConverterAttribute>(inherit: false);
-            customConverter = converterAttribute is null ? null : GetConverterFromAttribute(converterAttribute, typeToConvert, memberInfo, options);
-
-            return options.TryGetTypeInfoCached(typeToConvert, out JsonTypeInfo? typeInfo)
-                ? typeInfo.Converter
-                : GetConverterForType(typeToConvert, options);
+            return converterAttribute is null ? null : GetConverterFromAttribute(converterAttribute, typeToConvert, memberInfo, options);
         }
 
         [RequiresUnreferencedCode(JsonSerializer.SerializationUnreferencedCodeMessage)]
         [RequiresDynamicCode(JsonSerializer.SerializationRequiresDynamicCodeMessage)]
-        internal static JsonConverter GetConverterForType(Type typeToConvert, JsonSerializerOptions options)
+        internal static JsonConverter GetConverterForType(Type typeToConvert, JsonSerializerOptions options, bool resolveJsonConverterAttribute = true)
         {
             // Priority 1: Attempt to get custom converter from the Converters list.
             JsonConverter? converter = options.GetConverterFromList(typeToConvert);
 
             // Priority 2: Attempt to get converter from [JsonConverter] on the type being converted.
-            if (converter == null)
+            if (resolveJsonConverterAttribute && converter == null)
             {
                 JsonConverterAttribute? converterAttribute = typeToConvert.GetUniqueCustomAttribute<JsonConverterAttribute>(inherit: false);
                 if (converterAttribute != null)
@@ -166,8 +156,18 @@ namespace System.Text.Json.Serialization.Metadata
                 }
             }
 
-            // Priority 3: Fall back to built-in converters and validate result
-            return options.GetCustomOrBuiltInConverter(typeToConvert, converter);
+            // Priority 3: Query the built-in converters.
+            converter ??= GetBuiltInConverter(typeToConvert);
+
+            // Expand if factory converter & validate.
+            converter = options.ExpandConverterFactory(converter, typeToConvert);
+            if (!converter.Type!.IsInSubtypeRelationshipWith(typeToConvert))
+            {
+                ThrowHelper.ThrowInvalidOperationException_SerializationConverterNotCompatible(converter.GetType(), typeToConvert);
+            }
+
+            JsonSerializerOptions.CheckConverterNullabilityIsSameAsPropertyType(converter, typeToConvert);
+            return converter;
         }
 
         [RequiresUnreferencedCode(JsonSerializer.SerializationUnreferencedCodeMessage)]

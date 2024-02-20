@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Text.Json.Serialization.Metadata;
+
 namespace System.Text.Json.Serialization
 {
     /// <summary>
@@ -10,6 +12,8 @@ namespace System.Text.Json.Serialization
     /// <typeparam name="T"></typeparam>
     internal abstract class JsonResumableConverter<T> : JsonConverter<T>
     {
+        public override bool HandleNull => false;
+
         public sealed override T? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if (options is null)
@@ -20,8 +24,10 @@ namespace System.Text.Json.Serialization
             // Bridge from resumable to value converters.
 
             ReadStack state = default;
-            state.Initialize(typeToConvert, options, supportContinuation: false);
-            TryRead(ref reader, typeToConvert, options, ref state, out T? value);
+            JsonTypeInfo jsonTypeInfo = options.GetTypeInfoInternal(typeToConvert);
+            state.Initialize(jsonTypeInfo);
+
+            TryRead(ref reader, typeToConvert, options, ref state, out T? value, out _);
             return value;
         }
 
@@ -33,9 +39,10 @@ namespace System.Text.Json.Serialization
             }
 
             // Bridge from resumable to value converters.
-
             WriteStack state = default;
-            state.Initialize(typeof(T), options, supportContinuation: false, supportAsync: false);
+            JsonTypeInfo typeInfo = options.GetTypeInfoInternal(typeof(T));
+            state.Initialize(typeInfo);
+
             try
             {
                 TryWrite(writer, value, options, ref state);
@@ -46,7 +53,5 @@ namespace System.Text.Json.Serialization
                 throw;
             }
         }
-
-        public sealed override bool HandleNull => false;
     }
 }

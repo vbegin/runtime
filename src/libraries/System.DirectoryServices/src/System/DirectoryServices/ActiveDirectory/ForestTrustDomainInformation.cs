@@ -1,8 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.InteropServices;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 
 namespace System.DirectoryServices.ActiveDirectory
 {
@@ -30,7 +30,7 @@ namespace System.DirectoryServices.ActiveDirectory
             global::Interop.BOOL result = global::Interop.Advapi32.ConvertSidToStringSid(domainInfo.sid, out sidLocal);
             if (result == global::Interop.BOOL.FALSE)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             DomainSid = sidLocal;

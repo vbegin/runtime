@@ -2,12 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.IO;
-using System.Text.RegularExpressions;
 using System.Xml.Schema;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaValidatorApiTests
 {
     public class TCValidateAfterAdd : CXmlSchemaValidatorTestCase
     {
@@ -181,7 +180,7 @@ namespace System.Xml.Tests
             try
             {
                 Schema2 = ss.Reprocess(Schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (ArgumentException e)
             {
@@ -245,7 +244,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Reprocess(Schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (ArgumentException e)
             {
@@ -327,7 +326,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Reprocess(Schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (ArgumentException e)
             {
@@ -391,7 +390,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Reprocess(schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (ArgumentException e)
             {
@@ -467,7 +466,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Reprocess(Schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaException e)
             {
@@ -478,7 +477,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Compile();
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaException e)
             {
@@ -489,7 +488,7 @@ namespace System.Xml.Tests
             try
             {
                 ValidateWithSchemaInfo(ss);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaValidationException e)
             {
@@ -521,7 +520,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Reprocess(Schema1);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaException e)
             {
@@ -532,7 +531,7 @@ namespace System.Xml.Tests
             try
             {
                 ss.Compile();
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaException e)
             {
@@ -543,7 +542,7 @@ namespace System.Xml.Tests
             try
             {
                 ValidateWithSchemaInfo(ss);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaValidationException e)
             {
@@ -570,7 +569,7 @@ namespace System.Xml.Tests
             try
             {
                 Schema1 = ss.Add(Schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (XmlSchemaException e)
             {
@@ -637,7 +636,7 @@ namespace System.Xml.Tests
                 _output.WriteLine(e.Message);
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //TFS_469828
@@ -669,7 +668,7 @@ namespace System.Xml.Tests
                 try
                 {
                     while (xmlReader.Read()) ;
-                    Assert.True(false);
+                    Assert.Fail();
                 }
                 catch (XmlSchemaValidationException e)
                 {
@@ -941,8 +940,7 @@ namespace System.Xml.Tests
 
         private string EnsureTrailingSlash(string path)
         {
-            if (string.IsNullOrEmpty(path))
-                throw new ArgumentException();
+            ArgumentException.ThrowIfNullOrEmpty(path);
 
             return path[path.Length - 1] == Path.DirectorySeparatorChar ?
                 path :
@@ -1111,6 +1109,47 @@ namespace System.Xml.Tests
             Assert.Equal(0, warningCount);
             Assert.Equal(1, errorCount);
             return;
+        }
+
+        [Fact]
+        public static void XmlSchemaReadNullStream()
+        {
+            Assert.Throws<ArgumentNullException>(() => XmlSchema.Read(default(Stream), validationEventHandler: null));
+        }
+
+        [Fact]
+        public static void XmlSchemaReadNullTextReader()
+        {
+            Assert.Throws<ArgumentNullException>(() => XmlSchema.Read(default(TextReader), validationEventHandler: null));
+        }
+
+        [Fact]
+        public static void XmlSchemaReadNullReader()
+        {
+            Assert.Throws<ArgumentNullException>(() => XmlSchema.Read(default(XmlReader), validationEventHandler: null));
+        }
+
+        [Fact]
+        public static void XmlSchemaWriteNullStream()
+        {
+            XmlSchema schema = new XmlSchema();
+            Assert.Throws<ArgumentNullException>(() => schema.Write(default(Stream), namespaceManager: null));
+        }
+
+        [Fact]
+        public static void XmlSchemaWriteNullTextWriter()
+        {
+            XmlSchema schema = new XmlSchema();
+            Assert.Throws<ArgumentNullException>(() => schema.Write(default(TextWriter)));
+            Assert.Throws<ArgumentNullException>(() => schema.Write(default(TextWriter), namespaceManager: null));
+        }
+
+        [Fact]
+        public static void XmlSchemaWriteNullWriter()
+        {
+            XmlSchema schema = new XmlSchema();
+            Assert.Throws<ArgumentNullException>(() => schema.Write(default(XmlWriter)));
+            Assert.Throws<ArgumentNullException>(() => schema.Write(default(XmlWriter), namespaceManager: null));
         }
     }
 }

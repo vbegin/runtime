@@ -60,7 +60,7 @@ class Module;
 typedef DWORD RVA;
 
 #ifdef _MSC_VER
-// Wrapper to suppress ambigous overload problems with MSVC.
+// Wrapper to suppress ambiguous overload problems with MSVC.
 inline CHECK CheckOverflow(RVA value1, COUNT_T value2)
 {
     WRAPPER_NO_CONTRACT;
@@ -87,6 +87,8 @@ inline CHECK CheckOverflow(RVA value1, COUNT_T value2)
 #define IMAGE_FILE_MACHINE_NATIVE   IMAGE_FILE_MACHINE_POWERPC
 #elif defined(TARGET_S390X)
 #define IMAGE_FILE_MACHINE_NATIVE   IMAGE_FILE_MACHINE_UNKNOWN
+#elif defined(TARGET_RISCV64)
+#define IMAGE_FILE_MACHINE_NATIVE   IMAGE_FILE_MACHINE_RISCV64
 #else
 #error "port me"
 #endif
@@ -177,8 +179,6 @@ class PEDecoder
     DWORD GetCheckSum() const;
     WORD GetMachine() const;
     WORD GetCharacteristics() const;
-    DWORD GetFileAlignment() const;
-    DWORD GetSectionAlignment() const;
     SIZE_T GetSizeOfStackReserve() const;
     SIZE_T GetSizeOfStackCommit() const;
     SIZE_T GetSizeOfHeapReserve() const;
@@ -336,7 +336,7 @@ class PEDecoder
     // Protected API for subclass use
     // ------------------------------------------------------------
 
-    // Checking utilites
+    // Checking utilities
     static CHECK CheckBounds(RVA rangeBase, COUNT_T rangeSize, RVA rva);
     static CHECK CheckBounds(RVA rangeBase, COUNT_T rangeSize, RVA rva, COUNT_T size);
 

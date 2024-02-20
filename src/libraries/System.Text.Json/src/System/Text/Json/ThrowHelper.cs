@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Text.Json.Serialization.Metadata;
 
 namespace System.Text.Json
 {
@@ -14,9 +13,15 @@ namespace System.Text.Json
         public const string ExceptionSourceValueToRethrowAsJsonException = "System.Text.Json.Rethrowable";
 
         [DoesNotReturn]
-        public static void ThrowArgumentNullException(string parameterName)
+        public static void ThrowArgumentOutOfRangeException_IndentCharacter(string parameterName)
         {
-            throw new ArgumentNullException(parameterName);
+            throw GetArgumentOutOfRangeException(parameterName, SR.InvalidIndentCharacter);
+        }
+
+        [DoesNotReturn]
+        public static void ThrowArgumentOutOfRangeException_IndentSize(string parameterName, int minimumSize, int maximumSize)
+        {
+            throw GetArgumentOutOfRangeException(parameterName, SR.Format(SR.InvalidIndentSize, minimumSize, maximumSize));
         }
 
         [DoesNotReturn]
@@ -40,6 +45,12 @@ namespace System.Text.Json
         public static void ThrowArgumentOutOfRangeException_ArrayIndexNegative(string paramName)
         {
             throw new ArgumentOutOfRangeException(paramName, SR.ArrayIndexNegative);
+        }
+
+        [DoesNotReturn]
+        public static void ThrowArgumentOutOfRangeException_JsonConverterFactory_TypeNotSupported(Type typeToConvert)
+        {
+            throw new ArgumentOutOfRangeException(nameof(typeToConvert), SR.Format(SR.SerializerConverterFactoryInvalidArgument, typeToConvert.FullName));
         }
 
         [DoesNotReturn]
@@ -77,7 +88,7 @@ namespace System.Text.Json
         }
 
         [DoesNotReturn]
-        public static void ThrowArgumentException_ValueTooLarge(int tokenLength)
+        public static void ThrowArgumentException_ValueTooLarge(long tokenLength)
         {
             throw GetArgumentException(SR.Format(SR.ValueTooLarge, tokenLength));
         }
@@ -92,6 +103,12 @@ namespace System.Text.Json
         public static void ThrowInvalidOperationException_NeedLargerSpan()
         {
             throw GetInvalidOperationException(SR.FailedToGetLargerSpan);
+        }
+
+        [DoesNotReturn]
+        public static void ThrowPropertyNameTooLargeArgumentException(int length)
+        {
+            throw GetArgumentException(SR.Format(SR.PropertyNameTooLarge, length));
         }
 
         [DoesNotReturn]
@@ -244,6 +261,12 @@ namespace System.Text.Json
         public static void ThrowInvalidOperationException_ExpectedString(JsonTokenType tokenType)
         {
             throw GetInvalidOperationException("string", tokenType);
+        }
+
+        [DoesNotReturn]
+        public static void ThrowInvalidOperationException_ExpectedPropertyName(JsonTokenType tokenType)
+        {
+            throw GetInvalidOperationException("propertyName", tokenType);
         }
 
         [DoesNotReturn]
@@ -504,7 +527,7 @@ namespace System.Text.Json
             throw GetInvalidOperationException(SR.CannotReadIncompleteUTF16);
         }
 
-        public static InvalidOperationException GetInvalidOperationException_ReadInvalidUTF8(DecoderFallbackException innerException)
+        public static InvalidOperationException GetInvalidOperationException_ReadInvalidUTF8(DecoderFallbackException? innerException = null)
         {
             return GetInvalidOperationException(SR.CannotTranscodeInvalidUtf8, innerException);
         }
@@ -514,7 +537,7 @@ namespace System.Text.Json
             return new ArgumentException(SR.CannotTranscodeInvalidUtf16, innerException);
         }
 
-        public static InvalidOperationException GetInvalidOperationException(string message, Exception innerException)
+        public static InvalidOperationException GetInvalidOperationException(string message, Exception? innerException)
         {
             InvalidOperationException ex = new InvalidOperationException(message, innerException);
             ex.Source = ExceptionSourceValueToRethrowAsJsonException;
@@ -604,6 +627,9 @@ namespace System.Text.Json
                 case NumericType.Int64:
                     message = SR.FormatInt64;
                     break;
+                case NumericType.Int128:
+                    message = SR.FormatInt128;
+                    break;
                 case NumericType.UInt16:
                     message = SR.FormatUInt16;
                     break;
@@ -612,6 +638,12 @@ namespace System.Text.Json
                     break;
                 case NumericType.UInt64:
                     message = SR.FormatUInt64;
+                    break;
+                case NumericType.UInt128:
+                    message = SR.FormatUInt128;
+                    break;
+                case NumericType.Half:
+                    message = SR.FormatHalf;
                     break;
                 case NumericType.Single:
                     message = SR.FormatSingle;
@@ -729,9 +761,12 @@ namespace System.Text.Json
         Int16,
         Int32,
         Int64,
+        Int128,
         UInt16,
         UInt32,
         UInt64,
+        UInt128,
+        Half,
         Single,
         Double,
         Decimal

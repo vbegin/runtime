@@ -346,7 +346,7 @@ namespace System.Linq.Expressions
             UnaryExpression? u = GetUserDefinedUnaryOperator(unaryType, name, operand);
             if (u != null)
             {
-                ValidateParamswithOperandsOrThrow(u.Method!.GetParametersCached()[0].ParameterType, operand.Type, unaryType, name);
+                ValidateParamsWithOperandsOrThrow(u.Method!.GetParametersCached()[0].ParameterType, operand.Type, unaryType, name);
                 return u;
             }
             throw Error.UnaryOperatorNotDefined(unaryType, operand.Type);
@@ -371,7 +371,7 @@ namespace System.Linq.Expressions
                 method = nnOperandType.GetAnyStaticMethodValidated(name, types);
                 if (method != null && method.ReturnType.IsValueType && !method.ReturnType.IsNullableType())
                 {
-                    return new UnaryExpression(unaryType, operand, method.ReturnType.GetNullableType(), method);
+                    return new UnaryExpression(unaryType, operand, method.ReturnType.LiftPrimitiveOrThrow(), method);
                 }
             }
             return null;
@@ -386,7 +386,7 @@ namespace System.Linq.Expressions
                 throw Error.IncorrectNumberOfMethodCallArguments(method, nameof(method));
             if (ParameterIsAssignable(pms[0], operand.Type))
             {
-                ValidateParamswithOperandsOrThrow(pms[0].ParameterType, operand.Type, unaryType, method.Name);
+                ValidateParamsWithOperandsOrThrow(pms[0].ParameterType, operand.Type, unaryType, method.Name);
                 return new UnaryExpression(unaryType, operand, method.ReturnType, method);
             }
             // check for lifted call
@@ -394,7 +394,7 @@ namespace System.Linq.Expressions
                 ParameterIsAssignable(pms[0], operand.Type.GetNonNullableType()) &&
                 method.ReturnType.IsValueType && !method.ReturnType.IsNullableType())
             {
-                return new UnaryExpression(unaryType, operand, method.ReturnType.GetNullableType(), method);
+                return new UnaryExpression(unaryType, operand, method.ReturnType.LiftPrimitiveOrThrow(), method);
             }
 
             throw Error.OperandTypesDoNotMatchParameters(unaryType, method.Name);

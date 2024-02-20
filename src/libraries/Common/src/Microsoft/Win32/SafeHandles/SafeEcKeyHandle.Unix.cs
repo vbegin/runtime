@@ -3,8 +3,8 @@
 
 using System;
 using System.Diagnostics;
-using System.Security;
 using System.Runtime.InteropServices;
+using System.Security;
 
 namespace Microsoft.Win32.SafeHandles
 {
@@ -37,7 +37,9 @@ namespace Microsoft.Win32.SafeHandles
 
             if (!Interop.Crypto.EcKeyUpRef(handle))
             {
-                throw Interop.Crypto.CreateOpenSslCryptographicException();
+                Exception e = Interop.Crypto.CreateOpenSslCryptographicException();
+                safeHandle.Dispose();
+                throw e;
             }
 
             safeHandle.SetHandle(handle);

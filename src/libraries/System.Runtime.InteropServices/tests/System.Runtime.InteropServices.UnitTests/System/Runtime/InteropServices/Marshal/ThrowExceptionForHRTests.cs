@@ -7,6 +7,7 @@ using Xunit;
 
 namespace System.Runtime.InteropServices.Tests
 {
+    [ConditionalClass(typeof(PlatformDetection), nameof(PlatformDetection.IsNotNativeAot))]
     public class ThrowExceptionForHRTests
     {
         [Theory]
@@ -32,9 +33,7 @@ namespace System.Runtime.InteropServices.Tests
                 Assert.Null(ex.HelpLink);
                 Assert.NotEmpty(ex.Message);
 
-                string sourceMaybe = PlatformDetection.IsNetCore
-                        ? "System.Private.CoreLib"
-                        : "mscorlib";
+                string sourceMaybe = "System.Private.CoreLib";
 
                 // If the ThrowExceptionForHR is inlined by the JIT, the source could be the test assembly
                 Assert.Contains(ex.Source, new string[]{ sourceMaybe, Assembly.GetExecutingAssembly().GetName().Name });
@@ -75,9 +74,7 @@ namespace System.Runtime.InteropServices.Tests
                 Assert.Null(ex.HelpLink);
                 Assert.NotEmpty(ex.Message);
 
-                string sourceMaybe = PlatformDetection.IsNetCore
-                        ? "System.Private.CoreLib"
-                        : "mscorlib";
+                string sourceMaybe = "System.Private.CoreLib";
 
                 // If the ThrowExceptionForHR is inlined by the JIT, the source could be the test assembly
                 Assert.Contains(ex.Source, new string[]{ sourceMaybe, Assembly.GetExecutingAssembly().GetName().Name });

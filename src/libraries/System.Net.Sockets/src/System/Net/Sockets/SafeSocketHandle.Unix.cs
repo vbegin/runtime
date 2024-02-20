@@ -2,11 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
-using System.Diagnostics;
 
 namespace System.Net.Sockets
 {
@@ -188,6 +188,12 @@ namespace System.Net.Sockets
             // On Linux this works well.
             // On OSX, TCP connections will be closed with a FIN close instead of an abortive RST close.
             // And, pending TCP connect operations and UDP receive are not abortable.
+
+            // Don't disconnect sockets we don't own.
+            if (!OwnsHandle)
+            {
+                return false;
+            }
 
             // Unless we're doing an abortive close, don't touch sockets which don't have the CLOEXEC flag set.
             // These may be shared with other processes and we want to avoid disconnecting them.

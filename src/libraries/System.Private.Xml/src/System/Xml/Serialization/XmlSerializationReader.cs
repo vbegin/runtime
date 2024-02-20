@@ -12,6 +12,7 @@ using System.Reflection;
 using System.Security;
 using System.Xml;
 using System.Xml.Schema;
+using static System.Xml.Serialization.ReflectionXmlSerializationReader;
 
 namespace System.Xml.Serialization
 {
@@ -110,7 +111,7 @@ namespace System.Xml.Serialization
         protected abstract void InitIDs();
 
         // this method must be called before any generated deserialization methods are called
-        internal void Init(XmlReader r, XmlDeserializationEvents events, string? encodingStyle, TempAssembly? tempAssembly)
+        internal void Init(XmlReader r, XmlDeserializationEvents events, string? encodingStyle)
         {
             _events = events;
             _r = r;
@@ -878,7 +879,7 @@ namespace System.Xml.Serialization
             return doc;
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected string? CollapseWhitespace(string? value)
         {
             if (value == null)
@@ -909,7 +910,7 @@ namespace System.Xml.Serialization
             return node;
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected static byte[]? ToByteArrayBase64(string? value)
         {
             return XmlCustomFormatter.ToByteArrayBase64(value);
@@ -924,7 +925,7 @@ namespace System.Xml.Serialization
             return ReadByteArray(true); //means use Base64
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected static byte[]? ToByteArrayHex(string? value)
         {
             return XmlCustomFormatter.ToByteArrayHex(value);
@@ -963,7 +964,7 @@ namespace System.Xml.Serialization
         {
             if (value == null)
             {
-                throw new ArgumentNullException(SR.Format(SR.XmlMissingArrayType, CurrentTag()));
+                throw new ArgumentNullException(nameof(value), SR.Format(SR.XmlMissingArrayType, CurrentTag()));
             }
 
             if (value.Length == 0)
@@ -1106,25 +1107,25 @@ namespace System.Xml.Serialization
             return XmlCustomFormatter.ToEnum(value, h, typeName, true);
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected static string? ToXmlName(string? value)
         {
             return XmlCustomFormatter.ToXmlName(value);
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected static string? ToXmlNCName(string? value)
         {
             return XmlCustomFormatter.ToXmlNCName(value);
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected static string? ToXmlNmToken(string? value)
         {
             return XmlCustomFormatter.ToXmlNmToken(value);
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected static string? ToXmlNmTokens(string? value)
         {
             return XmlCustomFormatter.ToXmlNmTokens(value);
@@ -1146,7 +1147,7 @@ namespace System.Xml.Serialization
                 prefix = XmlConvert.DecodeName(prefix);
                 localName = XmlConvert.DecodeName(localName);
             }
-            if (prefix == null || prefix.Length == 0)
+            if (string.IsNullOrEmpty(prefix))
             {
                 return new XmlQualifiedName(_r.NameTable.Add(value), _r.LookupNamespace(string.Empty));
             }
@@ -1362,19 +1363,19 @@ namespace System.Xml.Serialization
             return b;
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected string? ReadString(string? value)
         {
             return ReadString(value, false);
         }
 
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         protected string? ReadString(string? value, bool trim)
         {
             string str = _r.ReadString();
             if (str != null && trim)
                 str = str.Trim();
-            if (value == null || value.Length == 0)
+            if (string.IsNullOrEmpty(value))
                 return str;
             return value + str;
         }
@@ -1547,7 +1548,7 @@ namespace System.Xml.Serialization
         }
 
         [RequiresUnreferencedCode("calls GetArrayElementType")]
-        private object? ReadArray(string? typeName, string? typeNs)
+        private Array? ReadArray(string? typeName, string? typeNs)
         {
             SoapArrayInfo arrayInfo;
             Type? fallbackElementType = null;
@@ -2275,7 +2276,7 @@ namespace System.Xml.Serialization
         }
 
         [RequiresUnreferencedCode("calls GenerateReferencedMethods")]
-        internal void GenerateEnd(string?[] methods, XmlMapping[] xmlMappings, Type?[]? types)
+        internal void GenerateEnd()
         {
             GenerateReferencedMethods();
             GenerateInitCallbacksMethod();
@@ -3318,7 +3319,7 @@ namespace System.Xml.Serialization
                         // find anyElement if present.
                         for (int j = 0; j < mapping.Elements!.Length; j++)
                         {
-                            if (mapping.Elements[j].Any && (mapping.Elements[j].Name == null || mapping.Elements[j].Name.Length == 0))
+                            if (mapping.Elements[j].Any && string.IsNullOrEmpty(mapping.Elements[j].Name))
                             {
                                 anyElement = member;
                                 break;
@@ -3978,7 +3979,7 @@ namespace System.Xml.Serialization
                 {
                     ElementAccessor e = elements[j];
                     string? ns = e.Form == XmlSchemaForm.Qualified ? e.Namespace : "";
-                    if (e.Any && (e.Name == null || e.Name.Length == 0)) continue;
+                    if (e.Any && string.IsNullOrEmpty(e.Name)) continue;
 
                     if (!firstElement)
                         qnames += ", ";
@@ -4197,7 +4198,7 @@ namespace System.Xml.Serialization
                 {
                     ElementAccessor e = elements[j];
                     string? ns = e.Form == XmlSchemaForm.Qualified ? e.Namespace : "";
-                    if (!isSequence && e.Any && (e.Name == null || e.Name.Length == 0)) continue;
+                    if (!isSequence && e.Any && string.IsNullOrEmpty(e.Name)) continue;
                     if (!isSequence)
                     {
                         if (firstElement && count == 0)
@@ -4821,7 +4822,14 @@ namespace System.Xml.Serialization
                         Writer.Write("ReadSerializable(( ");
                         Writer.Write(typeof(IXmlSerializable).FullName);
                         Writer.Write(")");
-                        Writer.Write(RaCodeGen.GetStringForCreateInstance(sm.TypeDesc!.CSharpName, sm.TypeDesc.UseReflection, sm.TypeDesc.CannotNew, false));
+                        if (sm.TypeDesc!.CSharpName == "global::System.Xml.Linq.XElement")
+                        {
+                            Writer.Write(RaCodeGen.GetStringForCreateInstance(sm.TypeDesc!.CSharpName, false, false, false, "\"default\""));
+                        }
+                        else
+                        {
+                            Writer.Write(RaCodeGen.GetStringForCreateInstance(sm.TypeDesc!.CSharpName, sm.TypeDesc.UseReflection, sm.TypeDesc.CannotNew, false));
+                        }
                         bool isWrappedAny = !element.Any && IsWildcard(sm);
                         if (isWrappedAny)
                         {

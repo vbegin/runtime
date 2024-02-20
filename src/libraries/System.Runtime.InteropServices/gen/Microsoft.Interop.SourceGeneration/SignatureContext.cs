@@ -12,7 +12,6 @@ using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Diagnostics;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Microsoft.Interop
@@ -30,6 +29,8 @@ namespace Microsoft.Interop
 
         public ImmutableArray<TypePositionInfo> ElementTypeInformation { get; init; }
 
+        public IEnumerable<TypePositionInfo> ManagedParameters => ElementTypeInformation.Where(tpi => !TypePositionInfo.IsSpecialIndex(tpi.ManagedIndex));
+
         public TypeSyntax StubReturnType { get; init; }
 
         public IEnumerable<ParameterSyntax> StubParameters
@@ -43,7 +44,7 @@ namespace Microsoft.Interop
                     {
                         yield return Parameter(Identifier(typeInfo.InstanceIdentifier))
                             .WithType(typeInfo.ManagedType.Syntax)
-                            .WithModifiers(TokenList(Token(typeInfo.RefKindSyntax)));
+                            .WithModifiers(MarshallerHelpers.GetManagedParameterModifiers(typeInfo));
                     }
                 }
             }
@@ -53,34 +54,32 @@ namespace Microsoft.Interop
 
         public static SignatureContext Create(
             IMethodSymbol method,
-            InteropAttributeData interopAttributeData,
+            MarshallingInfoParser marshallingInfoParser,
             StubEnvironment env,
-            IGeneratorDiagnostics diagnostics,
+            CodeEmitOptions options,
             Assembly generatorInfoAssembly)
         {
-            ImmutableArray<TypePositionInfo> typeInfos = GenerateTypeInformation(method, interopAttributeData, diagnostics, env);
+            ImmutableArray<TypePositionInfo> typeInfos = GenerateTypeInformation(method, marshallingInfoParser, env);
 
             ImmutableArray<AttributeListSyntax>.Builder additionalAttrs = ImmutableArray.CreateBuilder<AttributeListSyntax>();
 
-            if (env.TargetFramework != TargetFramework.Unknown)
-            {
-                string generatorName = generatorInfoAssembly.GetName().Name;
-                string generatorVersion = generatorInfoAssembly.GetName().Version.ToString();
-                // Define additional attributes for the stub definition.
-                additionalAttrs.Add(
-                    AttributeList(
-                        SingletonSeparatedList(
-                            Attribute(ParseName(TypeNames.System_CodeDom_Compiler_GeneratedCodeAttribute),
-                                AttributeArgumentList(
-                                    SeparatedList(
-                                        new[]
-                                        {
+            string generatorName = generatorInfoAssembly.GetName().Name;
+            string generatorVersion = generatorInfoAssembly.GetName().Version.ToString();
+            // Define additional attributes for the stub definition.
+            additionalAttrs.Add(
+                AttributeList(
+                    SingletonSeparatedList(
+                        Attribute(
+                            NameSyntaxes.System_CodeDom_Compiler_GeneratedCodeAttribute,
+                            AttributeArgumentList(
+                                SeparatedList(
+                                    new[]
+                                    {
                                             AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(generatorName))),
                                             AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(generatorVersion)))
-                                        }))))));
-            }
+                                    }))))));
 
-            if (env.TargetFrameworkVersion >= new Version(5, 0) && !MethodIsSkipLocalsInit(env, method))
+            if (options.SkipInit && !MethodIsSkipLocalsInit(env, method))
             {
                 additionalAttrs.Add(
                     AttributeList(
@@ -88,7 +87,7 @@ namespace Microsoft.Interop
                             // Adding the skip locals init indiscriminately since the source generator is
                             // targeted at non-blittable method signatures which typically will contain locals
                             // in the generated code.
-                            Attribute(ParseName(TypeNames.System_Runtime_CompilerServices_SkipLocalsInitAttribute)))));
+                            Attribute(NameSyntaxes.System_Runtime_CompilerServices_SkipLocalsInitAttribute))));
             }
 
             return new SignatureContext()
@@ -99,35 +98,18 @@ namespace Microsoft.Interop
             };
         }
 
-        private static ImmutableArray<TypePositionInfo> GenerateTypeInformation(IMethodSymbol method, InteropAttributeData interopAttributeData, IGeneratorDiagnostics diagnostics, StubEnvironment env)
+        private static ImmutableArray<TypePositionInfo> GenerateTypeInformation(
+            IMethodSymbol method,
+            MarshallingInfoParser marshallingInfoParser,
+            StubEnvironment env)
         {
-            // Compute the current default string encoding value.
-            CharEncoding defaultEncoding = CharEncoding.Undefined;
-            if (interopAttributeData.IsUserDefined.HasFlag(InteropAttributeMember.StringMarshalling))
-            {
-                defaultEncoding = interopAttributeData.StringMarshalling switch
-                {
-                    StringMarshalling.Utf16 => CharEncoding.Utf16,
-                    StringMarshalling.Utf8 => CharEncoding.Utf8,
-                    StringMarshalling.Custom => CharEncoding.Custom,
-                    _ => CharEncoding.Undefined, // [Compat] Do not assume a specific value
-                };
-            }
-            else if (interopAttributeData.IsUserDefined.HasFlag(InteropAttributeMember.StringMarshallingCustomType))
-            {
-                defaultEncoding = CharEncoding.Custom;
-            }
-
-            var defaultInfo = new DefaultMarshallingInfo(defaultEncoding, interopAttributeData.StringMarshallingCustomType);
-
-            var marshallingAttributeParser = new MarshallingAttributeInfoParser(env.Compilation, diagnostics, defaultInfo, method);
 
             // Determine parameter and return types
             ImmutableArray<TypePositionInfo>.Builder typeInfos = ImmutableArray.CreateBuilder<TypePositionInfo>();
             for (int i = 0; i < method.Parameters.Length; i++)
             {
                 IParameterSymbol param = method.Parameters[i];
-                MarshallingInfo marshallingInfo = marshallingAttributeParser.ParseMarshallingInfo(param.Type, param.GetAttributes());
+                MarshallingInfo marshallingInfo = marshallingInfoParser.ParseMarshallingInfo(param.Type, param.GetAttributes());
                 var typeInfo = TypePositionInfo.CreateForParameter(param, marshallingInfo, env.Compilation);
                 typeInfo = typeInfo with
                 {
@@ -137,11 +119,11 @@ namespace Microsoft.Interop
                 typeInfos.Add(typeInfo);
             }
 
-            TypePositionInfo retTypeInfo = new(ManagedTypeInfo.CreateTypeInfoForTypeSymbol(method.ReturnType), marshallingAttributeParser.ParseMarshallingInfo(method.ReturnType, method.GetReturnTypeAttributes()));
+            TypePositionInfo retTypeInfo = new(ManagedTypeInfo.CreateTypeInfoForTypeSymbol(method.ReturnType), marshallingInfoParser.ParseMarshallingInfo(method.ReturnType, method.GetReturnTypeAttributes()));
             retTypeInfo = retTypeInfo with
             {
                 ManagedIndex = TypePositionInfo.ReturnIndex,
-                NativeIndex = TypePositionInfo.ReturnIndex
+                NativeIndex = TypePositionInfo.ReturnIndex,
             };
 
             typeInfos.Add(retTypeInfo);
@@ -166,7 +148,7 @@ namespace Microsoft.Interop
 
         private static bool MethodIsSkipLocalsInit(StubEnvironment env, IMethodSymbol method)
         {
-            if (env.ModuleSkipLocalsInit)
+            if (env.EnvironmentFlags.HasFlag(EnvironmentFlags.SkipLocalsInit))
             {
                 return true;
             }

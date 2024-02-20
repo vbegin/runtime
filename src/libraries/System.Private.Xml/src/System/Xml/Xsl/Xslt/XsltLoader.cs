@@ -7,15 +7,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Text;
-using System.IO;
 using System.Xml.XPath;
 using System.Xml.Xsl.Qil;
 using ContextInfo = System.Xml.Xsl.Xslt.XsltInput.ContextInfo;
 using F = System.Xml.Xsl.Xslt.AstFactory;
-using TypeFactory = System.Xml.Xsl.XmlQueryTypeFactory;
 using QName = System.Xml.Xsl.Xslt.XsltInput.DelayedQName;
+using TypeFactory = System.Xml.Xsl.XmlQueryTypeFactory;
 using XsltAttribute = System.Xml.Xsl.Xslt.XsltInput.XsltAttribute;
 
 namespace System.Xml.Xsl.Xslt
@@ -38,11 +38,11 @@ namespace System.Xml.Xsl.Xslt
         public static int V2Opt = 4;
         public static int V2Req = 8;
 
-        public void Load(Compiler compiler, object stylesheet, XmlResolver? xmlResolver)
+        public void Load(Compiler compiler, object stylesheet, XmlResolver? xmlResolver, XmlResolver? origResolver)
         {
             Debug.Assert(compiler != null);
             _compiler = compiler;
-            _xmlResolver = xmlResolver ?? XmlNullResolver.Singleton;
+            _xmlResolver = xmlResolver ?? XmlResolver.ThrowingResolver;
 
             XmlReader? reader = stylesheet as XmlReader;
             if (reader != null)
@@ -57,10 +57,21 @@ namespace System.Xml.Xsl.Xslt
                 string? uri = stylesheet as string;
                 if (uri != null)
                 {
-                    // If xmlResolver == null, then the original uri will be resolved using XmlUrlResolver
-                    XmlResolver origResolver = xmlResolver!;
-                    if (xmlResolver == null || xmlResolver == XmlNullResolver.Singleton)
-                        origResolver = new XmlUrlResolver();
+                    // If the stylesheet has been provided as a string (URI, really), then we'll bounce
+                    // through an XmlResolver to look up its contents. There's a complication here since
+                    // the default resolver provided by our caller is likely a throwing resolver, and
+                    // a throwing resolver would fail even when attempting to read this URL. We need
+                    // to at minimum allow this URL to be read, because the user after all did explicitly
+                    // ask us to do so.
+                    //
+                    // In this case, we'll rely on the 'origResolver' argument, which is the XmlResolver
+                    // which was provided *to our caller* before any default substitution took place.
+                    // If an explicit resolver was specified, we'll honor it. Otherwise we'll substitute
+                    // an XmlUrlResolver for this one read operation. The stored resolver (which is used
+                    // for reads beyond the initial stylesheet read) will use a throwing resolver as its
+                    // default, as shown at the very top of this method.
+
+                    origResolver ??= XmlReaderSettings.GetDefaultPermissiveResolver();
                     Uri resolvedUri = origResolver.ResolveUri(null, uri);
                     if (resolvedUri == null)
                     {
@@ -406,11 +417,11 @@ namespace System.Xml.Xsl.Xslt
                                 }
                                 else if (_input.IsKeyword(_atoms.Variable))
                                 {
-                                    LoadGlobalVariableOrParameter(ctxInfo.nsList, XslNodeType.Variable);
+                                    LoadGlobalVariableOrParameter(ctxInfo.nsList);
                                 }
                                 else if (_input.IsKeyword(_atoms.Param))
                                 {
-                                    LoadGlobalVariableOrParameter(ctxInfo.nsList, XslNodeType.Param);
+                                    LoadGlobalVariableOrParameter(ctxInfo.nsList);
                                 }
                                 else if (_input.IsKeyword(_atoms.Template))
                                 {
@@ -942,7 +953,7 @@ namespace System.Xml.Xsl.Xslt
             }
 
             char[] DefaultValues = DecimalFormatDecl.Default.Characters;
-            char[] characters = new char[NumCharAttrs];
+            Span<char> characters = stackalloc char[NumCharAttrs];
             Debug.Assert(NumCharAttrs == DefaultValues.Length);
 
             for (int idx = 0; idx < NumCharAttrs; idx++)
@@ -1107,7 +1118,7 @@ namespace System.Xml.Xsl.Xslt
             set.AddContent(SetInfo(F.List(), LoadEndTag(content), ctxInfo));
         }
 
-        private void LoadGlobalVariableOrParameter(NsDecl? stylesheetNsList, XslNodeType nodeType)
+        private void LoadGlobalVariableOrParameter(NsDecl? stylesheetNsList)
         {
             Debug.Assert(_curTemplate == null);
             Debug.Assert(_input.CanHaveApplyImports == false);
@@ -2704,7 +2715,7 @@ namespace System.Xml.Xsl.Xslt
                 }
                 if (1 < modes.Count)
                 {
-                    ReportNYI("Multipe modes");
+                    ReportNYI("Multiple modes");
                     return nullMode;
                 }
                 if (modes.Count == 0)
@@ -2813,7 +2824,7 @@ namespace System.Xml.Xsl.Xslt
         // Does not suppress errors
         private void ParseWhitespaceRules(string elements, bool preserveSpace)
         {
-            if (elements != null && elements.Length != 0)
+            if (!string.IsNullOrEmpty(elements))
             {
                 string[] tokens = XmlConvert.SplitString(elements);
                 for (int i = 0; i < tokens.Length; i++)
@@ -2823,7 +2834,7 @@ namespace System.Xml.Xsl.Xslt
                     {
                         namespaceName = _compiler.CreatePhantomNamespace();
                     }
-                    else if (prefix == null || prefix.Length == 0)
+                    else if (string.IsNullOrEmpty(prefix))
                     {
                         namespaceName = prefix;
                     }
@@ -3086,7 +3097,7 @@ namespace System.Xml.Xsl.Xslt
         // NOTE! We inverting namespace order that is irelevant for namespace of the same node, but
         // for included styleseets we don't keep stylesheet as a node and adding it's namespaces to
         // each toplevel element by MergeNamespaces().
-        // Namespaces of stylesheet can be overriden in template and to make this works correclety we
+        // Namespaces of stylesheet can be overridden in template and to make this works correclety we
         // should attache them after NsDec of top level elements.
         // Toplevel element almost never contais NsDecl and in practice node duplication will not happened, but if they have
         // we should copy NsDecls of stylesheet locally in toplevel elements.

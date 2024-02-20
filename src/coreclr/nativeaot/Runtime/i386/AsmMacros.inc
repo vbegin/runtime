@@ -32,24 +32,6 @@ decoratedName label proc
 PUBLIC decoratedName
         endm
 
-EXPORT_POINTER_TO_ADDRESS macro Name
-
-        local   AddressToExport
-
-AddressToExport  label   proc
-
-        .const
-
-        align   4
-
-Name    dd      offset AddressToExport
-
-        public  Name
-
-        .code
-
-        endm
-
 __tls_array     equ 2Ch     ;; offsetof(TEB, ThreadLocalStoragePointer)
 
 ;;
@@ -180,12 +162,10 @@ G_EPHEMERAL_LOW                             equ _g_ephemeral_low
 G_EPHEMERAL_HIGH                            equ _g_ephemeral_high
 G_CARD_TABLE                                equ _g_card_table
 RhpWaitForGC2                               equ @RhpWaitForGC2@4
-RhpReversePInvokeAttachOrTrapThread2        equ @RhpReversePInvokeAttachOrTrapThread2@4
 RhpTrapThreads                              equ _RhpTrapThreads
 
 ifdef FEATURE_GC_STRESS
 THREAD__HIJACKFORGCSTRESS                   equ ?HijackForGcStress@Thread@@SGXPAUPAL_LIMITED_CONTEXT@@@Z
-REDHAWKGCINTERFACE__STRESSGC                equ ?StressGc@RedhawkGCInterface@@SGXXZ
 endif ;; FEATURE_GC_STRESS
 
 ;;
@@ -194,7 +174,6 @@ endif ;; FEATURE_GC_STRESS
 EXTERN RhpGcAlloc                               : PROC
 EXTERN RhDebugBreak                             : PROC
 EXTERN RhpWaitForGC2                            : PROC
-EXTERN RhpReversePInvokeAttachOrTrapThread2     : PROC
 EXTERN RhExceptionHandling_FailedAllocation     : PROC
 EXTERN RhThrowHwEx                              : PROC
 EXTERN RhThrowEx                                : PROC
@@ -202,7 +181,7 @@ EXTERN RhRethrow                                : PROC
 
 ifdef FEATURE_GC_STRESS
 EXTERN THREAD__HIJACKFORGCSTRESS                : PROC
-EXTERN REDHAWKGCINTERFACE__STRESSGC             : PROC
+EXTERN RhpStressGc                              : PROC
 endif ;; FEATURE_GC_STRESS
 
 EXTERN G_LOWEST_ADDRESS : DWORD

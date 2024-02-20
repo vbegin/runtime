@@ -1,10 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.IO.MemoryMappedFiles
 {
@@ -233,7 +233,7 @@ namespace System.IO.MemoryMappedFiles
         {
             SafeMemoryMappedFileHandle handle = Interop.OpenFileMapping(
                 desiredAccessRights, (inheritability & HandleInheritability.Inheritable) != 0, mapName);
-            int lastError = Marshal.GetLastWin32Error();
+            int lastError = Marshal.GetLastPInvokeError();
 
             if (handle.IsInvalid)
             {

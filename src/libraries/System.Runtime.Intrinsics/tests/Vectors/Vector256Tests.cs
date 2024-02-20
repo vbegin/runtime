@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Xunit;
@@ -9,6 +10,35 @@ namespace System.Runtime.Intrinsics.Tests.Vectors
 {
     public sealed class Vector256Tests
     {
+        /// <summary>Verifies that two <see cref="Vector256{Single}" /> values are equal, within the <paramref name="variance" />.</summary>
+        /// <param name="expected">The expected value</param>
+        /// <param name="actual">The value to be compared against</param>
+        /// <param name="variance">The total variance allowed between the expected and actual results.</param>
+        /// <exception cref="EqualException">Thrown when the values are not equal</exception>
+        internal static void AssertEqual(Vector256<float> expected, Vector256<float> actual, Vector256<float> variance)
+        {
+            Vector128Tests.AssertEqual(expected.GetLower(), actual.GetLower(), variance.GetLower());
+            Vector128Tests.AssertEqual(expected.GetUpper(), actual.GetUpper(), variance.GetUpper());
+        }
+
+        /// <summary>Verifies that two <see cref="Vector256{Double}" /> values are equal, within the <paramref name="variance" />.</summary>
+        /// <param name="expected">The expected value</param>
+        /// <param name="actual">The value to be compared against</param>
+        /// <param name="variance">The total variance allowed between the expected and actual results.</param>
+        /// <exception cref="EqualException">Thrown when the values are not equal</exception>
+        internal static void AssertEqual(Vector256<double> expected, Vector256<double> actual, Vector256<double> variance)
+        {
+            Vector128Tests.AssertEqual(expected.GetLower(), actual.GetLower(), variance.GetLower());
+            Vector128Tests.AssertEqual(expected.GetUpper(), actual.GetUpper(), variance.GetUpper());
+        }
+
+        [Fact]
+        public unsafe void Vector256IsHardwareAcceleratedTest()
+        {
+            MethodInfo methodInfo = typeof(Vector256).GetMethod("get_IsHardwareAccelerated");
+            Assert.Equal(Vector256.IsHardwareAccelerated, methodInfo.Invoke(null, null));
+        }
+
         [Fact]
         public unsafe void Vector256ByteExtractMostSignificantBitsTest()
         {
@@ -5484,6 +5514,97 @@ namespace System.Runtime.Intrinsics.Tests.Vectors
         }
 
         [Fact]
+        public void Vector256DoubleEqualsNonCanonicalNaNTest()
+        {
+            // max 8 bit exponent, just under half max mantissa
+            var snan = BitConverter.UInt64BitsToDouble(0x7FF7_FFFF_FFFF_FFFF);
+            var nans = new double[]
+            {
+                double.CopySign(double.NaN, -0.0), // -qnan same as double.NaN
+                double.CopySign(double.NaN, +0.0), // +qnan
+                double.CopySign(snan, -0.0),       // -snan
+                double.CopySign(snan, +0.0),       // +snan
+            };
+
+            // all Vector<double> NaNs .Equals compare the same, but == compare as different
+            foreach(var i in nans)
+            {
+                foreach(var j in nans)
+                {
+                    Assert.True(Vector256.Create(i).Equals(Vector256.Create(j)));
+                    Assert.False(Vector256.Create(i) == Vector256.Create(j));
+                }
+            }
+        }
+
+        [Fact]
+        public void Vector256SingleEqualsNonCanonicalNaNTest()
+        {
+            // max 11 bit exponent, just under half max mantissa
+            var snan = BitConverter.UInt32BitsToSingle(0x7FBF_FFFF);
+            var nans = new float[]
+            {
+                float.CopySign(float.NaN, -0.0f), // -qnan same as float.NaN
+                float.CopySign(float.NaN, +0.0f), // +qnan
+                float.CopySign(snan, -0.0f),      // -snan
+                float.CopySign(snan, +0.0f),      // +snan
+            };
+
+            // all Vector<float> NaNs .Equals compare the same, but == compare as different
+            foreach(var i in nans)
+            {
+                foreach(var j in nans)
+                {
+                    Assert.True(Vector256.Create(i).Equals(Vector256.Create(j)));
+                    Assert.False(Vector256.Create(i) == Vector256.Create(j));
+                }
+            }
+        }
+
+        [Fact]
+        public void Vector256SingleCreateFromArrayTest()
+        {
+            float[] array = [1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f];
+            Vector256<float> vector = Vector256.Create(array);
+            Assert.Equal(Vector256.Create(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f), vector);
+        }
+
+        [Fact]
+        public void Vector256SingleCreateFromArrayOffsetTest()
+        {
+            float[] array = [1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f];
+            Vector256<float> vector = Vector256.Create(array, 1);
+            Assert.Equal(Vector256.Create(2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f), vector);
+        }
+
+        [Fact]
+        public void Vector256SingleCopyToTest()
+        {
+            float[] array = new float[8];
+            Vector256.Create(2.0f).CopyTo(array);
+            Assert.True(array.AsSpan().SequenceEqual([2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f]));
+        }
+
+        [Fact]
+        public void Vector256SingleCopyToOffsetTest()
+        {
+            float[] array = new float[9];
+            Vector256.Create(2.0f).CopyTo(array, 1);
+            Assert.True(array.AsSpan().SequenceEqual([0.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f]));
+        }
+
+        [Fact]
+        public void Vector256SByteAbs_MinValue()
+        {
+            Vector256<sbyte> vector = Vector256.Create(sbyte.MinValue);
+            Vector256<sbyte> abs = Vector256.Abs(vector);
+            for (int index = 0; index < Vector256<sbyte>.Count; index++)
+            {
+                Assert.Equal(sbyte.MinValue, vector.GetElement(index));
+            }
+        }
+
+        [Fact]
         public void IsSupportedByte() => TestIsSupported<byte>();
 
         [Fact]
@@ -5550,6 +5671,221 @@ namespace System.Runtime.Intrinsics.Tests.Vectors
 
             MethodInfo methodInfo = typeof(Vector256<T>).GetProperty("IsSupported", BindingFlags.Public | BindingFlags.Static).GetMethod;
             Assert.False((bool)methodInfo.Invoke(null, null));
+        }
+
+        [Fact]
+        public void GetOneByte() => TestGetOne<byte>();
+
+        [Fact]
+        public void GetOneDouble() => TestGetOne<double>();
+
+        [Fact]
+        public void GetOneInt16() => TestGetOne<short>();
+
+        [Fact]
+        public void GetOneInt32() => TestGetOne<int>();
+
+        [Fact]
+        public void GetOneInt64() => TestGetOne<long>();
+
+        [Fact]
+        public void GetOneIntPtr() => TestGetOne<nint>();
+
+        [Fact]
+        public void GetOneSByte() => TestGetOne<sbyte>();
+
+        [Fact]
+        public void GetOneSingle() => TestGetOne<float>();
+
+        [Fact]
+        public void GetOneUInt16() => TestGetOne<ushort>();
+
+        [Fact]
+        public void GetOneUInt32() => TestGetOne<uint>();
+
+        [Fact]
+        public void GetOneUInt64() => TestGetOne<ulong>();
+
+        [Fact]
+        public void GetOneUIntPtr() => TestGetOne<nuint>();
+
+        private static void TestGetOne<T>()
+            where T : struct, INumber<T>
+        {
+            Assert.Equal(Vector256<T>.One, Vector256.Create(T.One));
+
+            MethodInfo methodInfo = typeof(Vector256<T>).GetProperty("One", BindingFlags.Public | BindingFlags.Static).GetMethod;
+            Assert.Equal((Vector256<T>)methodInfo.Invoke(null, null), Vector256.Create(T.One));
+        }
+
+        [Fact]
+        public void GetIndicesByteTest() => TestGetIndices<byte>();
+
+        [Fact]
+        public void GetIndicesDoubleTest() => TestGetIndices<double>();
+
+        [Fact]
+        public void GetIndicesInt16Test() => TestGetIndices<short>();
+
+        [Fact]
+        public void GetIndicesInt32Test() => TestGetIndices<int>();
+
+        [Fact]
+        public void GetIndicesInt64Test() => TestGetIndices<long>();
+
+        [Fact]
+        public void GetIndicesNIntTest() => TestGetIndices<nint>();
+
+        [Fact]
+        public void GetIndicesNUIntTest() => TestGetIndices<nuint>();
+
+        [Fact]
+        public void GetIndicesSByteTest() => TestGetIndices<sbyte>();
+
+        [Fact]
+        public void GetIndicesSingleTest() => TestGetIndices<float>();
+
+        [Fact]
+        public void GetIndicesUInt16Test() => TestGetIndices<ushort>();
+
+        [Fact]
+        public void GetIndicesUInt32Test() => TestGetIndices<uint>();
+
+        [Fact]
+        public void GetIndicesUInt64Test() => TestGetIndices<ulong>();
+
+        private static void TestGetIndices<T>()
+            where T : INumber<T>
+        {
+            Vector256<T> indices = Vector256<T>.Indices;
+
+            for (int index = 0; index < Vector256<T>.Count; index++)
+            {
+                Assert.Equal(T.CreateTruncating(index), indices.GetElement(index));
+            }
+        }
+
+        [Theory]
+        [InlineData(0, 2)]
+        [InlineData(3, 3)]
+        [InlineData(31, unchecked((byte)(-1)))]
+        public void CreateSequenceByteTest(byte start, byte step) => TestCreateSequence<byte>(start, step);
+
+        [Theory]
+        [InlineData(0.0, +2.0)]
+        [InlineData(3.0, +3.0)]
+        [InlineData(3.0, -1.0)]
+        public void CreateSequenceDoubleTest(double start, double step) => TestCreateSequence<double>(start, step);
+
+        [Theory]
+        [InlineData(0, +2)]
+        [InlineData(3, +3)]
+        [InlineData(15, -1)]
+        public void CreateSequenceInt16Test(short start, short step) => TestCreateSequence<short>(start, step);
+
+        [Theory]
+        [InlineData(0, +2)]
+        [InlineData(3, +3)]
+        [InlineData(7, -1)]
+        public void CreateSequenceInt32Test(int start, int step) => TestCreateSequence<int>(start, step);
+
+        [Theory]
+        [InlineData(0, +2)]
+        [InlineData(3, +3)]
+        [InlineData(15, -1)]
+        public void CreateSequenceInt64Test(long start, long step) => TestCreateSequence<long>(start, step);
+
+        [Theory]
+        [InlineData(0, +2)]
+        [InlineData(3, +3)]
+        [InlineData(31, -1)]
+        public void CreateSequenceSByteTest(sbyte start, sbyte step) => TestCreateSequence<sbyte>(start, step);
+
+        [Theory]
+        [InlineData(0.0f, +2.0f)]
+        [InlineData(3.0f, +3.0f)]
+        [InlineData(7.0f, -1.0f)]
+        public void CreateSequenceSingleTest(float start, float step) => TestCreateSequence<float>(start, step);
+
+        [Theory]
+        [InlineData(0, 2)]
+        [InlineData(3, 3)]
+        [InlineData(15, unchecked((ushort)(-1)))]
+        public void CreateSequenceUInt16Test(ushort start, ushort step) => TestCreateSequence<ushort>(start, step);
+
+        [Theory]
+        [InlineData(0, 2)]
+        [InlineData(3, 3)]
+        [InlineData(7, unchecked((uint)(-1)))]
+        public void CreateSequenceUInt32Test(uint start, uint step) => TestCreateSequence<uint>(start, step);
+
+        [Theory]
+        [InlineData(0, 2)]
+        [InlineData(3, 3)]
+        [InlineData(3, unchecked((ulong)(-1)))]
+        public void CreateSequenceUInt64Test(ulong start, ulong step) => TestCreateSequence<ulong>(start, step);
+
+        private static void TestCreateSequence<T>(T start, T step)
+            where T : INumber<T>
+        {
+            Vector256<T> sequence = Vector256.CreateSequence(start, step);
+            T expected = start;
+
+            for (int index = 0; index < Vector256<T>.Count; index++)
+            {
+                Assert.Equal(expected, sequence.GetElement(index));
+                expected += step;
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(VectorTestMemberData.ExpDouble), MemberType = typeof(VectorTestMemberData))]
+        [SkipOnMono("https://github.com/dotnet/runtime/issues/97176")]
+        public void ExpDoubleTest(double value, double expectedResult, double variance)
+        {
+            Vector256<double> actualResult = Vector256.Exp(Vector256.Create(value));
+            AssertEqual(Vector256.Create(expectedResult), actualResult, Vector256.Create(variance));
+        }
+
+        [Theory]
+        [MemberData(nameof(VectorTestMemberData.ExpSingle), MemberType = typeof(VectorTestMemberData))]
+        [SkipOnMono("https://github.com/dotnet/runtime/issues/97176")]
+        public void ExpSingleTest(float value, float expectedResult, float variance)
+        {
+            Vector256<float> actualResult = Vector256.Exp(Vector256.Create(value));
+            AssertEqual(Vector256.Create(expectedResult), actualResult, Vector256.Create(variance));
+        }
+
+        [Theory]
+        [MemberData(nameof(VectorTestMemberData.LogDouble), MemberType = typeof(VectorTestMemberData))]
+        public void LogDoubleTest(double value, double expectedResult, double variance)
+        {
+            Vector256<double> actualResult = Vector256.Log(Vector256.Create(value));
+            AssertEqual(Vector256.Create(expectedResult), actualResult, Vector256.Create(variance));
+        }
+
+        [Theory]
+        [MemberData(nameof(VectorTestMemberData.LogSingle), MemberType = typeof(VectorTestMemberData))]
+        public void LogSingleTest(float value, float expectedResult, float variance)
+        {
+            Vector256<float> actualResult = Vector256.Log(Vector256.Create(value));
+            AssertEqual(Vector256.Create(expectedResult), actualResult, Vector256.Create(variance));
+        }
+
+        [Theory]
+        [MemberData(nameof(VectorTestMemberData.Log2Double), MemberType = typeof(VectorTestMemberData))]
+        public void Log2DoubleTest(double value, double expectedResult, double variance)
+        {
+            Vector256<double> actualResult = Vector256.Log2(Vector256.Create(value));
+            AssertEqual(Vector256.Create(expectedResult), actualResult, Vector256.Create(variance));
+        }
+
+        [Theory]
+        [MemberData(nameof(VectorTestMemberData.Log2Single), MemberType = typeof(VectorTestMemberData))]
+        public void Log2SingleTest(float value, float expectedResult, float variance)
+        {
+            Vector256<float> actualResult = Vector256.Log2(Vector256.Create(value));
+            AssertEqual(Vector256.Create(expectedResult), actualResult, Vector256.Create(variance));
         }
     }
 }

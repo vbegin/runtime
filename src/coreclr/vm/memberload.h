@@ -62,10 +62,10 @@ class MemberLoader
 public:
     static void DECLSPEC_NORETURN ThrowMissingMethodException(MethodTable* pMT,
                                             LPCSTR szMember,
-                                            ModuleBase *pModule,
-                                            PCCOR_SIGNATURE pSig,
-                                            DWORD cSig,
-                                            const SigTypeContext *pTypeContext);
+                                            ModuleBase *pModule = NULL,
+                                            PCCOR_SIGNATURE pSig = NULL,
+                                            DWORD cSig = 0,
+                                            const SigTypeContext *pTypeContext = NULL);
 
     static void DECLSPEC_NORETURN ThrowMissingFieldException( MethodTable *pMT,
                                             LPCSTR szMember);
@@ -198,7 +198,7 @@ private:
     static const FM_Flags FM_SpecialVirtualMask = (FM_Flags) (FM_ExcludeNonVirtual |
                                                               FM_ExcludeVirtual);
 
-    // Typedef for string comparition functions.
+    // Typedef for string comparison functions.
     typedef int (__cdecl *UTF8StringCompareFuncPtr)(const char *, const char *);
 
     static inline UTF8StringCompareFuncPtr FM_GetStrCompFunc(DWORD dwFlags)

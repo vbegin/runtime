@@ -1,9 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using SuppressMessageAttribute = System.Diagnostics.CodeAnalysis.SuppressMessageAttribute;
-using System.Runtime.Serialization;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Serialization;
+using SuppressMessageAttribute = System.Diagnostics.CodeAnalysis.SuppressMessageAttribute;
 
 namespace System.Xml.Linq
 {
@@ -101,7 +101,7 @@ namespace System.Xml.Linq
         /// <param name="expandedName">A string containing an expanded XML name in the format: {namespace}localname.</param>
         /// <returns>An XName object constructed from the expanded name.</returns>
         [CLSCompliant(false)]
-        [return: NotNullIfNotNull("expandedName")]
+        [return: NotNullIfNotNull(nameof(expandedName))]
         public static implicit operator XName?(string? expandedName)
         {
             return expandedName != null ? Get(expandedName) : null;

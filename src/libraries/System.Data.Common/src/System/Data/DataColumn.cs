@@ -1,20 +1,20 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Xml;
-using System.Data.Common;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Globalization;
-using System.Data.SqlTypes;
-using System.Xml.Serialization;
-using System.Runtime.CompilerServices;
+using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
+using System.ComponentModel;
+using System.Data.Common;
+using System.Data.SqlTypes;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
-using System.Collections;
-using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Xml;
+using System.Xml.Serialization;
 
 namespace System.Data
 {
@@ -1362,7 +1362,7 @@ namespace System.Data
 
         internal void CheckColumnConstraint(DataRow row, DataRowAction action)
         {
-            if (DataTable.UpdatingCurrent(row, action))
+            if (DataTable.UpdatingCurrent(action))
             {
                 CheckNullable(row);
                 CheckMaxLength(row);
@@ -1472,7 +1472,7 @@ namespace System.Data
             return _storage.Compare(record1, record2);
         }
 
-        internal bool CompareValueTo(int record1, object value, bool checkType)
+        internal bool CompareValueToChecked(int record1, object value)
         {
             // this method is used to make sure value and exact type match.
             int valuesMatch = CompareValueTo(record1, value);
@@ -1485,7 +1485,7 @@ namespace System.Data
                 // if strings, then do exact character by character check
                 if (leftType == typeof(string) && rightType == typeof(string))
                 {
-                    return string.CompareOrdinal((string)_storage.Get(record1), (string)value) == 0 ? true : false;
+                    return (string)_storage.Get(record1) == (string)value;
                 }
                 // make sure same type
                 else if (leftType == rightType)
@@ -1757,7 +1757,7 @@ namespace System.Data
         [RequiresUnreferencedCode(DataSet.RequiresUnreferencedCodeMessage)]
         internal object ConvertXmlToObject(string s)
         {
-            Debug.Assert(s != null, "Caller is resposible for missing element/attribute case");
+            Debug.Assert(s != null, "Caller is responsible for missing element/attribute case");
             return InsureStorage().ConvertXmlToObject(s);
         }
 
@@ -1770,14 +1770,14 @@ namespace System.Data
         [RequiresUnreferencedCode(DataSet.RequiresUnreferencedCodeMessage)]
         internal string ConvertObjectToXml(object value)
         {
-            Debug.Assert(value != null && (value != DBNull.Value), "Caller is resposible for checking on DBNull");
+            Debug.Assert(value != null && (value != DBNull.Value), "Caller is responsible for checking on DBNull");
             return InsureStorage().ConvertObjectToXml(value);
         }
 
         [RequiresUnreferencedCode(DataSet.RequiresUnreferencedCodeMessage)]
         internal void ConvertObjectToXml(object value, XmlWriter xmlWriter, XmlRootAttribute? xmlAttrib)
         {
-            Debug.Assert(value != null && (value != DBNull.Value), "Caller is resposible for checking on DBNull");
+            Debug.Assert(value != null && (value != DBNull.Value), "Caller is responsible for checking on DBNull");
             InsureStorage().ConvertObjectToXml(value, xmlWriter, xmlAttrib);
         }
 

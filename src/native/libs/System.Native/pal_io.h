@@ -151,11 +151,12 @@ enum
 
     // Flags (combinable)
     // These numeric values are not defined by POSIX and vary across targets.
-    PAL_O_CLOEXEC = 0x0010, // Close-on-exec
-    PAL_O_CREAT = 0x0020,   // Create file if it doesn't already exist
-    PAL_O_EXCL = 0x0040,    // When combined with CREAT, fails if file already exists
-    PAL_O_TRUNC = 0x0080,   // Truncate file to length 0 if it already exists
-    PAL_O_SYNC = 0x0100,    // Block writes call will block until physically written
+    PAL_O_CLOEXEC = 0x0010,  // Close-on-exec
+    PAL_O_CREAT = 0x0020,    // Create file if it doesn't already exist
+    PAL_O_EXCL = 0x0040,     // When combined with CREAT, fails if file already exists
+    PAL_O_TRUNC = 0x0080,    // Truncate file to length 0 if it already exists
+    PAL_O_SYNC = 0x0100,     // Block writes call will block until physically written
+    PAL_O_NOFOLLOW = 0x0200, // Fails to open the target if it's a symlink, parent symlinks are allowed
 };
 
 /**
@@ -264,7 +265,7 @@ enum
 typedef enum
 {
     PAL_MADV_DONTFORK = 1, // don't map pages in to forked process
-} MemmoryAdvice;
+} MemoryAdvice;
 
 /**
  * Name argument to SysConf.
@@ -286,7 +287,7 @@ typedef enum
     PAL_POSIX_FADV_SEQUENTIAL = 2, /* sequential I/O access */
     PAL_POSIX_FADV_WILLNEED = 3,   /* will need specified pages */
     PAL_POSIX_FADV_DONTNEED = 4,   /* don't need the specified pages */
-    PAL_POSIX_FADV_NOREUSE = 5,    /* data will only be acessed once */
+    PAL_POSIX_FADV_NOREUSE = 5,    /* data will only be accessed once */
 } FileAdvice;
 
 /**
@@ -523,7 +524,7 @@ PALEXPORT int32_t SystemNative_Access(const char* path, int32_t mode);
 /**
  * Seek to a specified location within a seekable stream
  *
- * On success, the resulting offet, in bytes, from the beginning of the stream; otherwise,
+ * On success, the resulting offset, in bytes, from the beginning of the stream; otherwise,
  * returns -1 and errno is set.
  */
 PALEXPORT int64_t SystemNative_LSeek(intptr_t fd, int64_t offset, int32_t whence);
@@ -562,6 +563,14 @@ PALEXPORT int32_t SystemNative_MkNod(const char* pathName, uint32_t mode, uint32
 PALEXPORT int32_t SystemNative_MkFifo(const char* pathName, uint32_t mode);
 
 /**
+ * Creates a directory name that adheres to the specified template, creates the directory on disk with
+ * 0700 permissions, and returns the directory name.
+ *
+ * Returns a pointer to the modified template string on success; otherwise, returns NULL and errno is set.
+ */
+PALEXPORT char* SystemNative_MkdTemp(char* pathTemplate);
+
+/**
  * Creates a file name that adheres to the specified template, creates the file on disk with
  * 0600 permissions, and returns an open r/w File Descriptor on the file.
  *
@@ -590,6 +599,13 @@ PALEXPORT void* SystemNative_MMap(void* address,
  * Returns 0 for success, -1 for failure. Sets errno on failure.
  */
 PALEXPORT int32_t SystemNative_MUnmap(void* address, uint64_t length);
+
+/**
+ * Change the access protections for the specified memory pages.
+ *
+ * Returns 0 for success, -1 for failure. Sets errno on failure.
+ */
+PALEXPORT int32_t SystemNative_MProtect(void* address, uint64_t length, int32_t protection);
 
 /**
  * Give advice about use of memory. Implemented as shim to madvise(2).
@@ -668,7 +684,7 @@ PALEXPORT int32_t SystemNative_ReadLink(const char* path, char* buffer, int32_t 
  * Renames a file, moving to the correct destination if necessary. There are many edge cases to this call, check man 2
  * rename for more info
  *
- * Returns 0 on succes; otherwise, returns -1 and errno is set.
+ * Returns 0 on success; otherwise, returns -1 and errno is set.
  */
 PALEXPORT int32_t SystemNative_Rename(const char* oldPath, const char* newPath);
 

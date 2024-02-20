@@ -61,10 +61,9 @@ namespace System.Formats.Tar
                     throw new InvalidOperationException(SR.TarEntryBlockOrCharacterExpected);
                 }
 
-                if (value < 0 || value > 2097151) // 7777777 in octal
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 0x1FFFFF); // 7777777 in octal
+
                 _header._devMajor = value;
             }
         }
@@ -84,10 +83,10 @@ namespace System.Formats.Tar
                 {
                     throw new InvalidOperationException(SR.TarEntryBlockOrCharacterExpected);
                 }
-                if (value < 0 || value > 2097151) // 7777777 in octal
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 0x1FFFFF); // 7777777 in octal
+
                 _header._devMinor = value;
             }
         }
@@ -99,7 +98,7 @@ namespace System.Formats.Tar
         /// <remarks><see cref="GroupName"/> is only used in Unix platforms.</remarks>
         public string GroupName
         {
-            get => _header._gName;
+            get => _header._gName ?? string.Empty;
             set
             {
                 ArgumentNullException.ThrowIfNull(value);
@@ -114,7 +113,7 @@ namespace System.Formats.Tar
         /// <exception cref="ArgumentNullException">Cannot set a null user name.</exception>
         public string UserName
         {
-            get => _header._uName;
+            get => _header._uName ?? string.Empty;
             set
             {
                 ArgumentNullException.ThrowIfNull(value);

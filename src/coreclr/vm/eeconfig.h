@@ -76,6 +76,7 @@ public:
     unsigned int  GenOptimizeType(void)                     const {LIMITED_METHOD_CONTRACT;  return iJitOptimizeType; }
     bool          JitFramed(void)                           const {LIMITED_METHOD_CONTRACT;  return fJitFramed; }
     bool          JitMinOpts(void)                          const {LIMITED_METHOD_CONTRACT;  return fJitMinOpts; }
+    bool          JitEnableOptionalRelocs(void)             const {LIMITED_METHOD_CONTRACT;  return fJitEnableOptionalRelocs; }
 
     // Tiered Compilation config
 #if defined(FEATURE_TIERED_COMPILATION)
@@ -92,6 +93,12 @@ public:
 
 #if defined(FEATURE_PGO)
     bool          TieredPGO(void) const { LIMITED_METHOD_CONTRACT;  return fTieredPGO; }
+    bool          TieredPGO_InstrumentOnlyHotCode(void) const { LIMITED_METHOD_CONTRACT;  return tieredPGO_InstrumentOnlyHotCode; }
+    DWORD         TieredPGO_ScalableCountThreshold() const { LIMITED_METHOD_CONTRACT;  return tieredPGO_ScalableCountThreshold; }
+#endif
+
+#if defined(FEATURE_READYTORUN)
+    bool          ReadyToRun(void) const { LIMITED_METHOD_CONTRACT;  return fReadyToRun; }
 #endif
 
 #if defined(FEATURE_ON_STACK_REPLACEMENT)
@@ -137,11 +144,9 @@ public:
     bool InteropValidatePinnedObjects()             const { LIMITED_METHOD_CONTRACT;  return m_fInteropValidatePinnedObjects; }
     bool InteropLogArguments()                      const { LIMITED_METHOD_CONTRACT;  return m_fInteropLogArguments; }
 
+    bool GenDebuggableCode(void)                    const { LIMITED_METHOD_CONTRACT;  return fDebuggable; }
+
 #ifdef _DEBUG
-    bool GenDebuggableCode(void)                    const {LIMITED_METHOD_CONTRACT;  return fDebuggable; }
-
-    bool ShouldExposeExceptionsInCOMToConsole()     const {LIMITED_METHOD_CONTRACT;  return (iExposeExceptionsInCOM & 1) != 0; }
-
     static bool RegexOrExactMatch(LPCUTF8 regex, LPCUTF8 input);
 
     inline bool ShouldPrestubHalt(MethodDesc* pMethodInfo) const
@@ -369,8 +374,6 @@ public:
 #endif
 
 #if defined(STRESS_HEAP) || defined(_DEBUG)
-    void    SetGCStressLevel(int val)             {LIMITED_METHOD_CONTRACT;  iGCStress = val;  }
-
     enum  GCStressFlags {
         GCSTRESS_NONE               = 0,
         GCSTRESS_ALLOC              = 1,    // GC on all allocs and 'easy' places
@@ -386,9 +389,7 @@ public:
     bool    IsGCBreakOnOOMEnabled()         const {LIMITED_METHOD_CONTRACT; return fGCBreakOnOOM; }
 
     int     GetGCconcurrent()               const {LIMITED_METHOD_CONTRACT; return iGCconcurrent; }
-    void    SetGCconcurrent(int val)              {LIMITED_METHOD_CONTRACT; iGCconcurrent = val;  }
     int     GetGCRetainVM ()                const {LIMITED_METHOD_CONTRACT; return iGCHoardVM;}
-    DWORD   GetGCLOHThreshold()             const {LIMITED_METHOD_CONTRACT; return iGCLOHThreshold;}
 
 #ifdef FEATURE_CONSERVATIVE_GC
     bool    GetGCConservative()             const {LIMITED_METHOD_CONTRACT; return iGCConservative;}
@@ -423,8 +424,6 @@ public:
 
     bool    NgenBindOptimizeNonGac()        const { LIMITED_METHOD_CONTRACT; return fNgenBindOptimizeNonGac; }
 
-    LPUTF8  GetZapBBInstr()                 const { LIMITED_METHOD_CONTRACT; return szZapBBInstr; }
-    LPWSTR  GetZapBBInstrDir()              const { LIMITED_METHOD_CONTRACT; return szZapBBInstrDir; }
     DWORD   DisableStackwalkCache()         const {LIMITED_METHOD_CONTRACT;  return dwDisableStackwalkCache; }
 
     bool    StressLog()                     const { LIMITED_METHOD_CONTRACT; return fStressLog; }
@@ -442,12 +441,6 @@ public:
     int AllocNumThreshold()                 const { LIMITED_METHOD_CONTRACT; return iPerfNumAllocsThreshold;  }
 
 #endif // _DEBUG
-
-#ifdef _DEBUG
-    DWORD  NgenForceFailureMask()     { LIMITED_METHOD_CONTRACT; return dwNgenForceFailureMask; }
-    DWORD  NgenForceFailureCount()    { LIMITED_METHOD_CONTRACT; return dwNgenForceFailureCount; }
-    DWORD  NgenForceFailureKind()     { LIMITED_METHOD_CONTRACT; return dwNgenForceFailureKind;  }
-#endif
 
 #ifdef _DEBUG
 
@@ -475,6 +468,7 @@ private: //----------------------------------------------------------------
     bool fTrackDynamicMethodDebugInfo; //  Enable/Disable tracking dynamic method debug info
     bool fJitFramed;                   // Enable/Disable EBP based frames
     bool fJitMinOpts;                  // Enable MinOpts for all jitted methods
+    bool fJitEnableOptionalRelocs;     // Allow optional relocs
 
     unsigned iJitOptimizeType; // 0=Blended,1=SmallCode,2=FastCode,              default is 0=Blended
 
@@ -493,12 +487,12 @@ private: //----------------------------------------------------------------
     bool   m_fInteropValidatePinnedObjects; // After returning from a M->U interop call, validate GC heap around objects pinned by IL stubs.
     bool   m_fInteropLogArguments; // Log all pinned arguments passed to an interop call
 
+    bool fDebuggable;
+
 #ifdef _DEBUG
     static HRESULT ParseMethList(_In_z_ LPWSTR str, MethodNamesList* * out);
     static void DestroyMethList(MethodNamesList* list);
     static bool IsInMethList(MethodNamesList* list, MethodDesc* pMD);
-
-    bool fDebuggable;
 
     MethodNamesList* pPrestubHalt;      // list of methods on which to break when hit prestub
     MethodNamesList* pPrestubGC;        // list of methods on which to cause a GC when hit prestub
@@ -519,8 +513,6 @@ private: //----------------------------------------------------------------
 
     bool   fConditionalContracts;       // Conditional contracts (off inside asserts)
     bool   fSuppressChecks;             // Disable checks (including contracts)
-
-    DWORD  iExposeExceptionsInCOM;      // Should we exposed exceptions that will be transformed into HRs?
 
     unsigned m_SuspendThreadDeadlockTimeoutMs;  // Used in Thread::SuspendThread()
     unsigned m_SuspendDeadlockTimeout; // Used in Thread::SuspendRuntime.
@@ -580,7 +572,6 @@ private: //----------------------------------------------------------------
 
     int  iGCconcurrent;
     int  iGCHoardVM;
-    DWORD iGCLOHThreshold;
 
 #ifdef FEATURE_CONSERVATIVE_GC
     bool iGCConservative;
@@ -613,9 +604,6 @@ private: //----------------------------------------------------------------
     // Stackwalk optimization flag
     DWORD dwDisableStackwalkCache;
 
-    LPUTF8 szZapBBInstr;
-    LPWSTR szZapBBInstrDir;
-
 #ifdef _DEBUG
     // interop logging
     int       m_TraceWrapper;
@@ -628,12 +616,6 @@ private: //----------------------------------------------------------------
     TypeNamesList* pPerfTypesToLog;     // List of types whose allocations are to be logged
 
 #endif // _DEBUG
-
-#ifdef _DEBUG
-    DWORD dwNgenForceFailureMask;
-    DWORD dwNgenForceFailureCount;
-    DWORD dwNgenForceFailureKind;
-#endif
 
 #ifdef _DEBUG
     DWORD fShouldInjectFault;
@@ -654,6 +636,12 @@ private: //----------------------------------------------------------------
 
 #if defined(FEATURE_PGO)
     bool fTieredPGO;
+    bool tieredPGO_InstrumentOnlyHotCode;
+    DWORD tieredPGO_ScalableCountThreshold;
+#endif
+
+#if defined(FEATURE_READYTORUN)
+    bool fReadyToRun;
 #endif
 
 #if defined(FEATURE_ON_STACK_REPLACEMENT)
@@ -687,10 +675,6 @@ public:
         CallSite_7 = 0x0040,
         CallSite_8 = 0x0080,
     };
-
-#if defined(_DEBUG) && !defined(DACCESS_COMPILE)
-    void DebugCheckAndForceIBCFailure(BitForMask bitForMask);
-#endif
 
 #if defined(_DEBUG)
 #if defined(TARGET_AMD64)

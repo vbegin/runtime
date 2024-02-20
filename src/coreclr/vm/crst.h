@@ -40,7 +40,7 @@
 //    Crst *pcrst = new Crst(type);
 //
 //      where "type" is one of the enums created in the auto-generated
-//      file:..\inc\CrstTypes.h header file (matching the definition in
+//      file:..\inc\crsttypes_generated.h header file (matching the definition in
 //      file:..\inc\CrstTypes.def).
 //
 //      By default, crsts don't support nested enters by the same thread. If
@@ -134,9 +134,9 @@ friend class Crst;
     friend class DbgTransportLock;
 #endif // FEATURE_DBGIPC_TRANSPORT_VM
 
-    // PendingTypeLoadEntry acquires the lock during construction before anybody has a chance to see it to avoid
+    // PendingTypeLoadTable::Entry acquires the lock during construction before anybody has a chance to see it to avoid
     // level violations.
-    friend class PendingTypeLoadEntry;
+    friend class PendingTypeLoadTable;
 
 public:
 #ifdef _DEBUG

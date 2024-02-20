@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Xunit;
-using Xunit.Abstractions;
 using System.IO;
 using System.Xml.Schema;
+using Xunit;
+using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaTests
 {
     //[TestCase(Name = "TC_SchemaSet_Includes", Desc = "")]
     public class TC_SchemaSet_Includes : TC_SchemaSetBase
@@ -51,7 +51,7 @@ namespace System.Xml.Tests
             foreach (object obj in schema.Elements.Names)
                 if ((obj.ToString()).Equals(param2.ToString()))
                     return;
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ namespace System.Xml.Tests
                 CError.Compare(sc.IsCompiled, true, "IsCompiled");
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -277,7 +277,7 @@ namespace System.Xml.Tests
             foreach (object obj in schema.Elements.Names)
                 if ((obj.ToString()).Equals(param2.ToString()))
                     return;
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -295,7 +295,7 @@ namespace System.Xml.Tests
             try
             {
                 sc.Reprocess(schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (ArgumentException) { }
             CError.Compare(sc.IsCompiled, false, "ReprocessIsCompiled");
@@ -318,14 +318,14 @@ namespace System.Xml.Tests
                 try
                 {
                     sc.Reprocess(schema);
-                    Assert.True(false);
+                    Assert.Fail();
                 }
                 catch (ArgumentException) { }
                 CError.Compare(sc.IsCompiled, true, "ReprocessIsCompiled");
                 CError.Compare(sc.Count, 1, "ReprocessCount");
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -542,7 +542,7 @@ namespace System.Xml.Tests
             foreach (object obj in schema.Elements.Names)
                 if ((obj.ToString()).Equals(param2.ToString()))
                     return;
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -564,7 +564,7 @@ namespace System.Xml.Tests
             try
             {
                 sc.Reprocess(schema);
-                Assert.True(false);
+                Assert.Fail();
             }
             catch (ArgumentException) { }
             CError.Compare(sc.IsCompiled, true, "ReprocessIsCompiled");
@@ -583,14 +583,14 @@ namespace System.Xml.Tests
                 try
                 {
                     sc.Reprocess(schema);
-                    Assert.True(false);
+                    Assert.Fail();
                 }
                 catch (ArgumentException) { }
                 CError.Compare(sc.IsCompiled, true, "ReprocessIsCompiled");
                 CError.Compare(sc.Count, 1, "ReprocessCount");
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------

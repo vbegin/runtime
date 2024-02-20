@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
 using System.Runtime.Serialization;
 using System.Transactions.Configuration;
 
@@ -29,16 +30,6 @@ namespace System.Transactions
             return new TransactionException(message, innerException);
         }
 
-        internal static TransactionException Create(TraceSourceType traceSource, string? message, Exception? innerException)
-        {
-            TransactionsEtwProvider etwLog = TransactionsEtwProvider.Log;
-            if (etwLog.IsEnabled())
-            {
-                etwLog.TransactionExceptionTrace(TransactionExceptionType.TransactionException, message, innerException == null ? string.Empty : innerException.ToString());
-            }
-
-            return new TransactionException(message, innerException);
-        }
         internal static TransactionException CreateTransactionStateException(Exception? innerException)
         {
             return Create(SR.TransactionStateException, innerException);
@@ -98,6 +89,8 @@ namespace System.Transactions
         /// </summary>
         /// <param name="info"></param>
         /// <param name="context"></param>
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected TransactionException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
@@ -118,24 +111,6 @@ namespace System.Transactions
                 messagewithTxId = SR.Format(SR.DistributedTxIDInTransactionException, messagewithTxId, distributedTxId);
 
             return Create(messagewithTxId, innerException);
-        }
-
-        internal static TransactionException Create(TraceSourceType traceSource, string? message, Exception? innerException, Guid distributedTxId)
-        {
-            string? messagewithTxId = message;
-            if (IncludeDistributedTxId(distributedTxId))
-                messagewithTxId = SR.Format(SR.DistributedTxIDInTransactionException, messagewithTxId, distributedTxId);
-
-            return Create(traceSource, messagewithTxId, innerException);
-        }
-
-        internal static TransactionException Create(TraceSourceType traceSource, string? message, Guid distributedTxId)
-        {
-            if (IncludeDistributedTxId(distributedTxId))
-            {
-                return new TransactionException(SR.Format(SR.DistributedTxIDInTransactionException, message, distributedTxId));
-            }
-            return new TransactionException(message);
         }
 
         internal static TransactionException CreateTransactionStateException(Exception? innerException, Guid distributedTxId)
@@ -206,7 +181,7 @@ namespace System.Transactions
         ///
         /// </summary>
         /// <param name="message"></param>
-        public TransactionAbortedException(string? message) : base(message)
+        public TransactionAbortedException(string? message) : base(message ?? SR.TransactionAborted)
         {
         }
 
@@ -215,7 +190,7 @@ namespace System.Transactions
         /// </summary>
         /// <param name="message"></param>
         /// <param name="innerException"></param>
-        public TransactionAbortedException(string? message, Exception? innerException) : base(message, innerException)
+        public TransactionAbortedException(string? message, Exception? innerException) : base(message ?? SR.TransactionAborted, innerException)
         {
         }
 
@@ -239,6 +214,8 @@ namespace System.Transactions
         /// </summary>
         /// <param name="info"></param>
         /// <param name="context"></param>
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected TransactionAbortedException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
@@ -251,7 +228,7 @@ namespace System.Transactions
     [System.Runtime.CompilerServices.TypeForwardedFrom("System.Transactions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
     public class TransactionInDoubtException : TransactionException
     {
-        internal static new TransactionInDoubtException Create(TraceSourceType traceSource, string? message, Exception? innerException, Guid distributedTxId)
+        internal static TransactionInDoubtException Create(TraceSourceType traceSource, string? message, Exception? innerException, Guid distributedTxId)
         {
             string? messagewithTxId = message;
             if (IncludeDistributedTxId(distributedTxId))
@@ -260,7 +237,7 @@ namespace System.Transactions
             return TransactionInDoubtException.Create(traceSource, messagewithTxId, innerException);
         }
 
-        internal static new TransactionInDoubtException Create(TraceSourceType traceSource, string? message, Exception? innerException)
+        internal static TransactionInDoubtException Create(TraceSourceType traceSource, string? message, Exception? innerException)
         {
             TransactionsEtwProvider etwLog = TransactionsEtwProvider.Log;
             if (etwLog.IsEnabled())
@@ -282,7 +259,7 @@ namespace System.Transactions
         ///
         /// </summary>
         /// <param name="message"></param>
-        public TransactionInDoubtException(string? message) : base(message)
+        public TransactionInDoubtException(string? message) : base(message ?? SR.TransactionIndoubt)
         {
         }
 
@@ -291,7 +268,7 @@ namespace System.Transactions
         /// </summary>
         /// <param name="message"></param>
         /// <param name="innerException"></param>
-        public TransactionInDoubtException(string? message, Exception? innerException) : base(message, innerException)
+        public TransactionInDoubtException(string? message, Exception? innerException) : base(message ?? SR.TransactionIndoubt, innerException)
         {
         }
 
@@ -300,6 +277,8 @@ namespace System.Transactions
         /// </summary>
         /// <param name="info"></param>
         /// <param name="context"></param>
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected TransactionInDoubtException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
@@ -339,7 +318,7 @@ namespace System.Transactions
         ///
         /// </summary>
         /// <param name="message"></param>
-        public TransactionManagerCommunicationException(string? message) : base(message)
+        public TransactionManagerCommunicationException(string? message) : base(message ?? SR.TransactionManagerCommunicationException)
         {
         }
 
@@ -351,7 +330,7 @@ namespace System.Transactions
         public TransactionManagerCommunicationException(
             string? message,
             Exception? innerException
-            ) : base(message, innerException)
+            ) : base(message ?? SR.TransactionManagerCommunicationException, innerException)
         {
         }
 
@@ -360,6 +339,8 @@ namespace System.Transactions
         /// </summary>
         /// <param name="info"></param>
         /// <param name="context"></param>
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected TransactionManagerCommunicationException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
@@ -380,7 +361,7 @@ namespace System.Transactions
         ///
         /// </summary>
         /// <param name="message"></param>
-        public TransactionPromotionException(string? message) : base(message)
+        public TransactionPromotionException(string? message) : base(message ?? SR.PromotionFailed)
         {
         }
 
@@ -389,7 +370,7 @@ namespace System.Transactions
         /// </summary>
         /// <param name="message"></param>
         /// <param name="innerException"></param>
-        public TransactionPromotionException(string? message, Exception? innerException) : base(message, innerException)
+        public TransactionPromotionException(string? message, Exception? innerException) : base(message ?? SR.PromotionFailed, innerException)
         {
         }
 
@@ -398,6 +379,8 @@ namespace System.Transactions
         /// </summary>
         /// <param name="info"></param>
         /// <param name="context"></param>
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         protected TransactionPromotionException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }

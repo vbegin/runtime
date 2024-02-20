@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+namespace NativeFormatGen;
+
 /// <summary>
 /// Defines the set of flags that may be applied to a schema record definition.
 /// </summary>
@@ -65,24 +67,24 @@ public class MemberDef
         Comment = comment;
     }
 
-    readonly public string Name;
-    readonly public object TypeName;
-    readonly public MemberDefFlags Flags;
-    readonly public string Value;
-    readonly public string Comment;
+    public readonly string Name;
+    public readonly object TypeName;
+    public readonly MemberDefFlags Flags;
+    public readonly string Value;
+    public readonly string Comment;
 
     public string GetMemberType(MemberTypeKind kind = MemberTypeKind.Accessor)
     {
         string typeName;
         if ((Flags & MemberDefFlags.RecordRef) != 0)
         {
-            if (TypeName is String[])
+            if (TypeName is string[])
             {
                 typeName = (kind == MemberTypeKind.WriterField) ? "MetadataRecord" : "Handle";
             }
             else
             {
-                typeName = (kind == MemberTypeKind.WriterField) ? 
+                typeName = (kind == MemberTypeKind.WriterField) ?
                     (TypeName != null ? (string)TypeName : "MetadataRecord"): $"{TypeName}Handle";
             }
         }
@@ -107,16 +109,16 @@ public class MemberDef
 
     public string GetMemberFieldName()
     {
-        return "_" + Char.ToLower(Name[0], System.Globalization.CultureInfo.InvariantCulture) + Name.Substring(1);
+        return "_" + char.ToLower(Name[0], System.Globalization.CultureInfo.InvariantCulture) + Name.Substring(1);
     }
 
     public string GetMemberDescription()
     {
-        var typeSet = TypeName as String[];
+        var typeSet = TypeName as string[];
         if (typeSet == null)
             return null;
 
-        return "One of: " + String.Join(", ", typeSet);
+        return "One of: " + string.Join(", ", typeSet);
     }
 }
 
@@ -134,11 +136,11 @@ public class RecordDef
         Members = members;
     }
 
-    readonly public string Name;
-    readonly public string BaseTypeName;
-    readonly public RecordDefFlags Flags;
-    readonly public string Comment;
-    readonly public MemberDef[] Members;
+    public readonly string Name;
+    public readonly string BaseTypeName;
+    public readonly RecordDefFlags Flags;
+    public readonly string Comment;
+    public readonly MemberDef[] Members;
 }
 
 public class EnumType
@@ -149,8 +151,8 @@ public class EnumType
         UnderlyingType = underlyingType;
     }
 
-    readonly public string Name;
-    readonly public string UnderlyingType;
+    public readonly string Name;
+    public readonly string UnderlyingType;
 }
 
 public class PrimitiveType
@@ -162,21 +164,22 @@ public class PrimitiveType
         CustomCompare = customCompare;
     }
 
-    readonly public string Name;
-    readonly public string TypeName;
-    readonly public bool CustomCompare;
+    public readonly string Name;
+    public readonly string TypeName;
+    public readonly bool CustomCompare;
 }
 
 /// <summary>
 /// This class defines the metadata schema that is consumed by all generators.
 /// </summary>
-class SchemaDef
+internal sealed class SchemaDef
 {
     public static readonly EnumType[] EnumTypes = new EnumType[]
     {
         new EnumType("AssemblyFlags", "uint"),
         new EnumType("AssemblyHashAlgorithm", "uint"),
         new EnumType("CallingConventions", "ushort"),
+        new EnumType("SignatureCallingConvention", "byte"),
         new EnumType("EventAttributes", "ushort"),
         new EnumType("FieldAttributes", "ushort"),
         new EnumType("GenericParameterAttributes", "ushort"),
@@ -253,7 +256,24 @@ class SchemaDef
                 new MemberDef(name: "GenericTypeParameter", value: "0x0", comment: "Represents a type parameter for a generic type."),
                 new MemberDef(name: "GenericMethodParameter", value: "0x1", comment: "Represents a type parameter from a generic method."),
             }
-        )
+        ),
+        new RecordDef(
+            name: "SignatureCallingConvention",
+            baseTypeName: "byte",
+            flags: RecordDefFlags.Enum,
+            members: new MemberDef[] {
+                new MemberDef(name: "HasThis", value: "0x20"),
+                new MemberDef(name: "ExplicitThis", value: "0x40"),
+                new MemberDef(name: "Default", value: "0x00"),
+                new MemberDef(name: "Vararg", value: "0x05"),
+                new MemberDef(name: "Cdecl", value: "0x01"),
+                new MemberDef(name: "StdCall", value: "0x02"),
+                new MemberDef(name: "ThisCall", value: "0x03"),
+                new MemberDef(name: "FastCall", value: "0x04"),
+                new MemberDef(name: "Unmanaged", value: "0x09"),
+                new MemberDef(name: "UnmanagedCallingConventionMask", value: "0x0F"),
+            }
+        ),
     }
     .OrderBy(record => record.Name, StringComparer.Ordinal)
     .ToArray();
@@ -267,13 +287,13 @@ class SchemaDef
     //
 
     // Set of record schema definitions (see format description in "Metadata records" section below)
-    // that represent contant primitive type values. Adds concept of constant managed reference, which
+    // that represent constant primitive type values. Adds concept of constant managed reference, which
     // must always have a null value (thus the use of the NotPersisted flag).
 
     private static readonly RecordDef[] ConstantValueRecordSchema =
         (
-            from primitiveType in PrimitiveTypes select
-                new RecordDef(
+            from primitiveType in PrimitiveTypes
+            select new RecordDef(
                     name: "Constant" + primitiveType.TypeName + "Value",
                     members: new MemberDef[] {
                         new MemberDef(name: "Value", typeName: primitiveType.Name,
@@ -301,14 +321,14 @@ class SchemaDef
         .ToArray();
 
     // Set of record schema definitions (see format description in "Metadata records" section below)
-    // that represent contant arrays primitive type values. Adds concept of a constant array of handle values (currently used to store
+    // that represent constant arrays primitive type values. Adds concept of a constant array of handle values (currently used to store
     // an array TypeDefOrRefOrSpec handles corresponding to System.Type arguments to the instantiation of a custom attribute, or to store
     // custom initialized object[] arrays in custom attributes).
 
     private static readonly RecordDef[] ConstantArrayRecordSchema =
         (
-            from primitiveType in PrimitiveTypes select
-                new RecordDef(
+            from primitiveType in PrimitiveTypes
+            select new RecordDef(
                     name: "Constant" + primitiveType.TypeName + "Array",
                     members: new MemberDef[] {
                         new MemberDef(name: "Value", typeName: primitiveType.TypeName,
@@ -342,7 +362,7 @@ class SchemaDef
         )
         .ToArray();
 
-    private static readonly RecordDef[] ConstantRecordSchema = 
+    private static readonly RecordDef[] ConstantRecordSchema =
         ConstantValueRecordSchema.Concat(ConstantArrayRecordSchema)
         .OrderBy(record => record.Name, StringComparer.Ordinal)
         .ToArray();
@@ -540,7 +560,7 @@ class SchemaDef
             name: "MethodInstantiation",
             members: new MemberDef[] {
                 new MemberDef("Method", MethodDefOrRef, MemberDefFlags.RecordRef),
-                new MemberDef("GenericTypeArguments", TypeDefOrRefOrSpec, MemberDefFlags.List | MemberDefFlags.RecordRef),
+                new MemberDef("GenericTypeArguments", TypeDefOrRefOrSpecOrMod, MemberDefFlags.List | MemberDefFlags.RecordRef),
                 // COMPLETENESS: new MemberDef("CustomAttributes", "CustomAttribute", MemberDefFlags.List | MemberDefFlags.RecordRef | MemberDefFlags.Child),
             }
         ),
@@ -656,7 +676,7 @@ class SchemaDef
             name: "TypeInstantiationSignature",
             members: new MemberDef[] {
                 new MemberDef("GenericType", TypeDefOrRefOrSpec, MemberDefFlags.RecordRef),
-                new MemberDef("GenericTypeArguments", TypeDefOrRefOrSpec, MemberDefFlags.List | MemberDefFlags.RecordRef),
+                new MemberDef("GenericTypeArguments", TypeDefOrRefOrSpecOrMod, MemberDefFlags.List | MemberDefFlags.RecordRef),
             }
         ),
         new RecordDef(
@@ -668,7 +688,7 @@ class SchemaDef
         new RecordDef(
             name: "ArraySignature",
             members: new MemberDef[] {
-                new MemberDef("ElementType", TypeDefOrRefOrSpec, MemberDefFlags.RecordRef),
+                new MemberDef("ElementType", TypeDefOrRefOrSpecOrMod, MemberDefFlags.RecordRef),
                 new MemberDef("Rank", "int"),
                 new MemberDef("Sizes", "Int32", MemberDefFlags.Array),
                 new MemberDef("LowerBounds", "Int32", MemberDefFlags.Array),
@@ -677,7 +697,7 @@ class SchemaDef
         new RecordDef(
             name: "ByReferenceSignature",
             members: new MemberDef[] {
-                new MemberDef("Type", TypeDefOrRefOrSpec, MemberDefFlags.RecordRef),
+                new MemberDef("Type", TypeDefOrRefOrSpecOrMod, MemberDefFlags.RecordRef),
             }
         ),
         new RecordDef(
@@ -721,7 +741,7 @@ class SchemaDef
         new RecordDef(
             name: "MethodSignature",
             members: new MemberDef[] {
-                new MemberDef("CallingConvention", "CallingConventions"),
+                new MemberDef("CallingConvention", "SignatureCallingConvention"),
                 new MemberDef("GenericParameterCount", "int"),
                 new MemberDef("ReturnType", TypeDefOrRefOrSpecOrMod, MemberDefFlags.RecordRef),
                 new MemberDef("Parameters", TypeDefOrRefOrSpecOrMod, MemberDefFlags.List | MemberDefFlags.RecordRef | MemberDefFlags.EnumerateForHashCode),

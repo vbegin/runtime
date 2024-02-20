@@ -511,7 +511,18 @@ register_thread (MonoThreadInfo *info)
 	mono_native_tls_set_value (thread_info_key, info);
 
 	mono_thread_info_get_stack_bounds (&staddr, &stsize);
+
+	/* for wasm, the stack can be placed at the start of the linear memory */
+#ifndef TARGET_WASM
 	g_assert (staddr);
+#endif /* TARGET_WASM */
+
+#ifdef HOST_WASM
+#ifndef DISABLE_THREADS
+	mono_native_tls_set_value (jobs_key, NULL);
+#endif /* DISABLE_THREADS */
+#endif /* HOST_WASM */
+
 	g_assert (stsize);
 	info->stack_start_limit = staddr;
 	info->stack_end = staddr + stsize;
@@ -553,7 +564,7 @@ register_thread (MonoThreadInfo *info)
 	mono_thread_info_suspend_unlock ();
 
 #ifdef HOST_BROWSER
-	mono_threads_wasm_on_thread_attached ();
+	mono_threads_wasm_on_thread_registered ();
 #endif
 
 	return TRUE;
@@ -636,6 +647,10 @@ unregister_thread (void *arg)
 	mono_threads_transition_detach (info);
 
 	mono_thread_info_suspend_unlock ();
+
+#ifdef HOST_BROWSER
+	mono_threads_wasm_on_thread_unregistered ();
+#endif
 
 	g_byte_array_free (info->stackdata, /*free_segment=*/TRUE);
 
@@ -958,6 +973,12 @@ mono_thread_info_init (size_t info_size)
 
 	mono_threads_suspend_policy_init ();
 
+#ifdef HOST_WASM
+#ifndef DISABLE_THREADS
+	res = mono_native_tls_alloc (&jobs_key, NULL);
+#endif /* DISABLE_THREADS */
+#endif /* HOST_BROWSER */
+
 #ifdef HOST_WIN32
 	res = mono_native_tls_alloc (&thread_info_key, NULL);
 	res = mono_native_tls_alloc (&thread_exited_key, NULL);
@@ -1103,8 +1124,6 @@ begin_suspend_peek_and_preempt (MonoThreadInfo *info);
 MonoThreadBeginSuspendResult
 mono_thread_info_begin_suspend (MonoThreadInfo *info, MonoThreadSuspendPhase phase)
 {
-	if (phase == MONO_THREAD_SUSPEND_PHASE_INITIAL && mono_threads_platform_stw_defer_initial_suspend (info))
-		return MONO_THREAD_BEGIN_SUSPEND_NEXT_PHASE;
 	if (phase == MONO_THREAD_SUSPEND_PHASE_MOPUP && mono_threads_is_hybrid_suspension_enabled ())
 		return begin_suspend_peek_and_preempt (info);
 	else
@@ -1537,43 +1556,6 @@ STATE_BLOCKING_SUSPEND_REQUESTED: Invalid if we're preemptively suspending block
 }
 
 /*
- * This is a very specific function whose only purpose is to
- * break a given thread from socket syscalls.
- *
- * This only exists because linux won't fail a call to connect
- * if the underlying is closed.
- *
- * TODO We should cleanup and unify this with the other syscall abort
- * facility.
- */
-void
-mono_thread_info_abort_socket_syscall_for_close (MonoNativeThreadId tid)
-{
-	MonoThreadHazardPointers *hp;
-	MonoThreadInfo *info;
-
-	if (tid == mono_native_thread_id_get ())
-		return;
-
-	mono_thread_info_suspend_lock ();
-	hp = mono_hazard_pointer_get ();
-	info = mono_thread_info_lookup (tid);
-	if (!info) {
-		mono_thread_info_suspend_unlock ();
-		return;
-	}
-	mono_threads_begin_global_suspend ();
-
-	mono_threads_suspend_abort_syscall (info);
-	mono_threads_wait_pending_operations ();
-
-	mono_hazard_pointer_clear (hp, 1);
-
-	mono_threads_end_global_suspend ();
-	mono_thread_info_suspend_unlock ();
-}
-
-/*
  * mono_thread_info_set_is_async_context:
  *
  *   Set whenever the current thread is in an async context. Some runtime functions might behave
@@ -1617,19 +1599,14 @@ mono_thread_info_is_async_context (void)
  */
 void
 mono_thread_info_get_stack_bounds (guint8 **staddr, size_t *stsize)
-{
+{ 
 	guint8 *current = (guint8 *)&stsize;
 	mono_threads_platform_get_stack_bounds (staddr, stsize);
 	if (!*staddr)
 		return;
 
-#ifdef HOST_WASI
-	// TODO: Fix the stack positioning on WASI and re-enable the following check.
-	// Currently it works as a prototype anyway.
-#else
 	/* Sanity check the result */
 	g_assert ((current > *staddr) && (current < *staddr + *stsize));
-#endif
 
 #ifndef TARGET_WASM
 	/* When running under emacs, sometimes staddr is not aligned to a page size */
@@ -1663,7 +1640,7 @@ sleep_interrupt (gpointer data)
 }
 
 static guint32
-sleep_interruptable (guint32 ms, gboolean *alerted)
+sleep_interruptible (guint32 ms, gboolean *alerted)
 {
 	gint64 now = 0, end = 0;
 
@@ -1725,7 +1702,7 @@ mono_thread_info_sleep (guint32 ms, gboolean *alerted)
 	}
 
 	if (alerted)
-		return sleep_interruptable (ms, alerted);
+		return sleep_interruptible (ms, alerted);
 
 	MONO_ENTER_GC_SAFE;
 
@@ -1938,7 +1915,7 @@ mono_thread_info_uninstall_interrupt (gboolean *interrupted)
 	/* Common to uninstall interrupt handler around OS API's affecting last error. */
 	/* This method could call OS API's on some platforms that will reset last error so make sure to restore */
 	/* last error before exit. */
-	W32_DEFINE_LAST_ERROR_RESTORE_POINT;
+	MONO_DEFINE_LAST_ERROR_RESTORE_POINT;
 
 	g_assert (interrupted);
 	*interrupted = FALSE;
@@ -1961,7 +1938,7 @@ mono_thread_info_uninstall_interrupt (gboolean *interrupted)
 	THREADS_INTERRUPT_DEBUG ("interrupt uninstall  tid %p previous_token %p interrupted %s\n",
 		mono_thread_info_get_tid (info), previous_token, *interrupted ? "TRUE" : "FALSE");
 
-	W32_RESTORE_LAST_ERROR_FROM_RESTORE_POINT;
+	MONO_RESTORE_LAST_ERROR_FROM_RESTORE_POINT;
 }
 
 static MonoThreadInfoInterruptToken*
@@ -2175,11 +2152,3 @@ mono_thread_info_get_tools_data (void)
 
 	return info ? info->tools_data : NULL;
 }
-
-#ifndef HOST_WASM
-gboolean
-mono_threads_platform_stw_defer_initial_suspend (MonoThreadInfo *info)
-{
-	return FALSE;
-}
-#endif

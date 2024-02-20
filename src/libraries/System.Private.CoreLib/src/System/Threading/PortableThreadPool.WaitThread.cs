@@ -12,8 +12,8 @@ namespace System.Threading
     /// </summary>
     internal sealed partial class CompleteWaitThreadPoolWorkItem : IThreadPoolWorkItem
     {
-        private RegisteredWaitHandle _registeredWaitHandle;
-        private bool _timedOut;
+        private readonly RegisteredWaitHandle _registeredWaitHandle;
+        private readonly bool _timedOut;
 
         public CompleteWaitThreadPoolWorkItem(RegisteredWaitHandle registeredWaitHandle, bool timedOut)
         {
@@ -187,7 +187,7 @@ namespace System.Threading
                 {
                     IsThreadPoolThread = true,
                     IsBackground = true,
-                    Name = ".NET ThreadPool Wait"
+                    Name = ".NET TP Wait"
                 };
                 waitThread.UnsafeStart();
             }
@@ -373,7 +373,10 @@ namespace System.Threading
                 // If the handle is a repeating handle, set up the next call. Otherwise, remove it from the wait thread.
                 if (registeredHandle.Repeating)
                 {
-                    registeredHandle.RestartTimeout();
+                    if (!registeredHandle.IsInfiniteTimeout)
+                    {
+                        registeredHandle.RestartTimeout();
+                    }
                 }
                 else
                 {

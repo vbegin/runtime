@@ -136,7 +136,7 @@ HRESULT CCompRC::Init(LPCWSTR pResourceFile)
         {
             NewArrayHolder<WCHAR> pwszResourceFile(NULL);
 
-            DWORD lgth = (DWORD) wcslen(pResourceFile) + 1;
+            DWORD lgth = (DWORD) u16_strlen(pResourceFile) + 1;
             pwszResourceFile = new(nothrow) WCHAR[lgth];
             if (pwszResourceFile)
             {
@@ -294,7 +294,7 @@ CCompRC* CCompRC::GetDefaultResourceDll()
 //*****************************************************************************
 //*****************************************************************************
 
-// String resouces packaged as PE files only exist on Windows
+// String resources packaged as PE files only exist on Windows
 #ifdef HOST_WINDOWS
 HRESULT CCompRC::GetLibrary(LocaleID langId, HRESOURCEDLL* phInst)
 {
@@ -541,7 +541,7 @@ HRESULT CCompRC::LoadString(ResourceCategory eCategory, LocaleID langId, UINT iR
 
 #ifndef DACCESS_COMPILE
 
-// String resouces packaged as PE files only exist on Windows
+// String resources packaged as PE files only exist on Windows
 #ifdef HOST_WINDOWS
 HRESULT CCompRC::LoadResourceFile(HRESOURCEDLL * pHInst, LPCWSTR lpFileName)
 {
@@ -555,7 +555,7 @@ HRESULT CCompRC::LoadResourceFile(HRESOURCEDLL * pHInst, LPCWSTR lpFileName)
         dwLoadLibraryFlags = 0;
     }
 
-    if((*pHInst = WszLoadLibraryEx(lpFileName, NULL, dwLoadLibraryFlags)) == NULL)
+    if((*pHInst = WszLoadLibrary(lpFileName, NULL, dwLoadLibraryFlags)) == NULL)
     {
         return HRESULT_FROM_GetLastError();
     }
@@ -618,7 +618,7 @@ HRESULT CCompRC::LoadLibraryHelper(HRESOURCEDLL *pHInst,
 
             PathString rcPathName(rcPath);
 
-            if (!rcPathName.EndsWith(W("\\")))
+            if (!rcPathName.EndsWith(SL(W("\\"))))
             {
                 rcPathName.Append(W("\\"));
             }

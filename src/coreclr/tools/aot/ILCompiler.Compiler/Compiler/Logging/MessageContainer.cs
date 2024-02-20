@@ -28,8 +28,8 @@ namespace ILCompiler.Logging
 #endif
     {
         /// <summary>
-        /// Optional data with a filename, line and column that triggered the
-        /// linker to output an error (or warning) message.
+        /// Optional data with a filename, line and column that triggered
+        /// to output an error (or warning) message.
         /// </summary>
         public MessageOrigin? Origin { get; }
 
@@ -41,7 +41,7 @@ namespace ILCompiler.Logging
         public string SubCategory { get; }
 
         /// <summary>
-        /// Code identifier for errors and warnings reported by the IL linker.
+        /// Code identifier for errors and warnings.
         /// </summary>
         public int? Code { get; }
 
@@ -54,7 +54,7 @@ namespace ILCompiler.Logging
         /// Create an error message.
         /// </summary>
         /// <param name="text">Humanly readable message describing the error</param>
-        /// <param name="code">Unique error ID. Please see https://github.com/mono/linker/blob/main/doc/error-codes.md
+        /// <param name="code">Unique error ID. Please see https://github.com/dotnet/runtime/blob/main/docs/tools/illink/error-codes.md
         /// for the list of errors and possibly add a new one</param>
         /// <param name="subcategory">Optionally, further categorize this error</param>
         /// <param name="origin">Filename, line, and column where the error was found</param>
@@ -71,7 +71,7 @@ namespace ILCompiler.Logging
         /// Create an error message.
         /// </summary>
         /// <param name="origin">Filename, line, and column where the error was found</param>
-        /// <param name="id">Unique error ID. Please see https://github.com/dotnet/linker/blob/main/docs/error-codes.md
+        /// <param name="id">Unique error ID. Please see https://github.com/dotnet/runtime/blob/main/docs/tools/illink/error-codes.md
         /// for the list of errors and possibly add a new one</param>
         /// <param name="args">Additional arguments to form a humanly readable message describing the warning</param>
         /// <returns>New MessageContainer of 'Error' category</returns>
@@ -88,7 +88,7 @@ namespace ILCompiler.Logging
         /// </summary>
         /// <param name="context">Context with the relevant warning suppression info.</param>
         /// <param name="text">Humanly readable message describing the warning</param>
-        /// <param name="code">Unique warning ID. Please see https://github.com/mono/linker/blob/main/doc/error-codes.md
+        /// <param name="code">Unique warning ID. Please see https://github.com/dotnet/runtime/blob/main/docs/tools/illink/error-codes.md
         /// for the list of warnings and possibly add a new one</param>
         /// /// <param name="origin">Filename or member where the warning is coming from</param>
         /// <param name="subcategory">Optionally, further categorize this warning</param>
@@ -108,7 +108,7 @@ namespace ILCompiler.Logging
         /// </summary>
         /// <param name="context">Context with the relevant warning suppression info.</param>
         /// <param name="origin">Filename or member where the warning is coming from</param>
-        /// <param name="id">Unique warning ID. Please see https://github.com/dotnet/linker/blob/main/docs/error-codes.md
+        /// <param name="id">Unique warning ID. Please see https://github.com/dotnet/runtime/blob/main/docs/tools/illink/error-codes.md
         /// for the list of warnings and possibly add a new one</param>
         /// <param name="args">Additional arguments to form a humanly readable message describing the warning</param>
         /// <returns>New MessageContainer of 'Warning' category</returns>
@@ -125,6 +125,9 @@ namespace ILCompiler.Logging
             if (context.IsWarningSuppressed(code, origin))
                 return null;
 
+            if (context.IsWarningSubcategorySuppressed(subcategory))
+                return null;
+
             if (TryLogSingleWarning(context, code, origin, subcategory))
                 return null;
 
@@ -137,6 +140,9 @@ namespace ILCompiler.Logging
         private static MessageContainer? CreateWarningMessageContainer(Logger context, MessageOrigin origin, DiagnosticId id, string subcategory, params string[] args)
         {
             if (context.IsWarningSuppressed((int)id, origin))
+                return null;
+
+            if (context.IsWarningSubcategorySuppressed(subcategory))
                 return null;
 
             if (TryLogSingleWarning(context, (int)id, origin, subcategory))
@@ -165,7 +171,7 @@ namespace ILCompiler.Logging
                 _ => null,
             };
 
-            ModuleDesc declaringAssembly = (declaringType as MetadataType)?.Module;
+            ModuleDesc declaringAssembly = (declaringType as MetadataType)?.Module ?? (origin.MemberDefinition as ModuleDesc);
             Debug.Assert(declaringAssembly != null);
             if (declaringAssembly == null)
                 return false;
@@ -259,10 +265,10 @@ namespace ILCompiler.Logging
             string origin = Origin?.ToString() ?? originApp;
 
             StringBuilder sb = new StringBuilder();
-            sb.Append(origin).Append(":");
+            sb.Append(origin).Append(':');
 
             if (!string.IsNullOrEmpty(SubCategory))
-                sb.Append(" ").Append(SubCategory);
+                sb.Append(' ').Append(SubCategory);
 
             string cat;
             switch (Category)
@@ -281,7 +287,7 @@ namespace ILCompiler.Logging
 
             if (!string.IsNullOrEmpty(cat))
             {
-                sb.Append(" ")
+                sb.Append(' ')
                     .Append(cat)
                     .Append(" IL")
                     .Append(Code.Value.ToString("D4"))
@@ -289,16 +295,12 @@ namespace ILCompiler.Logging
             }
             else
             {
-                sb.Append(" ");
+                sb.Append(' ');
             }
 
             if (Origin?.MemberDefinition != null)
             {
-                if (Origin?.MemberDefinition is MethodDesc method)
-                    sb.Append(method.GetDisplayName());
-                else
-                    sb.Append(Origin?.MemberDefinition.ToString());
-
+                sb.Append(Origin?.MemberDefinition?.GetDisplayName() ?? Origin?.MemberDefinition?.ToString());
                 sb.Append(": ");
             }
 

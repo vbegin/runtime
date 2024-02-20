@@ -8,6 +8,9 @@
     <!-- The entry point for these tests is native and the produced assembly is a no-op, so unloadability testing doesn't do anything here. -->
     <UnloadabilityIncompatible>true</UnloadabilityIncompatible>
     <CLRTestIsHosted>false</CLRTestIsHosted>
+    <NativeAotIncompatible>true</NativeAotIncompatible>
+    <!-- The true entrypoint for these tests is a native executable -->
+    <RequiresProcessIsolation>true</RequiresProcessIsolation>
   </PropertyGroup>
 
   <ItemGroup>

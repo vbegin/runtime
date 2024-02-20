@@ -9,7 +9,7 @@ using Internal.ReadyToRunConstants;
 
 namespace ILCompiler
 {
-    internal class JitHelper
+    internal static class JitHelper
     {
         /// <summary>
         /// Returns JIT helper entrypoint. JIT helpers can be either implemented by entrypoint with given mangled name or
@@ -73,13 +73,31 @@ namespace ILCompiler
                 case ReadyToRunHelper.WriteBarrier_EAX:
                     mangledName = "RhpAssignRefEAX";
                     break;
+                case ReadyToRunHelper.WriteBarrier_EBX:
+                    mangledName = "RhpAssignRefEBX";
+                    break;
                 case ReadyToRunHelper.WriteBarrier_ECX:
+                    mangledName = "RhpAssignRefECX";
+                    break;
+                case ReadyToRunHelper.WriteBarrier_EDI:
+                    mangledName = "RhpAssignRefECX";
+                    break;
+                case ReadyToRunHelper.WriteBarrier_ESI:
                     mangledName = "RhpAssignRefECX";
                     break;
                 case ReadyToRunHelper.CheckedWriteBarrier_EAX:
                     mangledName = "RhpCheckedAssignRefEAX";
                     break;
+                case ReadyToRunHelper.CheckedWriteBarrier_EBX:
+                    mangledName = "RhpCheckedAssignRefEAX";
+                    break;
                 case ReadyToRunHelper.CheckedWriteBarrier_ECX:
+                    mangledName = "RhpCheckedAssignRefECX";
+                    break;
+                case ReadyToRunHelper.CheckedWriteBarrier_EDI:
+                    mangledName = "RhpCheckedAssignRefECX";
+                    break;
+                case ReadyToRunHelper.CheckedWriteBarrier_ESI:
                     mangledName = "RhpCheckedAssignRefECX";
                     break;
 
@@ -97,6 +115,9 @@ namespace ILCompiler
                 case ReadyToRunHelper.NewMultiDimArr:
                     methodDesc = context.GetHelperEntryPoint("ArrayHelpers", "NewObjArray");
                     break;
+                case ReadyToRunHelper.NewMultiDimArrRare:
+                    methodDesc = context.GetHelperEntryPoint("ArrayHelpers", "NewObjArrayRare");
+                    break;
 
                 case ReadyToRunHelper.NewArray:
                     mangledName = "RhNewArray";
@@ -113,10 +134,10 @@ namespace ILCompiler
                     break;
 
                 case ReadyToRunHelper.MemCpy:
-                    mangledName = "memcpy"; // TODO: Null reference handling
+                    methodDesc = context.GetHelperEntryPoint("MemoryHelpers", "MemCopy");
                     break;
                 case ReadyToRunHelper.MemSet:
-                    mangledName = "memset"; // TODO: Null reference handling
+                    methodDesc = context.GetHelperEntryPoint("MemoryHelpers", "MemSet");
                     break;
 
                 case ReadyToRunHelper.GetRuntimeTypeHandle:
@@ -130,10 +151,6 @@ namespace ILCompiler
                     break;
                 case ReadyToRunHelper.GetRuntimeFieldHandle:
                     methodDesc = context.GetHelperEntryPoint("LdTokenHelpers", "GetRuntimeFieldHandle");
-                    break;
-
-                case ReadyToRunHelper.AreTypesEquivalent:
-                    mangledName = "RhTypeCast_AreTypesEquivalent";
                     break;
 
                 case ReadyToRunHelper.Lng2Dbl:
@@ -174,12 +191,6 @@ namespace ILCompiler
                     break;
                 case ReadyToRunHelper.FltRem:
                     mangledName = "RhpFltRem";
-                    break;
-                case ReadyToRunHelper.DblRound:
-                    mangledName = "RhpDblRound";
-                    break;
-                case ReadyToRunHelper.FltRound:
-                    mangledName = "RhpFltRound";
                     break;
 
                 case ReadyToRunHelper.LMul:
@@ -243,28 +254,29 @@ namespace ILCompiler
                     break;
 
                 case ReadyToRunHelper.CheckCastAny:
-                    mangledName = "RhTypeCast_CheckCast";
-                    break;
-                case ReadyToRunHelper.CheckInstanceAny:
-                    mangledName = "RhTypeCast_IsInstanceOf";
+                    mangledName = "RhTypeCast_CheckCastAny";
                     break;
                 case ReadyToRunHelper.CheckCastInterface:
                     mangledName = "RhTypeCast_CheckCastInterface";
                     break;
-                case ReadyToRunHelper.CheckInstanceInterface:
-                    mangledName = "RhTypeCast_IsInstanceOfInterface";
-                    break;
                 case ReadyToRunHelper.CheckCastClass:
                     mangledName = "RhTypeCast_CheckCastClass";
+                    break;
+                case ReadyToRunHelper.CheckCastClassSpecial:
+                    mangledName = "RhTypeCast_CheckCastClassSpecial";
+                    break;
+
+                case ReadyToRunHelper.CheckInstanceAny:
+                    mangledName = "RhTypeCast_IsInstanceOfAny";
+                    break;
+                case ReadyToRunHelper.CheckInstanceInterface:
+                    mangledName = "RhTypeCast_IsInstanceOfInterface";
                     break;
                 case ReadyToRunHelper.CheckInstanceClass:
                     mangledName = "RhTypeCast_IsInstanceOfClass";
                     break;
-                case ReadyToRunHelper.CheckCastArray:
-                    mangledName = "RhTypeCast_CheckCastArray";
-                    break;
-                case ReadyToRunHelper.CheckInstanceArray:
-                    mangledName = "RhTypeCast_IsInstanceOfArray";
+                case ReadyToRunHelper.IsInstanceOfException:
+                    mangledName = "RhTypeCast_IsInstanceOfException";
                     break;
 
                 case ReadyToRunHelper.MonitorEnter:
@@ -331,21 +343,6 @@ namespace ILCompiler
                 return "RhpNewArrayAlign8";
 
             return "RhpNewArray";
-        }
-
-        public static string GetCastingHelperNameForType(TypeDesc type, bool throwing)
-        {
-            if (type.IsArray)
-                return throwing ? "RhTypeCast_CheckCastArray" : "RhTypeCast_IsInstanceOfArray";
-
-            if (type.IsInterface)
-                return throwing ? "RhTypeCast_CheckCastInterface" : "RhTypeCast_IsInstanceOfInterface";
-
-            if (type.IsDefType)
-                return throwing ? "RhTypeCast_CheckCastClass" : "RhTypeCast_IsInstanceOfClass";
-
-            // No specialized helper for the rest of the types because they don't make much sense anyway.
-            return throwing ? "RhTypeCast_CheckCast" : "RhTypeCast_IsInstanceOf";
         }
     }
 }

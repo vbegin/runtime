@@ -412,7 +412,7 @@ mono_unwind_ops_encode_full (GSList *unwind_ops, guint32 *out_len, gboolean enab
 			loc = op->when;
 		}
 
-		/* Emit an advance_loc if neccesary */
+		/* Emit an advance_loc if necessary */
 		while (op->when > loc) {
 			if (op->when - loc >= 65536) {
 				*p ++ = DW_CFA_advance_loc4;
@@ -725,8 +725,8 @@ static guint
 cached_info_hash(gconstpointer key)
 {
 	guint i, a;
-	const guint8 *info = cached_info [GPOINTER_TO_UINT (key)].info;
-	const guint len = cached_info [GPOINTER_TO_UINT (key)].len;
+	const guint8 *info = cached_info [GCONSTPOINTER_TO_UINT (key)].info;
+	const guint len = cached_info [GCONSTPOINTER_TO_UINT (key)].len;
 
 	for (i = a = 0; i != len; ++i)
 		a ^= (((guint)info [i]) << (i & 0xf));
@@ -737,11 +737,11 @@ cached_info_hash(gconstpointer key)
 static gboolean
 cached_info_eq(gconstpointer a, gconstpointer b)
 {
-	const guint32 lena = cached_info [GPOINTER_TO_UINT (a)].len;
-	const guint32 lenb = cached_info [GPOINTER_TO_UINT (b)].len;
+	const guint32 lena = cached_info [GCONSTPOINTER_TO_UINT (a)].len;
+	const guint32 lenb = cached_info [GCONSTPOINTER_TO_UINT (b)].len;
 	if (lena == lenb) {
-		const guint8 *infoa = cached_info [GPOINTER_TO_UINT (a)].info;
-		const guint8 *infob = cached_info [GPOINTER_TO_UINT (b)].info;
+		const guint8 *infoa = cached_info [GCONSTPOINTER_TO_UINT (a)].info;
+		const guint8 *infob = cached_info [GCONSTPOINTER_TO_UINT (b)].info;
 		if (memcmp (infoa, infob, lena) == 0)
 			return TRUE;
 	}
@@ -1041,7 +1041,7 @@ mono_unwind_decode_fde (guint8 *fde, guint32 *out_len, guint32 *code_len, MonoJi
 	/* Decode FDE */
 
 	p = fde;
-	// FIXME: Endianess ?
+	// FIXME: Endianness ?
 	fde_len = *(guint32*)p;
 	g_assert (fde_len != 0xffffffff && fde_len != 0);
 	p += 4;

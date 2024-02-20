@@ -89,7 +89,7 @@ namespace System.Net.Sockets.Tests
         [InlineData(true)]
         public async Task ReceiveSent_TCP_Success(bool ipv6)
         {
-            if (ipv6 && PlatformDetection.IsOSXLike)
+            if (ipv6 && PlatformDetection.IsApplePlatform)
             {
                 // [ActiveIssue("https://github.com/dotnet/runtime/issues/47335")]
                 // accept() will create a (seemingly) DualMode socket on Mac,
@@ -208,16 +208,9 @@ namespace System.Net.Sockets.Tests
                 if (closeOrDispose) socket.Close();
                 else socket.Dispose();
 
-                if (DisposeDuringOperationResultsInDisposedException)
-                {
-                    await Assert.ThrowsAsync<ObjectDisposedException>(() => receiveTask).WaitAsync(CancellationTestTimeout);
-                }
-                else
-                {
-                    SocketException ex = await Assert.ThrowsAsync<SocketException>(() => receiveTask).WaitAsync(CancellationTestTimeout);
-                    SocketError expectedError = UsesSync ? SocketError.Interrupted : SocketError.OperationAborted;
-                    Assert.Equal(expectedError, ex.SocketErrorCode);
-                }
+                SocketException ex = await Assert.ThrowsAsync<SocketException>(() => receiveTask).WaitAsync(CancellationTestTimeout);
+                SocketError expectedError = UsesSync ? SocketError.Interrupted : SocketError.OperationAborted;
+                Assert.Equal(expectedError, ex.SocketErrorCode);
             }
         }
 

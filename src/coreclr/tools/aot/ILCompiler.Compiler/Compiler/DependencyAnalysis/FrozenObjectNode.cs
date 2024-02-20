@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
@@ -6,58 +6,49 @@ using System.Collections.Generic;
 using Internal.Text;
 using Internal.TypeSystem;
 
+using Debug = System.Diagnostics.Debug;
+
 namespace ILCompiler.DependencyAnalysis
 {
-    /// <summary>
-    /// Represents a frozen object that is statically preallocated within the data section
-    /// of the executable instead of on the GC heap.
-    /// </summary>
-    public class FrozenObjectNode : EmbeddedObjectNode, ISymbolDefinitionNode
+    public abstract class FrozenObjectNode : EmbeddedObjectNode, ISymbolDefinitionNode
     {
-        private readonly FieldDesc _field;
-        private readonly TypePreinit.ISerializableReference _data;
-        
-        public FrozenObjectNode(FieldDesc field, TypePreinit.ISerializableReference data)
-        {
-            _field = field;
-            _data = data;
-        }
-
-        public void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
-        {
-            sb.Append(nameMangler.CompilationUnitPrefix).Append("__FrozenObj_")
-                .Append(nameMangler.GetMangledFieldName(_field));
-        }
-
-        public override bool StaticDependenciesAreComputed => true;
-
         int ISymbolNode.Offset => 0;
 
         int ISymbolDefinitionNode.Offset
         {
             get
             {
-                // The frozen object symbol points at the MethodTable portion of the object, skipping over the sync block
-                return OffsetFromBeginningOfArray + _field.Context.Target.PointerSize;
+                // The frozen symbol points at the MethodTable portion of the object, skipping over the sync block
+                return OffsetFromBeginningOfArray + ObjectType.Context.Target.PointerSize;
             }
         }
 
-        public override void EncodeData(ref ObjectDataBuilder dataBuilder, NodeFactory factory, bool relocsOnly)
-        {
-            // Sync Block
-            dataBuilder.EmitZeroPointer();
+        public abstract TypeDesc ObjectType { get; }
 
-            // byte contents
-            _data.WriteContent(ref dataBuilder, this, factory);
+        public abstract int? ArrayLength { get; }
+        public abstract bool IsKnownImmutable { get; }
+        public int Size => ObjectType.Context.Target.PointerSize + ContentSize; // SyncBlock + size of contents
+        protected abstract int ContentSize { get; }
+
+        public abstract void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb);
+
+        public sealed override bool StaticDependenciesAreComputed => true;
+
+        public sealed override void EncodeData(ref ObjectDataBuilder dataBuilder, NodeFactory factory, bool relocsOnly)
+        {
+            dataBuilder.EmitZeroPointer(); // Sync block
+
+            int sizeBefore = dataBuilder.CountBytes;
+            EncodeContents(ref dataBuilder, factory, relocsOnly);
+            Debug.Assert(dataBuilder.CountBytes == sizeBefore + ContentSize);
         }
 
-        protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
-
-        public override IEnumerable<DependencyListEntry> GetStaticDependencies(NodeFactory factory)
+        public sealed override IEnumerable<DependencyListEntry> GetStaticDependencies(NodeFactory factory)
         {
-            ObjectDataBuilder builder = new ObjectDataBuilder(factory, true);
-            EncodeData(ref builder, factory, true);
+            var builder = new ObjectDataBuilder(factory, relocsOnly: true);
+            EncodeData(ref builder, factory, relocsOnly: true);
             Relocation[] relocs = builder.ToObjectData().Relocs;
+
             DependencyList dependencies = null;
 
             if (relocs != null)
@@ -72,16 +63,6 @@ namespace ILCompiler.DependencyAnalysis
             return dependencies;
         }
 
-        protected override void OnMarked(NodeFactory factory)
-        {
-            factory.FrozenSegmentRegion.AddEmbeddedObject(this);
-        }
-
-        public override int ClassCode => 1789429316;
-
-        public override int CompareToImpl(ISortableNode other, CompilerComparer comparer)
-        {
-            return comparer.Compare(((FrozenObjectNode)other)._field, _field);
-        }
+        public abstract void EncodeContents(ref ObjectDataBuilder dataBuilder, NodeFactory factory, bool relocsOnly);
     }
 }

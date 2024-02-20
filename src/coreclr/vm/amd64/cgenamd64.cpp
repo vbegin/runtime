@@ -58,9 +58,17 @@ void ClearRegDisplayArgumentAndScratchRegisters(REGDISPLAY * pRD)
     pContextPointers->R11 = NULL;
 }
 
-void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     LIMITED_METHOD_CONTRACT;
+
+#ifndef DACCESS_COMPILE
+    if (updateFloats)
+    {
+        UpdateFloatingPointRegisters(pRD);
+        _ASSERTE(pRD->pCurrentContext->Rip == GetReturnAddress());
+    }
+#endif // DACCESS_COMPILE
 
     pRD->IsCallerContextValid = FALSE;
     pRD->IsCallerSPValid      = FALSE;        // Don't add usage of this field.  This is only temporary.
@@ -76,7 +84,7 @@ void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     LOG((LF_GCROOTS, LL_INFO100000, "STACKWALK    TransitionFrame::UpdateRegDisplay(rip:%p, rsp:%p)\n", pRD->ControlPC, pRD->SP));
 }
 
-void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACTL
     {
@@ -96,6 +104,13 @@ void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
         LOG((LF_CORDB, LL_ERROR, "WARNING: InlinedCallFrame::UpdateRegDisplay called on inactive frame %p\n", this));
         return;
     }
+
+#ifndef DACCESS_COMPILE
+    if (updateFloats)
+    {
+        UpdateFloatingPointRegisters(pRD);
+    }
+#endif // DACCESS_COMPILE
 
     pRD->IsCallerContextValid = FALSE;
     pRD->IsCallerSPValid      = FALSE;        // Don't add usage of this field.  This is only temporary.
@@ -117,7 +132,7 @@ void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     LOG((LF_GCROOTS, LL_INFO100000, "STACKWALK    InlinedCallFrame::UpdateRegDisplay(rip:%p, rsp:%p)\n", pRD->ControlPC, pRD->SP));
 }
 
-void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACTL
     {
@@ -128,6 +143,14 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
         SUPPORTS_DAC;
     }
     CONTRACTL_END;
+
+#ifndef DACCESS_COMPILE
+    if (updateFloats)
+    {
+        UpdateFloatingPointRegisters(pRD);
+        _ASSERTE(pRD->pCurrentContext->Rip == m_MachState.m_Rip);
+    }
+#endif // DACCESS_COMPILE
 
     pRD->IsCallerContextValid = FALSE;
     pRD->IsCallerSPValid      = FALSE;        // Don't add usage of this field.  This is only temporary.
@@ -155,7 +178,7 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
         ENUM_CALLEE_SAVED_REGISTERS();
 #undef CALLEE_SAVED_REGISTER
 
-#define CALLEE_SAVED_REGISTER(regname) pRD->pCurrentContextPointers->regname = pUnwoundState->m_Ptrs.p##regname;
+#define CALLEE_SAVED_REGISTER(regname) pRD->pCurrentContextPointers->regname = &pRD->pCurrentContext->regname;
         ENUM_CALLEE_SAVED_REGISTERS();
 #undef CALLEE_SAVED_REGISTER
 
@@ -196,7 +219,7 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
     ClearRegDisplayArgumentAndScratchRegisters(pRD);
 }
 
-void FaultingExceptionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void FaultingExceptionFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     LIMITED_METHOD_DAC_CONTRACT;
 
@@ -233,7 +256,7 @@ TADDR ResumableFrame::GetReturnAddressPtr()
     return dac_cast<TADDR>(m_Regs) + offsetof(CONTEXT, Rip);
 }
 
-void ResumableFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void ResumableFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACT_VOID
     {
@@ -273,7 +296,7 @@ void ResumableFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
 }
 
 // The HijackFrame has to know the registers that are pushed by OnHijackTripThread
-void HijackFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+void HijackFrame::UpdateRegDisplay(const PREGDISPLAY pRD, bool updateFloats)
 {
     CONTRACTL {
         NOTHROW;
@@ -548,6 +571,7 @@ void UMEntryThunkCode::Encode(UMEntryThunkCode *pEntryThunkCodeRX, BYTE* pTarget
     m_jmpRAX[2]  = 0xE0;
 
     _ASSERTE(DbgIsExecutable(&pEntryThunkCodeRX->m_movR10[0], &pEntryThunkCodeRX->m_jmpRAX[3]-&pEntryThunkCodeRX->m_movR10[0]));
+    FlushInstructionCache(GetCurrentProcess(),pEntryThunkCodeRX,sizeof(UMEntryThunkCode));
 }
 
 void UMEntryThunkCode::Poison()
@@ -574,7 +598,7 @@ void UMEntryThunkCode::Poison()
     pThisRW->m_movR10[1]  = 0xBF;
 #endif
 
-    ClrFlushInstructionCache(&m_movR10[0], &m_jmpRAX[3]-&m_movR10[0]);
+    ClrFlushInstructionCache(&m_movR10[0], &m_jmpRAX[3]-&m_movR10[0], /* hasCodeExecutedBefore */ true);
 }
 
 UMEntryThunk* UMEntryThunk::Decode(LPVOID pCallback)
@@ -713,7 +737,7 @@ DWORD GetOffsetAtEndOfFunction(ULONGLONG           uImageBase,
     DWORD* pOffset          = (DWORD*) (pEndOfFunction)  - offsetNum;
     DWORD  offsetInFunc     = *pOffset;
 
-    _ASSERTE_ALL_BUILDS("clr/src/VM/AMD64/cGenAMD64.cpp", (offsetInFunc >= 0) && (offsetInFunc < functionSize));
+    _ASSERTE_ALL_BUILDS((offsetInFunc >= 0) && (offsetInFunc < functionSize));
 
     return offsetInFunc;
 }

@@ -5,11 +5,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Authentication;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Runtime.CompilerServices;
 using Microsoft.Win32;
 using Xunit;
 
@@ -30,6 +30,7 @@ namespace System
         public static bool IsMonoRuntime => Type.GetType("Mono.RuntimeStructs") != null;
         public static bool IsNotMonoRuntime => !IsMonoRuntime;
         public static bool IsMonoInterpreter => GetIsRunningOnMonoInterpreter();
+        public static bool IsNotMonoInterpreter => !IsMonoInterpreter;
         public static bool IsMonoAOT => Environment.GetEnvironmentVariable("MONO_AOT_MODE") == "aot";
         public static bool IsNotMonoAOT => Environment.GetEnvironmentVariable("MONO_AOT_MODE") != "aot";
         public static bool IsNativeAot => IsNotMonoRuntime && !IsReflectionEmitSupported;
@@ -38,20 +39,24 @@ namespace System
         public static bool IsNetBSD => RuntimeInformation.IsOSPlatform(OSPlatform.Create("NETBSD"));
         public static bool IsAndroid => RuntimeInformation.IsOSPlatform(OSPlatform.Create("ANDROID"));
         public static bool IsNotAndroid => !IsAndroid;
-        public static bool IsNotAndroidX86 => !(IsAndroid && IsX86Process);
+        public static bool IsAndroidX86 => IsAndroid && IsX86Process;
+        public static bool IsNotAndroidX86 => !IsAndroidX86;
         public static bool IsiOS => RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS"));
         public static bool IstvOS => RuntimeInformation.IsOSPlatform(OSPlatform.Create("TVOS"));
         public static bool IsMacCatalyst => RuntimeInformation.IsOSPlatform(OSPlatform.Create("MACCATALYST"));
+        public static bool IsNotMacCatalyst => !IsMacCatalyst;
         public static bool Isillumos => RuntimeInformation.IsOSPlatform(OSPlatform.Create("ILLUMOS"));
         public static bool IsSolaris => RuntimeInformation.IsOSPlatform(OSPlatform.Create("SOLARIS"));
         public static bool IsBrowser => RuntimeInformation.IsOSPlatform(OSPlatform.Create("BROWSER"));
+        public static bool IsWasi => RuntimeInformation.IsOSPlatform(OSPlatform.Create("WASI"));
         public static bool IsNotBrowser => !IsBrowser;
-        public static bool IsMobile => IsBrowser || IsAppleMobile || IsAndroid;
+        public static bool IsNotWasi => !IsWasi;
+        public static bool IsMobile => IsBrowser || IsWasi || IsAppleMobile || IsAndroid;
         public static bool IsNotMobile => !IsMobile;
         public static bool IsAppleMobile => IsMacCatalyst || IsiOS || IstvOS;
         public static bool IsNotAppleMobile => !IsAppleMobile;
         public static bool IsNotNetFramework => !IsNetFramework;
-        public static bool IsBsdLike => IsOSXLike || IsFreeBSD || IsNetBSD;
+        public static bool IsBsdLike => IsApplePlatform || IsFreeBSD || IsNetBSD;
 
         public static bool IsArmProcess => RuntimeInformation.ProcessArchitecture == Architecture.Arm;
         public static bool IsNotArmProcess => !IsArmProcess;
@@ -59,7 +64,10 @@ namespace System
         public static bool IsNotArm64Process => !IsArm64Process;
         public static bool IsArmOrArm64Process => IsArmProcess || IsArm64Process;
         public static bool IsNotArmNorArm64Process => !IsArmOrArm64Process;
+        public static bool IsS390xProcess => (int)RuntimeInformation.ProcessArchitecture == 5; // Architecture.S390x
         public static bool IsArmv6Process => (int)RuntimeInformation.ProcessArchitecture == 7; // Architecture.Armv6
+        public static bool IsPpc64leProcess => (int)RuntimeInformation.ProcessArchitecture == 8; // Architecture.Ppc64le
+        public static bool IsRiscV64Process => (int)RuntimeInformation.ProcessArchitecture == 9; // Architecture.RiscV64;
         public static bool IsX64Process => RuntimeInformation.ProcessArchitecture == Architecture.X64;
         public static bool IsX86Process => RuntimeInformation.ProcessArchitecture == Architecture.X86;
         public static bool IsNotX86Process => !IsX86Process;
@@ -69,6 +77,25 @@ namespace System
         public static bool Is64BitProcess => IntPtr.Size == 8;
         public static bool IsNotWindows => !IsWindows;
 
+        private static volatile int s_isPrivilegedProcess = -1;
+        public static bool IsPrivilegedProcess
+        {
+            get
+            {
+                int p = s_isPrivilegedProcess;
+                if (p == -1)
+                {
+                    s_isPrivilegedProcess = p = AdminHelpers.IsProcessElevated() ? 1 : 0;
+                }
+
+                return p == 1;
+            }
+        }
+
+        public static bool IsNotPrivilegedProcess => !IsPrivilegedProcess;
+
+        public static bool IsMarshalGetExceptionPointersSupported => !IsMonoRuntime && !IsNativeAot;
+
         private static readonly Lazy<bool> s_isCheckedRuntime = new Lazy<bool>(() => AssemblyConfigurationEquals("Checked"));
         private static readonly Lazy<bool> s_isReleaseRuntime = new Lazy<bool>(() => AssemblyConfigurationEquals("Release"));
         private static readonly Lazy<bool> s_isDebugRuntime = new Lazy<bool>(() => AssemblyConfigurationEquals("Debug"));
@@ -77,33 +104,52 @@ namespace System
         public static bool IsReleaseRuntime => s_isReleaseRuntime.Value;
         public static bool IsDebugRuntime => s_isDebugRuntime.Value;
 
-        // For use as needed on tests that time out when run on a Debug runtime.
+        public static bool IsReleaseLibrary(Assembly assembly) => !IsDebuggable(assembly);
+        public static bool IsDebugLibrary(Assembly assembly) => IsDebuggable(assembly);
+
+        // For use as needed on tests that time out when run on a Debug or Checked runtime.
         // Not relevant for timeouts on external activities, such as network timeouts.
-        public static int SlowRuntimeTimeoutModifier = (PlatformDetection.IsDebugRuntime ? 5 : 1);
+        public static int SlowRuntimeTimeoutModifier
+        {
+            get
+            {
+                if (IsReleaseRuntime)
+                    return 1;
+                if (IsRiscV64Process)
+                    return IsDebugRuntime? 10 : 2;
+                else
+                    return IsDebugRuntime? 5 : 1;
+            }
+        }
 
         public static bool IsCaseInsensitiveOS => IsWindows || IsOSX || IsMacCatalyst;
+        public static bool IsCaseSensitiveOS => !IsCaseInsensitiveOS;
 
 #if NETCOREAPP
-        public static bool IsCaseSensitiveOS => !IsCaseInsensitiveOS && !RuntimeInformation.RuntimeIdentifier.StartsWith("iossimulator")
-                                                                     && !RuntimeInformation.RuntimeIdentifier.StartsWith("tvossimulator");
+        public static bool FileCreateCaseSensitive => IsCaseSensitiveOS && !RuntimeInformation.RuntimeIdentifier.StartsWith("iossimulator")
+                                                                        && !RuntimeInformation.RuntimeIdentifier.StartsWith("tvossimulator");
 #else
-        public static bool IsCaseSensitiveOS => !IsCaseInsensitiveOS;
+        public static bool FileCreateCaseSensitive => IsCaseSensitiveOS;
 #endif
 
-        public static bool IsThreadingSupported => !IsBrowser;
+        public static bool IsThreadingSupported => (!IsWasi && !IsBrowser) || IsWasmThreadingSupported;
+        public static bool IsWasmThreadingSupported => IsBrowser && IsEnvironmentVariableTrue("IsBrowserThreadingSupported");
+        public static bool IsNotWasmThreadingSupported => !IsWasmThreadingSupported;
         public static bool IsBinaryFormatterSupported => IsNotMobile && !IsNativeAot;
-        public static bool IsSymLinkSupported => !IsiOS && !IstvOS;
+
         public static bool IsStartingProcessesSupported => !IsiOS && !IstvOS;
 
         public static bool IsSpeedOptimized => !IsSizeOptimized;
-        public static bool IsSizeOptimized => IsBrowser || IsAndroid || IsAppleMobile;
+        public static bool IsSizeOptimized => IsBrowser || IsWasi || IsAndroid || IsAppleMobile;
 
         public static bool IsBrowserDomSupported => IsEnvironmentVariableTrue("IsBrowserDomSupported");
         public static bool IsBrowserDomSupportedOrNotBrowser => IsNotBrowser || IsBrowserDomSupported;
+        public static bool IsBrowserDomSupportedOrNodeJS => IsBrowserDomSupported || IsNodeJS;
         public static bool IsNotBrowserDomSupported => !IsBrowserDomSupported;
         public static bool IsWebSocketSupported => IsEnvironmentVariableTrue("IsWebSocketSupported");
         public static bool IsNodeJS => IsEnvironmentVariableTrue("IsNodeJS");
         public static bool IsNotNodeJS => !IsNodeJS;
+        public static bool IsNodeJSOnWindows => GetNodeJSPlatform() == "win32";
         public static bool LocalEchoServerIsNotAvailable => !LocalEchoServerIsAvailable;
         public static bool LocalEchoServerIsAvailable => IsBrowser;
 
@@ -121,12 +167,28 @@ namespace System
         // Drawing is not supported on non windows platforms in .NET 7.0+.
         public static bool IsDrawingSupported => IsWindows && IsNotWindowsNanoServer && IsNotWindowsServerCore;
 
-        public static bool IsAsyncFileIOSupported => !IsBrowser;
+        public static bool IsAsyncFileIOSupported => !IsBrowser && !IsWasi;
 
         public static bool IsLineNumbersSupported => !IsNativeAot;
 
         public static bool IsInContainer => GetIsInContainer();
+        public static bool IsNotInContainer => !IsInContainer;
         public static bool SupportsComInterop => IsWindows && IsNotMonoRuntime && !IsNativeAot; // matches definitions in clr.featuredefines.props
+
+#if NETCOREAPP
+        public static bool IsBuiltInComEnabled => SupportsComInterop
+                                            && (AppContext.TryGetSwitch("System.Runtime.InteropServices.BuiltInComInterop.IsSupported", out bool isEnabled)
+                                                ? isEnabled
+                                                : true);
+#else
+        public static bool IsBuiltInComEnabled => SupportsComInterop;
+#endif
+
+        // Automation refers to OLE Automation support. Automation support here means the OS
+        // and runtime provide support for the following: IDispatch, STA apartments, etc. This
+        // is typically available whenever COM support is enabled, but Windows Nano Server is an exception.
+        public static bool IsBuiltInComEnabledWithOSAutomationSupport => IsBuiltInComEnabled && IsNotWindowsNanoServer;
+
         public static bool SupportsSsl3 => GetSsl3Support();
         public static bool SupportsSsl2 => IsWindows && !PlatformDetection.IsWindows10Version1607OrGreater;
 
@@ -138,6 +200,8 @@ namespace System
 #endif
 
         public static bool IsInvokingStaticConstructorsSupported => !IsNativeAot;
+        public static bool IsInvokingFinalizersSupported => !IsNativeAot;
+        public static bool IsTypeEquivalenceSupported => !IsNativeAot && !IsMonoRuntime && IsWindows;
 
         public static bool IsMetadataUpdateSupported => !IsNativeAot;
 
@@ -147,11 +211,19 @@ namespace System
 
         public static bool IsPreciseGcSupported => !IsMonoRuntime;
 
+        public static bool IsRareEnumsSupported => !IsNativeAot;
+
         public static bool IsNotIntMaxValueArrayIndexSupported => s_largeArrayIsNotSupported.Value;
 
         public static bool IsAssemblyLoadingSupported => !IsNativeAot;
+        public static bool IsNonBundledAssemblyLoadingSupported => IsAssemblyLoadingSupported && !IsMonoAOT;
         public static bool IsMethodBodySupported => !IsNativeAot;
         public static bool IsDebuggerTypeProxyAttributeSupported => !IsNativeAot;
+        public static bool HasAssemblyFiles => !string.IsNullOrEmpty(typeof(PlatformDetection).Assembly.Location);
+        public static bool HasHostExecutable => HasAssemblyFiles; // single-file don't have a host
+        public static bool IsSingleFile => !HasAssemblyFiles;
+
+        public static bool IsReadyToRunCompiled => Environment.GetEnvironmentVariable("TEST_READY_TO_RUN_MODE") == "1";
 
         private static volatile Tuple<bool> s_lazyNonZeroLowerBoundArraySupported;
         public static bool IsNonZeroLowerBoundArraySupported
@@ -201,6 +273,7 @@ namespace System
         public static bool IsNotDomainJoinedMachine => !IsDomainJoinedMachine;
 
         public static bool IsOpenSslSupported => IsLinux || IsFreeBSD || Isillumos || IsSolaris;
+        public static bool OpenSslNotPresentOnSystem => !OpenSslPresentOnSystem;
 
         public static bool UsesAppleCrypto => IsOSX || IsMacCatalyst || IsiOS || IstvOS;
         public static bool UsesMobileAppleCrypto => IsMacCatalyst || IsiOS || IstvOS;
@@ -208,10 +281,10 @@ namespace System
         // Changed to `true` when trimming
         public static bool IsBuiltWithAggressiveTrimming => IsNativeAot;
         public static bool IsNotBuiltWithAggressiveTrimming => !IsBuiltWithAggressiveTrimming;
+        public static bool IsTrimmedWithILLink => IsBuiltWithAggressiveTrimming && !IsNativeAot;
 
         // Windows - Schannel supports alpn from win8.1/2012 R2 and higher.
         // Linux - OpenSsl supports alpn from openssl 1.0.2 and higher.
-        // OSX - SecureTransport doesn't expose alpn APIs. TODO https://github.com/dotnet/runtime/issues/27727
         // Android - Platform supports alpn from API level 29 and higher
         private static readonly Lazy<bool> s_supportsAlpn = new Lazy<bool>(GetAlpnSupport);
         private static bool GetAlpnSupport()
@@ -236,18 +309,24 @@ namespace System
                 return Interop.AndroidCrypto.SSLSupportsApplicationProtocolsConfiguration();
             }
 
+            if (IsOSX)
+            {
+                return true;
+            }
+
             return false;
         }
 
         public static bool SupportsAlpn => s_supportsAlpn.Value;
         public static bool SupportsClientAlpn => SupportsAlpn || IsOSX || IsMacCatalyst || IsiOS || IstvOS;
-        public static bool SupportsHardLinkCreation => !IsAndroid;
+        public static bool SupportsHardLinkCreation => !IsAndroid && !IsLinuxBionic;
 
         private static readonly Lazy<bool> s_supportsTls10 = new Lazy<bool>(GetTls10Support);
         private static readonly Lazy<bool> s_supportsTls11 = new Lazy<bool>(GetTls11Support);
         private static readonly Lazy<bool> s_supportsTls12 = new Lazy<bool>(GetTls12Support);
         private static readonly Lazy<bool> s_supportsTls13 = new Lazy<bool>(GetTls13Support);
         private static readonly Lazy<bool> s_sendsCAListByDefault = new Lazy<bool>(GetSendsCAListByDefault);
+        private static readonly Lazy<bool> s_supportsSha3 = new Lazy<bool>(GetSupportsSha3);
 
         public static bool SupportsTls10 => s_supportsTls10.Value;
         public static bool SupportsTls11 => s_supportsTls11.Value;
@@ -255,6 +334,8 @@ namespace System
         public static bool SupportsTls13 => s_supportsTls13.Value;
         public static bool SendsCAListByDefault => s_sendsCAListByDefault.Value;
         public static bool SupportsSendingCustomCANamesInTls => UsesAppleCrypto || IsOpenSslSupported || (PlatformDetection.IsWindows8xOrLater && SendsCAListByDefault);
+        public static bool SupportsSha3 => s_supportsSha3.Value;
+        public static bool DoesNotSupportSha3 => !s_supportsSha3.Value;
 
         private static readonly Lazy<bool> s_largeArrayIsNotSupported = new Lazy<bool>(IsLargeArrayNotSupported);
 
@@ -290,25 +371,29 @@ namespace System
             }
         }
 
-        private static readonly Lazy<bool> m_isInvariant = new Lazy<bool>(() => GetStaticNonPublicBooleanPropertyValue("System.Globalization.GlobalizationMode", "Invariant"));
+        private static readonly Lazy<bool> m_isInvariant = new Lazy<bool>(()
+            => (bool?)Type.GetType("System.Globalization.GlobalizationMode")?.GetProperty("Invariant", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null) == true);
 
-        private static bool GetStaticNonPublicBooleanPropertyValue(string typeName, string propertyName)
-        {
-            if (Type.GetType(typeName)?.GetProperty(propertyName, BindingFlags.NonPublic | BindingFlags.Static)?.GetMethod is MethodInfo mi)
-            {
-                return (bool)mi.Invoke(null, null);
-            }
-
-            return false;
-        }
+        private static readonly Lazy<bool> m_isHybrid = new Lazy<bool>(()
+            => (bool?)Type.GetType("System.Globalization.GlobalizationMode")?.GetProperty("Hybrid", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null) == true);
 
         private static readonly Lazy<Version> m_icuVersion = new Lazy<Version>(GetICUVersion);
         public static Version ICUVersion => m_icuVersion.Value;
 
         public static bool IsInvariantGlobalization => m_isInvariant.Value;
+        public static bool IsHybridGlobalization => m_isHybrid.Value;
+        public static bool IsHybridGlobalizationOnBrowser => m_isHybrid.Value && IsBrowser;
+        public static bool IsHybridGlobalizationOnApplePlatform => m_isHybrid.Value && (IsMacCatalyst || IsiOS || IstvOS);
+        public static bool IsNotHybridGlobalizationOnBrowser => !IsHybridGlobalizationOnBrowser;
         public static bool IsNotInvariantGlobalization => !IsInvariantGlobalization;
-        public static bool IsIcuGlobalization => ICUVersion > new Version(0, 0, 0, 0);
-        public static bool IsNlsGlobalization => IsNotInvariantGlobalization && !IsIcuGlobalization;
+        public static bool IsNotHybridGlobalization => !IsHybridGlobalization;
+        public static bool IsNotHybridGlobalizationOnApplePlatform => !IsHybridGlobalizationOnApplePlatform;
+
+        // HG on apple platforms implies ICU
+        public static bool IsIcuGlobalization => !IsInvariantGlobalization && (IsHybridGlobalizationOnApplePlatform || ICUVersion > new Version(0, 0, 0, 0));
+
+        public static bool IsIcuGlobalizationAndNotHybridOnBrowser => IsIcuGlobalization && IsNotHybridGlobalizationOnBrowser;
+        public static bool IsNlsGlobalization => IsNotInvariantGlobalization && !IsIcuGlobalization && !IsHybridGlobalization;
 
         public static bool IsSubstAvailable
         {
@@ -335,19 +420,26 @@ namespace System
         private static Version GetICUVersion()
         {
             int version = 0;
-            try
+            // When HG on Apple platforms, our ICU lib is not loaded
+            if (IsNotHybridGlobalizationOnApplePlatform)
             {
-                Type interopGlobalization = Type.GetType("Interop+Globalization, System.Private.CoreLib");
-                if (interopGlobalization != null)
+                try
                 {
-                    MethodInfo methodInfo = interopGlobalization.GetMethod("GetICUVersion", BindingFlags.NonPublic | BindingFlags.Static);
-                    if (methodInfo != null)
+                    Type interopGlobalization = Type.GetType("Interop+Globalization, System.Private.CoreLib");
+                    if (interopGlobalization != null)
                     {
-                        version = (int)methodInfo.Invoke(null, null);
+                        MethodInfo methodInfo = interopGlobalization.GetMethod("GetICUVersion", BindingFlags.NonPublic | BindingFlags.Static);
+                        if (methodInfo != null)
+                        {
+                            // Ensure that ICU has been loaded
+                            GC.KeepAlive(System.Globalization.CultureInfo.InstalledUICulture);
+
+                            version = (int)methodInfo.Invoke(null, null);
+                        }
                     }
                 }
+                catch { }
             }
-            catch { }
 
             return new Version(version >> 24,
                               (version >> 16) & 0xFF,
@@ -355,7 +447,8 @@ namespace System
                               version & 0xFF);
         }
 
-        private static readonly Lazy<bool> s_fileLockingDisabled = new Lazy<bool>(() => GetStaticNonPublicBooleanPropertyValue("Microsoft.Win32.SafeHandles.SafeFileHandle", "DisableFileLocking"));
+        private static readonly Lazy<bool> s_fileLockingDisabled = new Lazy<bool>(()
+            => (bool?)Type.GetType("Microsoft.Win32.SafeHandles.SafeFileHandle")?.GetProperty("DisableFileLocking", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null) == true);
 
         public static bool IsFileLockingEnabled => IsWindows || !s_fileLockingDisabled.Value;
 
@@ -367,6 +460,7 @@ namespace System
                 return Registry.GetValue(key, "ContainerType", defaultValue: null) != null;
             }
 
+            // '/.dockerenv' - is to check if this is running in a codespace
             return (IsLinux && File.Exists("/.dockerenv"));
         }
 
@@ -377,8 +471,10 @@ namespace System
 #pragma warning disable CS0618 // Ssl2 and Ssl3 are obsolete
                 SslProtocols.Ssl3 => "SSL 3.0",
 #pragma warning restore CS0618
+#pragma warning disable SYSLIB0039 // TLS versions 1.0 and 1.1 have known vulnerabilities
                 SslProtocols.Tls => "TLS 1.0",
                 SslProtocols.Tls11 => "TLS 1.1",
+#pragma warning restore SYSLIB0039
                 SslProtocols.Tls12 => "TLS 1.2",
 #if !NETFRAMEWORK
                 SslProtocols.Tls13 => "TLS 1.3",
@@ -448,10 +544,11 @@ namespace System
             return (protocol & s_androidSupportedSslProtocols.Value) == protocol;
         }
 
+#pragma warning disable SYSLIB0039 // TLS versions 1.0 and 1.1 have known vulnerabilities
         private static bool GetTls10Support()
         {
             // on macOS and Android TLS 1.0 is supported.
-            if (IsOSXLike || IsAndroid)
+            if (IsApplePlatform || IsAndroid)
             {
                 return true;
             }
@@ -479,13 +576,14 @@ namespace System
                 return GetProtocolSupportFromWindowsRegistry(SslProtocols.Tls11, defaultProtocolSupport: true) && !IsWindows10Version20348OrGreater;
             }
             // on macOS and Android TLS 1.1 is supported.
-            else if (IsOSXLike || IsAndroid)
+            else if (IsApplePlatform || IsAndroid)
             {
                 return true;
             }
 
             return OpenSslGetTlsSupport(SslProtocols.Tls11);
         }
+#pragma warning restore SYSLIB0039
 
         private static bool GetTls12Support()
         {
@@ -576,8 +674,15 @@ namespace System
             if (!IsBrowser)
                 return false;
 
-            var val = Environment.GetEnvironmentVariable(variableName);
-            return (val != null && val == "true");
+            return Environment.GetEnvironmentVariable(variableName) is "true";
+        }
+
+        private static string GetNodeJSPlatform()
+        {
+            if (!IsNodeJS)
+                return null;
+
+            return Environment.GetEnvironmentVariable("NodeJSPlatform");
         }
 
         private static bool AssemblyConfigurationEquals(string configuration)
@@ -586,6 +691,33 @@ namespace System
 
             return assemblyConfigurationAttribute != null &&
                 string.Equals(assemblyConfigurationAttribute.Configuration, configuration, StringComparison.InvariantCulture);
+        }
+
+        private static bool IsDebuggable(Assembly assembly)
+        {
+            DebuggableAttribute debuggableAttribute = assembly.GetCustomAttribute<DebuggableAttribute>();
+
+            return debuggableAttribute != null && debuggableAttribute.IsJITTrackingEnabled;
+        }
+
+        private static bool GetSupportsSha3()
+        {
+            if (IsOpenSslSupported)
+            {
+                if (OpenSslVersion.Major >= 3)
+                {
+                    return true;
+                }
+
+                return OpenSslVersion.Major == 1 && OpenSslVersion.Minor >= 1 && OpenSslVersion.Build >= 1;
+            }
+
+            if (IsWindowsVersionOrLater(10, 0, 25324))
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }

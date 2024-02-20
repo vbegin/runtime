@@ -1,8 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -10,6 +10,7 @@ using System.Runtime.Versioning;
 using System.Security;
 using System.Text;
 using System.Threading;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Diagnostics
 {
@@ -228,6 +229,7 @@ namespace System.Diagnostics
         /// <summary>Gets the amount of time the process has spent running code inside the operating system core.</summary>
         [UnsupportedOSPlatform("ios")]
         [UnsupportedOSPlatform("tvos")]
+        [SupportedOSPlatform("maccatalyst")]
         public TimeSpan PrivilegedProcessorTime
         {
             get { return GetProcessTimes().PrivilegedProcessorTime; }
@@ -494,6 +496,12 @@ namespace System.Diagnostics
                         startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
                     }
 
+                    if (startInfo.WindowStyle != ProcessWindowStyle.Normal)
+                    {
+                        startupInfo.wShowWindow = (short)GetShowWindowFromWindowStyle(startInfo.WindowStyle);
+                        startupInfo.dwFlags |= Interop.Advapi32.StartupInfoOptions.STARTF_USESHOWWINDOW;
+                    }
+
                     // set up the creation flags parameter
                     int creationFlags = 0;
                     if (startInfo.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
@@ -523,9 +531,17 @@ namespace System.Diagnostics
                         }
 
                         Interop.Advapi32.LogonFlags logonFlags = (Interop.Advapi32.LogonFlags)0;
-                        if (startInfo.LoadUserProfile)
+                        if (startInfo.LoadUserProfile && startInfo.UseCredentialsForNetworkingOnly)
+                        {
+                            throw new ArgumentException(SR.CantEnableConflictingLogonFlags, nameof(startInfo));
+                        }
+                        else if (startInfo.LoadUserProfile)
                         {
                             logonFlags = Interop.Advapi32.LogonFlags.LOGON_WITH_PROFILE;
+                        }
+                        else if (startInfo.UseCredentialsForNetworkingOnly)
+                        {
+                            logonFlags = Interop.Advapi32.LogonFlags.LOGON_NETCREDENTIALS_ONLY;
                         }
 
                         fixed (char* passwordInClearTextPtr = startInfo.PasswordInClearText ?? string.Empty)
@@ -642,7 +658,7 @@ namespace System.Diagnostics
             return true;
         }
 
-        private static Encoding GetEncoding(int codePage)
+        private static ConsoleEncoding GetEncoding(int codePage)
         {
             Encoding enc = EncodingHelper.GetSupportedConsoleEncoding(codePage);
             return new ConsoleEncoding(enc); // ensure encoding doesn't output a preamble
@@ -842,7 +858,7 @@ namespace System.Diagnostics
             }
         }
 
-        private static string GetEnvironmentVariablesBlock(IDictionary<string, string> sd)
+        private static string GetEnvironmentVariablesBlock(DictionaryWrapper sd)
         {
             // https://docs.microsoft.com/en-us/windows/win32/procthread/changing-environment-variables
             // "All strings in the environment block must be sorted alphabetically by name. The sort is
@@ -872,7 +888,6 @@ namespace System.Diagnostics
             {
                 if (_processName == null)
                 {
-                    EnsureState(State.HaveNonExitedId);
                     // If we already have the name via a populated ProcessInfo
                     // then use that one.
                     if (_processInfo?.ProcessName != null)
@@ -881,12 +896,16 @@ namespace System.Diagnostics
                     }
                     else
                     {
-                        // If we don't have a populated ProcessInfo, then get and cache the process name.
+                        // Ensure that the process is not yet exited
+                        EnsureState(State.HaveNonExitedId);
                         _processName = ProcessManager.GetProcessName(_processId, _machineName);
 
+                        // Fallback to slower ProcessInfo implementation if optimized way did not return a
+                        // process name (e.g. in case of missing permissions for Non-Admin users)
                         if (_processName == null)
                         {
-                            throw new InvalidOperationException(SR.NoProcessInfo);
+                            EnsureState(State.HaveProcessInfo);
+                            _processName = _processInfo!.ProcessName;
                         }
                     }
                 }

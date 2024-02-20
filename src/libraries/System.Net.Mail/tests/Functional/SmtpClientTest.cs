@@ -313,8 +313,6 @@ namespace System.Net.Mail.Tests
         }
 
         [Fact]
-        // [ActiveIssue("https://github.com/dotnet/runtime/issues/31719")]
-        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, ".NET Framework has a bug and may not time out for low values")]
         [SkipOnPlatform(TestPlatforms.OSX, "on OSX, not all synchronous operations (e.g. connect) can be aborted by closing the socket.")]
         public void TestZeroTimeout()
         {
@@ -339,7 +337,6 @@ namespace System.Net.Mail.Tests
             }
         }
 
-        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, ".NET Framework has a bug and could hang in case of null or empty body")]
         [Theory]
         [InlineData("howdydoo")]
         [InlineData("")]
@@ -473,16 +470,16 @@ namespace System.Net.Mail.Tests
 
             var message = new MailMessage("foo@internet.com", "bar@internet.com", "Foo", "Bar");
 
-            Task sendTask = client.SendMailAsync(message, cts.Token);
+            Task sendTask = Task.Run(() => client.SendMailAsync(message, cts.Token));
 
             cts.Cancel();
             await Task.Delay(500);
             serverMre.Set();
 
-            await Assert.ThrowsAsync<TaskCanceledException>(async () => await sendTask);
+            await Assert.ThrowsAsync<TaskCanceledException>(async () => await sendTask).WaitAsync(TestHelper.PassingTestTimeout);
 
             // We should still be able to send mail on the SmtpClient instance
-            await client.SendMailAsync(message);
+            await Task.Run(() => client.SendMailAsync(message)).WaitAsync(TestHelper.PassingTestTimeout);
 
             Assert.Equal("<foo@internet.com>", server.MailFrom);
             Assert.Equal("<bar@internet.com>", server.MailTo);

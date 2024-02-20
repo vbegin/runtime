@@ -258,6 +258,15 @@ VOID FinalizerThread::FinalizerThreadWorker(void *args)
 
         WaitForFinalizerEvent (hEventFinalizer);
 
+        // Process pending finalizer work items from the GC first.
+        FinalizerWorkItem* pWork = GCHeapUtilities::GetGCHeap()->GetExtraWorkForFinalization();
+        while (pWork != NULL)
+        {
+            FinalizerWorkItem* pNext = pWork->next;
+            pWork->callback(pWork);
+            pWork = pNext;
+        }
+
 #if defined(__linux__) && defined(FEATURE_EVENT_TRACE)
         if (g_TriggerHeapDump && (CLRGetTickCount64() > (LastHeapDumpTime + LINUX_HEAP_DUMP_TIME_OUT)))
         {
@@ -281,8 +290,11 @@ VOID FinalizerThread::FinalizerThreadWorker(void *args)
                 GenAnalysis::EnableGenerationalAwareSession();
 #endif
             }
+
             // Writing an empty file to indicate completion
-            fclose(fopen(GENAWARE_COMPLETION_FILE_NAME,"w+"));
+            WCHAR outputPath[MAX_PATH];
+            ReplacePid(GENAWARE_COMPLETION_FILE_NAME, outputPath, MAX_PATH);
+            fclose(_wfopen(outputPath, W("w+")));
         }
 
         if (!bPriorityBoosted)
@@ -319,7 +331,7 @@ VOID FinalizerThread::FinalizerThreadWorker(void *args)
                 GetFinalizerThread()->EnablePreemptiveGC();
                 __SwitchToThread (0, ++dwSwitchCount);
                 GetFinalizerThread()->DisablePreemptiveGC();
-                // If no GCs happended, then we assume we are quiescent
+                // If no GCs happened, then we assume we are quiescent
                 GetFinalizerThread()->m_GCOnTransitionsOK = TRUE;
             } while (GCHeapUtilities::GetGCHeap()->CollectionCount(0) - last_gc_count > 0);
         }
@@ -488,6 +500,8 @@ void FinalizerThread::FinalizerThreadWait(DWORD timeout)
     // Can't call this from within a finalized method.
     if (!IsCurrentThreadFinalizer())
     {
+        GCX_PREEMP();
+
 #ifdef FEATURE_COMINTEROP
         // To help combat finalizer thread starvation, we check to see if there are any wrappers
         // scheduled to be cleaned up for our context.  If so, we'll do them here to avoid making
@@ -495,8 +509,6 @@ void FinalizerThread::FinalizerThreadWait(DWORD timeout)
         if (g_pRCWCleanupList != NULL)
             g_pRCWCleanupList->CleanupWrappersInCurrentCtxThread();
 #endif // FEATURE_COMINTEROP
-
-        GCX_PREEMP();
 
         ULONGLONG startTime = CLRGetTickCount64();
         ULONGLONG endTime;

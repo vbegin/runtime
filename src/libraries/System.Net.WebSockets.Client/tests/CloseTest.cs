@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net.Http;
 using System.Net.Test.Common;
 using System.Text;
 using System.Threading;
@@ -13,24 +14,39 @@ using Xunit.Abstractions;
 
 namespace System.Net.WebSockets.Client.Tests
 {
+    public sealed class InvokerCloseTest : CloseTest
+    {
+        public InvokerCloseTest(ITestOutputHelper output) : base(output) { }
+
+        protected override bool UseCustomInvoker => true;
+    }
+
+    public sealed class HttpClientCloseTest : CloseTest
+    {
+        public HttpClientCloseTest(ITestOutputHelper output) : base(output) { }
+
+        protected override bool UseHttpClient => true;
+    }
+
     public class CloseTest : ClientWebSocketTestBase
     {
         public CloseTest(ITestOutputHelper output) : base(output) { }
 
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/28957")]
+
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/28957", typeof(PlatformDetection), nameof(PlatformDetection.IsNotBrowser))]
         [OuterLoop("Uses external servers", typeof(PlatformDetection), nameof(PlatformDetection.LocalEchoServerIsNotAvailable))]
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServersAndBoolean))]
         public async Task CloseAsync_ServerInitiatedClose_Success(Uri server, bool useCloseOutputAsync)
         {
-            const string closeWebSocketMetaCommand = ".close";
+            const string shutdownWebSocketMetaCommand = ".shutdown";
 
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
                 _output.WriteLine("SendAsync starting.");
                 await cws.SendAsync(
-                    WebSocketData.GetBufferFromText(closeWebSocketMetaCommand),
+                    WebSocketData.GetBufferFromText(shutdownWebSocketMetaCommand),
                     WebSocketMessageType.Text,
                     true,
                     cts.Token);
@@ -43,26 +59,27 @@ namespace System.Net.WebSockets.Client.Tests
 
                 // Verify received server-initiated close message.
                 Assert.Equal(WebSocketCloseStatus.NormalClosure, recvResult.CloseStatus);
-                Assert.Equal(closeWebSocketMetaCommand, recvResult.CloseStatusDescription);
+                Assert.Equal(shutdownWebSocketMetaCommand, recvResult.CloseStatusDescription);
                 Assert.Equal(WebSocketMessageType.Close, recvResult.MessageType);
 
                 // Verify current websocket state as CloseReceived which indicates only partial close.
                 Assert.Equal(WebSocketState.CloseReceived, cws.State);
                 Assert.Equal(WebSocketCloseStatus.NormalClosure, cws.CloseStatus);
-                Assert.Equal(closeWebSocketMetaCommand, cws.CloseStatusDescription);
+                Assert.Equal(shutdownWebSocketMetaCommand, cws.CloseStatusDescription);
 
                 // Send back close message to acknowledge server-initiated close.
                 _output.WriteLine("Close starting.");
+                var closeStatus = PlatformDetection.IsNotBrowser ? WebSocketCloseStatus.InvalidMessageType : (WebSocketCloseStatus)3210;
                 await (useCloseOutputAsync ?
-                    cws.CloseOutputAsync(WebSocketCloseStatus.InvalidMessageType, string.Empty, cts.Token) :
-                    cws.CloseAsync(WebSocketCloseStatus.InvalidMessageType, string.Empty, cts.Token));
+                    cws.CloseOutputAsync(closeStatus, string.Empty, cts.Token) :
+                    cws.CloseAsync(closeStatus, string.Empty, cts.Token));
                 _output.WriteLine("Close done.");
                 Assert.Equal(WebSocketState.Closed, cws.State);
 
                 // Verify that there is no follow-up echo close message back from the server by
                 // making sure the close code and message are the same as from the first server close message.
                 Assert.Equal(WebSocketCloseStatus.NormalClosure, cws.CloseStatus);
-                Assert.Equal(closeWebSocketMetaCommand, cws.CloseStatusDescription);
+                Assert.Equal(shutdownWebSocketMetaCommand, cws.CloseStatusDescription);
             }
         }
 
@@ -70,7 +87,7 @@ namespace System.Net.WebSockets.Client.Tests
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseAsync_ClientInitiatedClose_Success(Uri server)
         {
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
                 Assert.Equal(WebSocketState.Open, cws.State);
@@ -94,7 +111,7 @@ namespace System.Net.WebSockets.Client.Tests
         {
             string closeDescription = new string('C', CloseDescriptionMaxLength);
 
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -108,7 +125,7 @@ namespace System.Net.WebSockets.Client.Tests
         {
             string closeDescription = new string('C', CloseDescriptionMaxLength + 1);
 
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -131,7 +148,7 @@ namespace System.Net.WebSockets.Client.Tests
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseAsync_CloseDescriptionHasUnicode_Success(Uri server)
         {
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -150,7 +167,7 @@ namespace System.Net.WebSockets.Client.Tests
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseAsync_CloseDescriptionIsNull_Success(Uri server)
         {
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -166,7 +183,7 @@ namespace System.Net.WebSockets.Client.Tests
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseOutputAsync_ExpectedStates(Uri server)
         {
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -185,7 +202,7 @@ namespace System.Net.WebSockets.Client.Tests
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseAsync_CloseOutputAsync_Throws(Uri server)
         {
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -212,12 +229,11 @@ namespace System.Net.WebSockets.Client.Tests
         {
             string message = "Hello WebSockets!";
 
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
-                // See issue for Browser websocket differences https://github.com/dotnet/runtime/issues/45538
-                var closeStatus = PlatformDetection.IsBrowser ? WebSocketCloseStatus.NormalClosure : WebSocketCloseStatus.InvalidPayloadData;
+                var closeStatus = PlatformDetection.IsNotBrowser ? WebSocketCloseStatus.InvalidPayloadData : (WebSocketCloseStatus)3210;
                 string closeDescription = "CloseOutputAsync_Client_InvalidPayloadData";
 
                 await cws.SendAsync(WebSocketData.GetBufferFromText(message), WebSocketMessageType.Text, true, cts.Token);
@@ -245,7 +261,60 @@ namespace System.Net.WebSockets.Client.Tests
             }
         }
 
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/28957")]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/28957", typeof(PlatformDetection), nameof(PlatformDetection.IsNotBrowser))]
+        [OuterLoop("Uses external servers", typeof(PlatformDetection), nameof(PlatformDetection.LocalEchoServerIsNotAvailable))]
+        [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
+        public async Task CloseOutputAsync_ServerInitiated_CanReceive(Uri server)
+        {
+            var expectedCloseStatus = WebSocketCloseStatus.NormalClosure;
+            var expectedCloseDescription = ".shutdownafter";
+
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            {
+                var cts = new CancellationTokenSource(TimeOutMilliseconds);
+
+                await cws.SendAsync(
+                    WebSocketData.GetBufferFromText(expectedCloseDescription),
+                    WebSocketMessageType.Text,
+                    true,
+                    cts.Token);
+
+                // Should be able to receive the message echoed by the server.
+                var recvBuffer = new byte[100];
+                var segmentRecv = new ArraySegment<byte>(recvBuffer);
+                WebSocketReceiveResult recvResult = await cws.ReceiveAsync(segmentRecv, cts.Token);
+                Assert.Equal(expectedCloseDescription.Length, recvResult.Count);
+                segmentRecv = new ArraySegment<byte>(segmentRecv.Array, 0, recvResult.Count);
+                Assert.Equal(expectedCloseDescription, WebSocketData.GetTextFromBuffer(segmentRecv));
+                Assert.Null(recvResult.CloseStatus);
+                Assert.Null(recvResult.CloseStatusDescription);
+
+                // Should be able to receive a shutdown message.
+                segmentRecv = new ArraySegment<byte>(recvBuffer);
+                recvResult = await cws.ReceiveAsync(segmentRecv, cts.Token);
+                Assert.Equal(0, recvResult.Count);
+                Assert.Equal(expectedCloseStatus, recvResult.CloseStatus);
+                Assert.Equal(expectedCloseDescription, recvResult.CloseStatusDescription);
+
+                // Verify WebSocket state
+                Assert.Equal(expectedCloseStatus, cws.CloseStatus);
+                Assert.Equal(expectedCloseDescription, cws.CloseStatusDescription);
+
+                Assert.Equal(WebSocketState.CloseReceived, cws.State);
+
+                // Cannot change the close status/description with the final close.
+                var closeStatus = PlatformDetection.IsNotBrowser ? WebSocketCloseStatus.InvalidPayloadData : (WebSocketCloseStatus)3210;
+                var closeDescription = "CloseOutputAsync_Client_Description";
+
+                await cws.CloseAsync(closeStatus, closeDescription, cts.Token);
+
+                Assert.Equal(expectedCloseStatus, cws.CloseStatus);
+                Assert.Equal(expectedCloseDescription, cws.CloseStatusDescription);
+                Assert.Equal(WebSocketState.Closed, cws.State);
+            }
+        }
+
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/28957", typeof(PlatformDetection), nameof(PlatformDetection.IsNotBrowser))]
         [OuterLoop("Uses external servers", typeof(PlatformDetection), nameof(PlatformDetection.LocalEchoServerIsNotAvailable))]
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseOutputAsync_ServerInitiated_CanSend(Uri server)
@@ -254,7 +323,7 @@ namespace System.Net.WebSockets.Client.Tests
             var expectedCloseStatus = WebSocketCloseStatus.NormalClosure;
             var expectedCloseDescription = ".shutdown";
 
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -282,7 +351,7 @@ namespace System.Net.WebSockets.Client.Tests
                 await cws.SendAsync(WebSocketData.GetBufferFromText(message), WebSocketMessageType.Text, true, cts.Token);
 
                 // Cannot change the close status/description with the final close.
-                var closeStatus = WebSocketCloseStatus.InvalidPayloadData;
+                var closeStatus = PlatformDetection.IsNotBrowser ? WebSocketCloseStatus.InvalidPayloadData : (WebSocketCloseStatus)3210;
                 var closeDescription = "CloseOutputAsync_Client_Description";
 
                 await cws.CloseAsync(closeStatus, closeDescription, cts.Token);
@@ -297,7 +366,7 @@ namespace System.Net.WebSockets.Client.Tests
         [ConditionalTheory(nameof(WebSocketsSupported)), MemberData(nameof(EchoServers))]
         public async Task CloseOutputAsync_CloseDescriptionIsNull_Success(Uri server)
         {
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var cts = new CancellationTokenSource(TimeOutMilliseconds);
 
@@ -314,7 +383,7 @@ namespace System.Net.WebSockets.Client.Tests
         public async Task CloseOutputAsync_DuringConcurrentReceiveAsync_ExpectedStates(Uri server)
         {
             var receiveBuffer = new byte[1024];
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 // Issue a receive but don't wait for it.
                 var t = cws.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), CancellationToken.None);
@@ -351,7 +420,7 @@ namespace System.Net.WebSockets.Client.Tests
         public async Task CloseAsync_DuringConcurrentReceiveAsync_ExpectedStates(Uri server)
         {
             var receiveBuffer = new byte[1024];
-            using (ClientWebSocket cws = await WebSocketHelper.GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
+            using (ClientWebSocket cws = await GetConnectedWebSocket(server, TimeOutMilliseconds, _output))
             {
                 var t = cws.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), CancellationToken.None);
                 Assert.False(t.IsCompleted);
@@ -374,7 +443,6 @@ namespace System.Net.WebSockets.Client.Tests
         }
 
         [ConditionalFact(nameof(WebSocketsSupported))]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/34690", TestPlatforms.Windows, TargetFrameworkMonikers.Netcoreapp, TestRuntimes.Mono)]
         [ActiveIssue("https://github.com/dotnet/runtime/issues/54153", TestPlatforms.Browser)]
         public async Task CloseAsync_CancelableEvenWhenPendingReceive_Throws()
         {
@@ -387,7 +455,7 @@ namespace System.Net.WebSockets.Client.Tests
                     using (var cws = new ClientWebSocket())
                     using (var cts = new CancellationTokenSource(TimeOutMilliseconds))
                     {
-                        await cws.ConnectAsync(uri, cts.Token);
+                        await ConnectAsync(cws, uri, cts.Token);
 
                         Task receiveTask = cws.ReceiveAsync(new byte[1], CancellationToken.None);
 

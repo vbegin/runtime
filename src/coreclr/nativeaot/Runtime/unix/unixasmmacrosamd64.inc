@@ -230,21 +230,6 @@ C_FUNC(\Name):
 
 .endm
 
-.macro EXPORT_POINTER_TO_ADDRESS Name
-
-// NOTE: The label is intentionally left as 2 - otherwise on OSX 0b or 1b will be incorrectly interpreted as binary integers
-
-2:
-
-        .data
-        .align      8
-C_FUNC(\Name):
-        .quad       2b
-        .global     C_FUNC(\Name)
-        .text
-
-.endm
-
 //
 // CONSTANTS -- INTEGER
 //
@@ -269,11 +254,10 @@ C_FUNC(\Name):
 #define PTFF_SAVE_R15            0x00000080
 #define PTFF_SAVE_ALL_PRESERVED  0x000000F1   // NOTE: RBP is not included in this set!
 #define PTFF_SAVE_RSP            0x00008000
-#define PTFF_SAVE_RAX            0x00000100   // RAX is saved if it contains a GC ref and we're in hijack handler
+#define PTFF_SAVE_RAX            0x00000100   // RAX is saved in hijack handler - in case it contains a GC ref
+#define PTFF_SAVE_RDX            0x00000400   // RDX is saved in hijack handler - in case it contains a GC ref
 #define PTFF_SAVE_ALL_SCRATCH    0x00007F00
-#define PTFF_RAX_IS_GCREF        0x00010000   // iff PTFF_SAVE_RAX: set -> eax is Object, clear -> eax is scalar
-#define PTFF_RAX_IS_BYREF        0x00020000   // iff PTFF_SAVE_RAX: set -> eax is ByRef, clear -> eax is Object or scalar
-#define PTFF_THREAD_ABORT        0x00040000   // indicates that ThreadAbortException should be thrown when returning from the transition
+#define PTFF_THREAD_ABORT        0x00100000   // indicates that ThreadAbortException should be thrown when returning from the transition
 
 // These must match the TrapThreadsFlags enum
 #define TrapThreadsFlags_None            0
@@ -286,17 +270,24 @@ C_FUNC(\Name):
         movq    _\Var@TLVP(%rip), %rdi
         callq   *(%rdi)
 #else
-        leaq    \Var@TLSLD(%rip), %rdi
+        .byte 0x66  // data16 prefix - padding to have space for linker relaxations
+        leaq    \Var@TLSGD(%rip), %rdi
+        .byte 0x66  //
+        .byte 0x66  //
+        .byte 0x48  // rex.W prefix, also for padding
         callq   __tls_get_addr@PLT
-        addq    $\Var@DTPOFF, %rax
 #endif
        .intel_syntax noprefix
 .endm
 
 
 .macro INLINE_GETTHREAD
+#ifdef FEATURE_EMULATED_TLS
+        call        C_FUNC(RhpGetThread)
+#else
         // Inlined version of call C_FUNC(RhpGetThread)
         INLINE_GET_TLS_VAR tls_CurrentThread
+#endif
 .endm
 
 .macro INLINE_THREAD_UNHIJACK threadReg, trashReg1, trashReg2

@@ -1,13 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Text;
-using System.Net;
 using System.Collections;
-using System.Security.Principal;
-using System.Runtime.InteropServices;
 using System.Diagnostics;
-
+using System.Net;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace System.DirectoryServices.ActiveDirectory
@@ -44,9 +43,6 @@ namespace System.DirectoryServices.ActiveDirectory
         private const int LOGON32_LOGON_NEW_CREDENTIALS = 9;
         private const int LOGON32_PROVIDER_WINNT50 = 3;
 
-        private const uint STANDARD_RIGHTS_REQUIRED = 0x000F0000;
-        private const uint SYNCHRONIZE = 0x00100000;
-        private const uint THREAD_ALL_ACCESS = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3FF;
         internal const AuthenticationTypes DefaultAuthType = AuthenticationTypes.Secure | AuthenticationTypes.Signing | AuthenticationTypes.Sealing;
 
         /*
@@ -120,7 +116,7 @@ namespace System.DirectoryServices.ActiveDirectory
             var dsCrackNames = (delegate* unmanaged<IntPtr, int, int, int, int, IntPtr, IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsCrackNamesW");
             if (dsCrackNames == null)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             IntPtr name = Marshal.StringToHGlobalUni(distinguishedName);
@@ -175,7 +171,7 @@ namespace System.DirectoryServices.ActiveDirectory
                         var dsFreeNameResultW = (delegate* unmanaged<IntPtr, void>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsFreeNameResultW");
                         if (dsFreeNameResultW == null)
                         {
-                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
                         }
                         dsFreeNameResultW(results);
                     }
@@ -215,7 +211,7 @@ namespace System.DirectoryServices.ActiveDirectory
             var dsCrackNames = (delegate* unmanaged<IntPtr, int, int, int, int, IntPtr, IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsCrackNamesW");
             if (dsCrackNames == null)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
             IntPtr name = Marshal.StringToHGlobalUni(dnsName + "/");
             IntPtr ptr = Marshal.AllocHGlobal(IntPtr.Size);
@@ -250,7 +246,7 @@ namespace System.DirectoryServices.ActiveDirectory
                         var dsFreeNameResultW = (delegate* unmanaged<IntPtr, void>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsFreeNameResultW");
                         if (dsFreeNameResultW == null)
                         {
-                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
                         }
                         dsFreeNameResultW(results);
                     }
@@ -644,7 +640,7 @@ namespace System.DirectoryServices.ActiveDirectory
             var dsMakePasswordCredentials = (delegate* unmanaged<char*, char*, char*, IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(libHandle, "DsMakePasswordCredentialsW");
             if (dsMakePasswordCredentials == null)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             fixed (char* usernamePtr = username)
@@ -673,7 +669,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 var dsFreePasswordCredentials = (delegate* unmanaged<IntPtr, void>)global::Interop.Kernel32.GetProcAddress(libHandle, "DsFreePasswordCredentials");
                 if (dsFreePasswordCredentials == null)
                 {
-                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
                 }
                 dsFreePasswordCredentials(authIdentity);
             }
@@ -695,7 +691,7 @@ namespace System.DirectoryServices.ActiveDirectory
             var bindWithCred = (delegate* unmanaged<char*, char*, IntPtr, IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(libHandle, "DsBindWithCredW");
             if (bindWithCred == null)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             fixed (char* domainControllerNamePtr = domainControllerName)
@@ -722,7 +718,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 var dsUnBind = (delegate* unmanaged<IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(libHandle, "DsUnBindW");
                 if (dsUnBind == null)
                 {
-                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
                 }
                 _ = dsUnBind(&dsHandle);
             }
@@ -874,7 +870,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 string? stringGuid = null;
 
                 // encode the byte arry into binary string representation
-                int hr = UnsafeNativeMethods.ADsEncodeBinaryData(byteGuid, byteGuid.Length, ref ptr);
+                int hr = Interop.Activeds.ADsEncodeBinaryData(byteGuid, byteGuid.Length, ref ptr);
 
                 if (hr == 0)
                 {
@@ -885,7 +881,7 @@ namespace System.DirectoryServices.ActiveDirectory
                     finally
                     {
                         if (ptr != (IntPtr)0)
-                            UnsafeNativeMethods.FreeADsMem(ptr);
+                            Interop.Activeds.FreeADsMem(ptr);
                     }
                 }
                 else
@@ -896,7 +892,7 @@ namespace System.DirectoryServices.ActiveDirectory
 
                 ADSearcher adSearcher = new ADSearcher(de,
                                                            "(&(objectClass=nTDSDSA)(invocationID=" + stringGuid + "))",
-                                                           new string[] { "distinguishedName" },
+                                                           ActiveDirectorySite.s_distinguishedName,
                                                            SearchScope.Subtree,
                                                            false, /* don't need paged search */
                                                            false /* don't need to cache result */);
@@ -967,14 +963,14 @@ namespace System.DirectoryServices.ActiveDirectory
             int result = global::Interop.Advapi32.LogonUser(userName!, domainName, context.Password, LOGON32_LOGON_NEW_CREDENTIALS, LOGON32_PROVIDER_WINNT50, ref hToken);
             // check the result
             if (result == 0)
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
 
             try
             {
                 result = global::Interop.Advapi32.ImpersonateLoggedOnUser(hToken);
                 if (result == 0)
                 {
-                    result = Marshal.GetLastWin32Error();
+                    result = Marshal.GetLastPInvokeError();
                     throw ExceptionHelper.GetExceptionFromErrorCode(result);
                 }
             }
@@ -989,15 +985,15 @@ namespace System.DirectoryServices.ActiveDirectory
 
         internal static void ImpersonateAnonymous()
         {
-            IntPtr hThread = UnsafeNativeMethods.OpenThread(THREAD_ALL_ACCESS, false, global::Interop.Kernel32.GetCurrentThreadId());
+            IntPtr hThread = Interop.Kernel32.OpenThread(Interop.Kernel32.THREAD_ALL_ACCESS, false, global::Interop.Kernel32.GetCurrentThreadId());
             if (hThread == (IntPtr)0)
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
 
             try
             {
-                int result = UnsafeNativeMethods.ImpersonateAnonymousToken(hThread);
-                if (result == 0)
-                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                bool success = Interop.Advapi32.ImpersonateAnonymousToken(hThread);
+                if (!success)
+                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
             finally
             {
@@ -1010,7 +1006,7 @@ namespace System.DirectoryServices.ActiveDirectory
         {
             if (!global::Interop.Advapi32.RevertToSelf())
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
         }
 
@@ -1846,7 +1842,7 @@ namespace System.DirectoryServices.ActiveDirectory
         internal static int Compare(string? s1, string? s2, uint compareFlags)
         {
             // This code block was specifically written for handling string comparison
-            // involving null strings. The unmanged API "NativeMethods.CompareString"
+            // involving null strings. The unmanaged API "Interop.Kernel32.CompareString"
             // does not handle null strings elegantly.
             //
             // This method handles comparison of the specified strings
@@ -1857,34 +1853,17 @@ namespace System.DirectoryServices.ActiveDirectory
             }
 
             int result = 0;
-            IntPtr lpString1 = IntPtr.Zero;
-            IntPtr lpString2 = IntPtr.Zero;
             int cchCount1 = 0;
             int cchCount2 = 0;
 
-            try
-            {
-                lpString1 = Marshal.StringToHGlobalUni(s1);
-                cchCount1 = s1.Length;
-                lpString2 = Marshal.StringToHGlobalUni(s2);
-                cchCount2 = s2.Length;
+            cchCount1 = s1.Length;
+            cchCount2 = s2.Length;
 
-                result = NativeMethods.CompareString(LCID, compareFlags, lpString1, cchCount1, lpString2, cchCount2);
-                if (result == 0)
-                {
-                    throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
-                }
-            }
-            finally
+            result = Interop.Kernel32.CompareString(LCID, compareFlags, s1, cchCount1, s2, cchCount2);
+
+            if (result == 0)
             {
-                if (lpString1 != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(lpString1);
-                }
-                if (lpString2 != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(lpString2);
-                }
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             return (result - 2); // to give the semantics of <0, ==0, >0
@@ -2079,7 +2058,7 @@ namespace System.DirectoryServices.ActiveDirectory
                                 out tokenHandle
                                 ))
                 {
-                    if ((error = Marshal.GetLastWin32Error()) == 1008) // ERROR_NO_TOKEN
+                    if ((error = Marshal.GetLastPInvokeError()) == 1008) // ERROR_NO_TOKEN
                     {
                         Debug.Assert(tokenHandle.IsInvalid);
                         tokenHandle.Dispose();
@@ -2091,7 +2070,7 @@ namespace System.DirectoryServices.ActiveDirectory
                                         out tokenHandle
                                         ))
                         {
-                            int lastError = Marshal.GetLastWin32Error();
+                            int lastError = Marshal.GetLastPInvokeError();
                             throw new InvalidOperationException(SR.Format(SR.UnableToOpenToken, lastError));
                         }
                     }
@@ -2115,7 +2094,7 @@ namespace System.DirectoryServices.ActiveDirectory
                                         out neededBufferSize);
 
                 int getTokenInfoError = 0;
-                if ((getTokenInfoError = Marshal.GetLastWin32Error()) != 122) // ERROR_INSUFFICIENT_BUFFER
+                if ((getTokenInfoError = Marshal.GetLastPInvokeError()) != 122) // ERROR_INSUFFICIENT_BUFFER
                 {
                     throw new InvalidOperationException(
                                     SR.Format(SR.UnableToRetrieveTokenInfo, getTokenInfoError));
@@ -2135,7 +2114,7 @@ namespace System.DirectoryServices.ActiveDirectory
 
                 if (!success)
                 {
-                    int lastError = Marshal.GetLastWin32Error();
+                    int lastError = Marshal.GetLastPInvokeError();
                     throw new InvalidOperationException(
                                     SR.Format(SR.UnableToRetrieveTokenInfo, lastError));
                 }
@@ -2152,7 +2131,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 success = global::Interop.Advapi32.CopySid(userSidLength, pCopyOfUserSid, pUserSid);
                 if (!success)
                 {
-                    int lastError = Marshal.GetLastWin32Error();
+                    int lastError = Marshal.GetLastPInvokeError();
                     throw new InvalidOperationException(
                                     SR.Format(SR.UnableToRetrieveTokenInfo, lastError));
                 }
@@ -2210,7 +2189,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 bool success = global::Interop.Advapi32.CopySid(sidLength, pCopyOfSid, info.DomainSid);
                 if (!success)
                 {
-                    int lastError = Marshal.GetLastWin32Error();
+                    int lastError = Marshal.GetLastPInvokeError();
                     throw new InvalidOperationException(
                                     SR.Format(SR.UnableToRetrievePolicy, lastError));
                 }
@@ -2234,9 +2213,9 @@ namespace System.DirectoryServices.ActiveDirectory
             try
             {
                 if (null == computerName)
-                    err = UnsafeNativeMethods.DsRoleGetPrimaryDomainInformation(IntPtr.Zero, DSROLE_PRIMARY_DOMAIN_INFO_LEVEL.DsRolePrimaryDomainInfoBasic, out dsRoleInfoPtr);
+                    err = Interop.Netapi32.DsRoleGetPrimaryDomainInformation(null, Interop.Netapi32.DSROLE_PRIMARY_DOMAIN_INFO_LEVEL.DsRolePrimaryDomainInfoBasic, out dsRoleInfoPtr);
                 else
-                    err = UnsafeNativeMethods.DsRoleGetPrimaryDomainInformation(computerName, DSROLE_PRIMARY_DOMAIN_INFO_LEVEL.DsRolePrimaryDomainInfoBasic, out dsRoleInfoPtr);
+                    err = Interop.Netapi32.DsRoleGetPrimaryDomainInformation(computerName, Interop.Netapi32.DSROLE_PRIMARY_DOMAIN_INFO_LEVEL.DsRolePrimaryDomainInfoBasic, out dsRoleInfoPtr);
 
                 if (err != 0)
                 {
@@ -2255,7 +2234,7 @@ namespace System.DirectoryServices.ActiveDirectory
             finally
             {
                 if (dsRoleInfoPtr != IntPtr.Zero)
-                    UnsafeNativeMethods.DsRoleFreeMemory(dsRoleInfoPtr);
+                    Interop.Netapi32.DsRoleFreeMemory(dsRoleInfoPtr);
             }
         }
 

@@ -23,48 +23,55 @@ namespace System.Diagnostics
         internal static ProcessInfo? CreateProcessInfo(int pid, string? processNameFilter = null)
         {
             // Negative PIDs aren't valid
-            if (pid < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(pid));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(pid);
 
-            ProcessInfo procInfo;
+            string? processName = null;
+
+            try
+            {
+                // Extract the process name from its path, because other alternatives such as
+                // reading proc_taskallinfo.pbsd.pbi_comm are limited in length
+                string processPath = GetProcPath(pid);
+                processName = Path.GetFileName(processPath);
+            }
+            catch
+            {
+                // Ignored
+            }
 
             // Try to get the task info. This can fail if the user permissions don't permit
             // this user context to query the specified process
             Interop.libproc.proc_taskallinfo? info = Interop.libproc.GetProcessInfoById(pid);
+
+            // If we could not get the process name from its path, attempt to use the old 15-char
+            // limited process name
+            if (string.IsNullOrEmpty(processName) && info != null)
+            {
+                Interop.libproc.proc_taskallinfo temp = info.Value;
+                unsafe { processName = Marshal.PtrToStringUTF8(new IntPtr(temp.pbsd.pbi_comm)); }
+            }
+
+            // Fallback to empty string if the process name could not be retrieved in any way
+            processName ??= "";
+
+            if (!string.IsNullOrEmpty(processNameFilter) && !string.Equals(processName, processNameFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var procInfo = new ProcessInfo()
+            {
+                ProcessId = pid,
+                ProcessName = processName,
+            };
+
             if (info.HasValue)
             {
                 // Set the values we have; all the other values don't have meaning or don't exist on OSX
                 Interop.libproc.proc_taskallinfo temp = info.Value;
-                string processName;
-                unsafe { processName = Marshal.PtrToStringAnsi(new IntPtr(temp.pbsd.pbi_comm))!; }
-                if (!string.IsNullOrEmpty(processNameFilter) && !string.Equals(processName, processNameFilter, StringComparison.OrdinalIgnoreCase))
-                {
-                    return null;
-                }
-
-                procInfo = new ProcessInfo()
-                {
-                    ProcessId = pid,
-                    ProcessName = processName,
-                    BasePriority = temp.pbsd.pbi_nice,
-                    VirtualBytes = (long)temp.ptinfo.pti_virtual_size,
-                    WorkingSet = (long)temp.ptinfo.pti_resident_size,
-                };
-            }
-            else if (string.IsNullOrEmpty(processNameFilter))
-            {
-                procInfo = new ProcessInfo()
-                {
-                    ProcessId = pid,
-                };
-            }
-            else
-            {
-                // We couldn't get process information but we only want to return a process that
-                // matches the specified name, so consider this process not a match.
-                return null;
+                procInfo.BasePriority = temp.pbsd.pbi_nice;
+                procInfo.VirtualBytes = (long)temp.ptinfo.pti_virtual_size;
+                procInfo.WorkingSet = (long)temp.ptinfo.pti_resident_size;
             }
 
             // Get the sessionId for the given pid, getsid returns -1 on error
@@ -83,7 +90,7 @@ namespace System.Diagnostics
                     _processId = pid,
                     _threadId = t.Key,
                     _basePriority = procInfo.BasePriority,
-                    _startAddress = IntPtr.Zero
+                    _startAddress = null
                 };
 
                 // Fill in additional info if we were able to retrieve such data about the thread

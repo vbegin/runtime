@@ -2,18 +2,16 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Text;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-
+using System.Text;
 using Microsoft.Win32.SafeHandles;
-
 using static Interop.Crypt32;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Internal.Cryptography.Pal.Windows
 {
@@ -33,15 +31,15 @@ namespace Internal.Cryptography.Pal.Windows
             using (SafeCryptMsgHandle hCryptMsg = Interop.Crypt32.CryptMsgOpenToDecode(MsgEncodingType.All, 0, 0, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero))
             {
                 if (hCryptMsg == null || hCryptMsg.IsInvalid)
-                    throw Marshal.GetLastWin32Error().ToCryptographicException();
+                    throw Marshal.GetLastPInvokeError().ToCryptographicException();
 
                 if (!Interop.Crypt32.CryptMsgUpdate(hCryptMsg, ref MemoryMarshal.GetReference(encodedMessage), encodedMessage.Length, fFinal: true))
-                    throw Marshal.GetLastWin32Error().ToCryptographicException();
+                    throw Marshal.GetLastPInvokeError().ToCryptographicException();
 
                 int msgTypeAsInt;
                 int cbSize = sizeof(int);
                 if (!Interop.Crypt32.CryptMsgGetParam(hCryptMsg, CryptMsgParamType.CMSG_TYPE_PARAM, 0, out msgTypeAsInt, ref cbSize))
-                    throw Marshal.GetLastWin32Error().ToCryptographicException();
+                    throw Marshal.GetLastPInvokeError().ToCryptographicException();
 
                 return (CryptMsgType)msgTypeAsInt switch
                 {
@@ -86,7 +84,7 @@ namespace Internal.Cryptography.Pal.Windows
         {
             using (SafeCertContextHandle hCertContext = certificate.CreateCertContextHandle())
             {
-                byte[] ski = hCertContext.GetSubjectKeyIdentifer();
+                byte[] ski = hCertContext.GetSubjectKeyIdentifier();
                 return ski;
             }
         }

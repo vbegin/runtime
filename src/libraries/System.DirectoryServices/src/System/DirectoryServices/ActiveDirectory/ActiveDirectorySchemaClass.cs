@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Text;
-using System.ComponentModel;
 using System.Collections;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using System.Text;
 
 namespace System.DirectoryServices.ActiveDirectory
 {
@@ -625,7 +625,7 @@ namespace System.DirectoryServices.ActiveDirectory
                             }
                             else
                             {
-                                // there are no superiors, return an emtpy collection
+                                // there are no superiors, return an empty collection
                                 _possibleSuperiors = new ActiveDirectorySchemaClassCollection(_context, this, true /* is Bound */, PropertyManager.PossibleSuperiors, new ArrayList());
                             }
                         }
@@ -724,7 +724,7 @@ namespace System.DirectoryServices.ActiveDirectory
                             }
                             else
                             {
-                                // there are no mandatory properties, return an emtpy collection
+                                // there are no mandatory properties, return an empty collection
                                 _mandatoryProperties = new ActiveDirectorySchemaPropertyCollection(_context, this, true /* isBound */, PropertyManager.MustContain, new ArrayList());
                             }
                         }
@@ -800,7 +800,7 @@ namespace System.DirectoryServices.ActiveDirectory
                             }
                             else
                             {
-                                // there are no optional properties, return an emtpy collection
+                                // there are no optional properties, return an empty collection
                                 _optionalProperties = new ActiveDirectorySchemaPropertyCollection(_context, this, true /* isBound */, PropertyManager.MayContain, new ArrayList());
                             }
                         }
@@ -885,7 +885,7 @@ namespace System.DirectoryServices.ActiveDirectory
                             }
                             else
                             {
-                                // there are no auxiliary classes, return an emtpy collection
+                                // there are no auxiliary classes, return an empty collection
                                 _auxiliaryClasses = new ActiveDirectorySchemaClassCollection(_context, this, true /* is Bound */, PropertyManager.AuxiliaryClass, new ArrayList());
                             }
                         }
@@ -1082,7 +1082,7 @@ namespace System.DirectoryServices.ActiveDirectory
         // This method retrieves all the values of a property (single valued) from the values
         // that were retrieved from the server.
         //
-        private ICollection GetValuesFromCache(string propertyName)
+        private ArrayList GetValuesFromCache(string propertyName)
         {
             // retrieve the properties from the server if necessary
             InitializePropertiesFromSchemaContainer();
@@ -1268,7 +1268,7 @@ namespace System.DirectoryServices.ActiveDirectory
         // This method searches in the schema container for all non-defunct classes of the
         // specified name (ldapDisplayName).
         //
-        private ArrayList GetClasses(ICollection ldapDisplayNames)
+        private ArrayList GetClasses(ArrayList ldapDisplayNames)
         {
             ArrayList classes = new ArrayList();
             SearchResultCollection? resCol = null;
@@ -1340,7 +1340,7 @@ namespace System.DirectoryServices.ActiveDirectory
         // This method searches in the schema container for all non-defunct properties of the
         // specified name (ldapDisplayName).
         //
-        private ArrayList GetProperties(ICollection ldapDisplayNames)
+        private ArrayList GetProperties(ArrayList ldapDisplayNames)
         {
             ArrayList properties = new ArrayList();
             SearchResultCollection? resCol = null;

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 using System;
 using System.Runtime.CompilerServices;
+using Xunit;
 
 public class AKey
 {
@@ -40,9 +41,9 @@ public class AKey
 public class TestOverridesClass
 {
     // this test ensures that while manipulating keys (through add/remove/lookup
-    // in the dictionary the overriden GetHashCode(), Equals(), and ==operator do not get invoked.
-    // Earlier implementation was using these functions virtually so overriding them would result in 
-    // the overridden functions being invoked. But later on Ati changed implementation to use 
+    // in the dictionary the overridden GetHashCode(), Equals(), and ==operator do not get invoked.
+    // Earlier implementation was using these functions virtually so overriding them would result in
+    // the overridden functions being invoked. But later on Ati changed implementation to use
     // Runtime.GetHashCode and Object.ReferenceEquals so this test makes sure that overridden functions never get invoked.
     public static void TestOverrides()
     {
@@ -66,7 +67,8 @@ public class TestOverridesClass
         }
     }
 
-    public static int Main()
+    [Fact]
+    public static int TestEntryPoint()
     {
         try
         {

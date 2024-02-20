@@ -62,11 +62,14 @@ class Module;
 class SString;
 class Pending;
 class MethodTable;
-class AppDomain;
 class DynamicMethodTable;
 class CodeVersionManager;
 class TieredCompilationManager;
 class JITInlineTrackingMap;
+
+#ifdef FEATURE_METADATA_UPDATER
+class EnCEEClassData;
+#endif // FEATURE_METADATA_UPDATER
 
 // Hash table parameter of available classes (name -> module/class) hash
 #define AVAILABLE_CLASSES_HASH_BUCKETS 1024
@@ -75,19 +78,6 @@ class JITInlineTrackingMap;
 #define PARAMMETHODS_HASH_BUCKETS 11
 #define METHOD_STUBS_HASH_BUCKETS 11
 #define GUID_TO_TYPE_HASH_BUCKETS 16
-
-// The native symbol reader dll name
-#if defined(HOST_AMD64)
-#define NATIVE_SYMBOL_READER_DLL W("Microsoft.DiaSymReader.Native.amd64.dll")
-#elif defined(HOST_X86)
-#define NATIVE_SYMBOL_READER_DLL W("Microsoft.DiaSymReader.Native.x86.dll")
-#elif defined(HOST_ARM)
-#define NATIVE_SYMBOL_READER_DLL W("Microsoft.DiaSymReader.Native.arm.dll")
-#elif defined(HOST_ARM64)
-#define NATIVE_SYMBOL_READER_DLL W("Microsoft.DiaSymReader.Native.arm64.dll")
-#elif defined(HOST_LOONGARCH64)
-#define NATIVE_SYMBOL_READER_DLL W("Microsoft.DiaSymReader.Native.loongarch64.dll")
-#endif
 
 typedef DPTR(JITInlineTrackingMap) PTR_JITInlineTrackingMap;
 
@@ -560,6 +550,7 @@ public:
         return NULL;
     };
 
+    const ReadyToRun_EnclosingTypeMap *m_pEnclosingTypeMap = &ReadyToRun_EnclosingTypeMap::EmptyInstance;
 
 #ifndef DACCESS_COMPILE
     // The vtable needs to match between DAC and non-DAC, but we don't want any use of ThrowTypeLoadException in the DAC
@@ -579,7 +570,7 @@ public:
     }
 
     // Resolving
-    OBJECTHANDLE ResolveStringRef(DWORD Token);
+    OBJECTHANDLE ResolveStringRef(DWORD Token, void** ppPinnedString = nullptr);
 private:
     // string helper
     void InitializeStringData(DWORD token, EEStringData *pstrData, CQuickBytes *pqb);
@@ -597,7 +588,7 @@ private:
 //    * code:Module.m_pAvailableClasses - this is a table that lets you look up the types (the code:EEClass)
 //        for all the types in the module
 //
-// See file:..\inc\corhdr.h#ManagedHeader for more on the layout of managed exectuable files.
+// See file:..\inc\corhdr.h#ManagedHeader for more on the layout of managed executable files.
 class Module : public ModuleBase
 {
 #ifdef DACCESS_COMPILE
@@ -616,7 +607,6 @@ private:
 
     enum {
         // These are the values set in m_dwTransientFlags.
-        // Note that none of these flags survive a prejit save/restore.
 
         MODULE_IS_TENURED           = 0x00000001,   // Set once we know for sure the Module will not be freed until the appdomain itself exits
         // unused                   = 0x00000002,
@@ -649,14 +639,10 @@ private:
         // Used to indicate that the module is loaded sufficiently for generic candidate instantiations to work
         MODULE_READY_FOR_TYPELOAD  = 0x00200000,
 
-        // Used during NGen only
-        TYPESPECS_TRIAGED           = 0x40000000,
-        MODULE_SAVED                = 0x80000000,
     };
 
     enum {
-        // These are the values set in m_dwPersistedFlags.  These will survive
-        // a prejit save/restore
+        // These are the values set in m_dwPersistedFlags.
         // unused                   = 0x00000001,
         COMPUTED_GLOBAL_CLASS       = 0x00000002,
 
@@ -667,15 +653,10 @@ private:
         COMPUTED_WRAP_EXCEPTIONS    = 0x00000010,
         WRAP_EXCEPTIONS             = 0x00000020,
 
-        // This flag applies to assembly, but it is stored so it can be cached in ngen image
-        COMPUTED_RELIABILITY_CONTRACT=0x00000040,
+        // unused                   = 0x00000040,
 
         // This flag applies to assembly, but is also stored here so that it can be cached in ngen image
         COLLECTIBLE_MODULE          = 0x00000080,
-
-        // Caches metadata version
-        COMPUTED_IS_PRE_V4_ASSEMBLY = 0x00000100,
-        IS_PRE_V4_ASSEMBLY          = 0x00000200,
 
         //If attribute value has been cached before
         DEFAULT_DLL_IMPORT_SEARCH_PATHS_IS_CACHED   = 0x00000400,
@@ -683,10 +664,6 @@ private:
         //If module has default dll import search paths attribute
         DEFAULT_DLL_IMPORT_SEARCH_PATHS_STATUS      = 0x00000800,
 
-        //If m_MethodDefToPropertyInfoMap has been generated
-        COMPUTED_METHODDEF_TO_PROPERTYINFO_MAP = 0x00002000,
-
-        // unused                   = 0x00004000,
 
         //If setting has been cached
         RUNTIME_MARSHALLING_ENABLED_IS_CACHED = 0x00008000,
@@ -701,7 +678,6 @@ private:
     VASigCookieBlock        *m_pVASigCookieBlock;
 
     PTR_Assembly            m_pAssembly;
-    mdFile                  m_moduleRef;
 
     CrstExplicitInit        m_Crst;
     CrstExplicitInit        m_FixupCrst;
@@ -737,15 +713,8 @@ private:
 
     #define GENERIC_PARAM_MAP_ALL_FLAGS               NO_MAP_FLAGS
 
-    #define GENERIC_TYPE_DEF_MAP_ALL_FLAGS            NO_MAP_FLAGS
-
-    #define FILE_REF_MAP_ALL_FLAGS                    NO_MAP_FLAGS
-        // For file ref map, 0x1 cannot be used as a flag: reserved for FIXUP_POINTER_INDIRECTION bit
-
     #define MANIFEST_MODULE_MAP_ALL_FLAGS             NO_MAP_FLAGS
         // For manifest module map, 0x1 cannot be used as a flag: reserved for FIXUP_POINTER_INDIRECTION bit
-
-    #define PROPERTY_INFO_MAP_ALL_FLAGS               NO_MAP_FLAGS
 
     // Linear mapping from TypeDef token to MethodTable *
     // For generic types, IsGenericTypeDefinition() is true i.e. instantiation at formals
@@ -760,18 +729,6 @@ private:
 
     // Linear mapping from GenericParam token to TypeVarTypeDesc*
     LookupMap<PTR_TypeVarTypeDesc>  m_GenericParamToDescMap;
-
-    // Linear mapping from TypeDef token to the MethodTable * for its canonical generic instantiation
-    // If the type is not generic, the entry is guaranteed to be NULL.  This means we are paying extra
-    // space in order to use the LookupMap infrastructure, but what it buys us is IBC support and
-    // a compressed format for NGen that makes up for it.
-    LookupMap<PTR_MethodTable>      m_GenericTypeDefToCanonMethodTableMap;
-
-    // Mapping from File token to Module *
-    LookupMap<PTR_Module>           m_FileReferencesMap;
-
-    // Mapping from MethodDef token to pointer-sized value encoding property information
-    LookupMap<SIZE_T>           m_MethodDefToPropertyInfoMap;
 
     // IL stub cache with fabricated MethodTable parented by this module.
     ILStubCache                *m_pILStubCache;
@@ -843,9 +800,6 @@ private:
     // Set the given bit on m_dwTransientFlags. Return true if we won the race to set the bit.
     BOOL SetTransientFlagInterlocked(DWORD dwFlag);
 
-    // Invoke fusion hooks into host to fetch PDBs
-    void FetchPdbsFromHost();
-
     // Cannoically-cased hashtable of the available class names for
     // case insensitive lookup.  Contains pointers into
     // m_pAvailableClasses.
@@ -890,10 +844,10 @@ protected:
 #endif // _DEBUG
 
  public:
-    static Module *Create(Assembly *pAssembly, mdFile kFile, PEAssembly *pPEAssembly, AllocMemTracker *pamTracker);
+    static Module *Create(Assembly *pAssembly, PEAssembly *pPEAssembly, AllocMemTracker *pamTracker);
 
  protected:
-    Module(Assembly *pAssembly, mdFile moduleRef, PEAssembly *file);
+    Module(Assembly *pAssembly, PEAssembly *file);
 
 
  public:
@@ -927,13 +881,6 @@ protected:
 
     PTR_Assembly GetAssembly() const;
 
-    int GetClassLoaderIndex()
-    {
-        LIMITED_METHOD_CONTRACT;
-
-        return RidFromToken(m_moduleRef);
-    }
-
     MethodTable *GetGlobalMethodTable();
     bool         NeedsGlobalMethodTable();
 
@@ -944,22 +891,17 @@ protected:
     OBJECTREF GetExposedObject();
 
     ClassLoader *GetClassLoader();
-    PTR_BaseDomain GetDomain();
 #ifdef FEATURE_CODE_VERSIONING
     CodeVersionManager * GetCodeVersionManager();
 #endif
 
-    mdFile GetModuleRef()
-    {
-        LIMITED_METHOD_CONTRACT;
-
-        return m_moduleRef;
-    }
-
     BOOL IsPEFile() const { WRAPPER_NO_CONTRACT; return !GetPEAssembly()->IsDynamic(); }
     BOOL IsReflection() const { WRAPPER_NO_CONTRACT; SUPPORTS_DAC; return GetPEAssembly()->IsDynamic(); }
+    BOOL IsSystem() { WRAPPER_NO_CONTRACT; SUPPORTS_DAC; return m_pPEAssembly->IsSystem(); }
     // Returns true iff the debugger can see this module.
     BOOL IsVisibleToDebugger();
+
+    virtual BOOL IsEditAndContinueCapable() const { return FALSE; }
 
     BOOL IsEditAndContinueEnabled()
     {
@@ -969,21 +911,22 @@ protected:
         return (m_dwTransientFlags & IS_EDIT_AND_CONTINUE) != 0;
     }
 
-    virtual BOOL IsEditAndContinueCapable() const { return FALSE; }
+#ifdef FEATURE_METADATA_UPDATER
+    // Holds a table of EnCEEClassData object for classes in this module that have been modified
+    CUnorderedArray<EnCEEClassData*, 5> m_ClassList;
+#endif // FEATURE_METADATA_UPDATER
 
-    BOOL IsSystem() { WRAPPER_NO_CONTRACT; SUPPORTS_DAC; return m_pPEAssembly->IsSystem(); }
-
-    static BOOL IsEditAndContinueCapable(Assembly *pAssembly, PEAssembly *file);
-
+private:
     void EnableEditAndContinue()
     {
         LIMITED_METHOD_CONTRACT;
         SUPPORTS_DAC;
         _ASSERTE(IsEditAndContinueCapable());
-        LOG((LF_ENC, LL_INFO100, "EnableEditAndContinue: this:0x%x, %s\n", this, GetDebugName()));
+        LOG((LF_ENC, LL_INFO100, "M:EnableEditAndContinue: this:%p, %s\n", this, GetDebugName()));
         m_dwTransientFlags |= IS_EDIT_AND_CONTINUE;
     }
 
+public:
     BOOL IsTenured()
     {
         LIMITED_METHOD_CONTRACT;
@@ -1094,9 +1037,6 @@ protected:
     // Note that this may require calling into managed code (to resolve security policy).
     BOOL IsSymbolReadingEnabled(void);
 
-    BOOL IsPersistedObject(void *address);
-
-
     // Get the in-memory symbol stream for this module, if any.
     // If none, this will return null.  This is used by modules loaded in-memory (eg. from a byte-array)
     // and by dynamic modules.
@@ -1200,8 +1140,6 @@ protected:
     // the class load, which avoids the need for a 'being loaded' list
     MethodTable* CreateArrayMethodTable(TypeHandle elemType, CorElementType kind, unsigned rank, class AllocMemTracker *pamTracker);
 
-    CHECK CheckStringRef(RVA rva);
-
     // Module/Assembly traversal
     Assembly * GetAssemblyIfLoaded(
             mdAssemblyRef       kAssemblyRef,
@@ -1230,22 +1168,6 @@ public:
         BAD_FORMAT_NOTHROW_ASSERT(TypeFromToken(token) == mdtTypeDef);
 
         TypeHandle th = TypeHandle(m_TypeDefToMethodTableMap.GetElement(RidFromToken(token)));
-
-        if (pLoadLevel && !th.IsNull())
-        {
-            *pLoadLevel = th.GetLoadLevel();
-        }
-
-        return th;
-    }
-
-    TypeHandle LookupFullyCanonicalInstantiation(mdTypeDef token, ClassLoadLevel *pLoadLevel = NULL)
-    {
-        LIMITED_METHOD_DAC_CONTRACT;
-
-        BAD_FORMAT_NOTHROW_ASSERT(TypeFromToken(token) == mdtTypeDef);
-
-        TypeHandle th = TypeHandle(m_GenericTypeDefToCanonMethodTableMap.GetElement(RidFromToken(token)));
 
         if (pLoadLevel && !th.IsNull())
         {
@@ -1362,55 +1284,10 @@ public:
         SUPPORTS_DAC;
 
         _ASSERTE(TypeFromToken(token) == mdtFile);
-        return m_FileReferencesMap.GetElement(RidFromToken(token));
+
+        // We don't support multi-module, so just check if we are looking for this module
+        return token == mdFileNil ? dac_cast<PTR_Module>(this) : NULL;
     }
-
-
-#ifndef DACCESS_COMPILE
-    void EnsureFileCanBeStored(mdFile token)
-    {
-        WRAPPER_NO_CONTRACT; // THROWS/GC_NOTRIGGER/INJECT_FAULT()/MODE_ANY
-
-        _ASSERTE(TypeFromToken(token) == mdtFile);
-        m_FileReferencesMap.EnsureElementCanBeStored(this, RidFromToken(token));
-    }
-
-    void EnsuredStoreFile(mdFile token, Module *value)
-    {
-        WRAPPER_NO_CONTRACT; // NOTHROW/GC_NOTRIGGER/FORBID_FAULT
-
-
-        _ASSERTE(TypeFromToken(token) == mdtFile);
-        m_FileReferencesMap.SetElement(RidFromToken(token), value);
-    }
-
-
-    void StoreFileThrowing(mdFile token, Module *value)
-    {
-        WRAPPER_NO_CONTRACT;
-
-
-        _ASSERTE(TypeFromToken(token) == mdtFile);
-        m_FileReferencesMap.AddElement(this, RidFromToken(token), value);
-    }
-
-    BOOL StoreFileNoThrow(mdFile token, Module *value)
-    {
-        WRAPPER_NO_CONTRACT;
-
-        _ASSERTE(TypeFromToken(token) == mdtFile);
-        return m_FileReferencesMap.TrySetElement(RidFromToken(token), value);
-    }
-
-    mdAssemblyRef FindManifestModule(Module *value)
-    {
-        WRAPPER_NO_CONTRACT;
-
-        return m_ManifestModuleReferencesMap.Find(value) | mdtAssembly;
-    }
-#endif // !DACCESS_COMPILE
-
-    DWORD GetFileMax() { LIMITED_METHOD_DAC_CONTRACT;  return m_FileReferencesMap.GetSize(); }
 
 #ifndef DACCESS_COMPILE
     //
@@ -1502,7 +1379,7 @@ public:
     const SString &GetPath() { WRAPPER_NO_CONTRACT; return m_pPEAssembly->GetPath(); }
 
 #ifdef LOGGING
-    LPCWSTR GetDebugName() { WRAPPER_NO_CONTRACT; return m_pPEAssembly->GetDebugName(); }
+    LPCUTF8 GetDebugName() { WRAPPER_NO_CONTRACT; return m_pPEAssembly->GetDebugName(); }
 #endif
 
     PEImageLayout * GetReadyToRunImage();
@@ -1534,33 +1411,6 @@ public:
     mdToken GetEntryPointToken();
 
     BYTE *GetProfilerBase();
-
-
-    // Active transition path management
-    //
-    // This list keeps track of module which we have active transition
-    // paths to.  An active transition path is where we move from
-    // active execution in one module to another module without
-    // involving triggering the file loader to ensure that the
-    // destination module is active.  We must explicitly list these
-    // relationships so the loader can ensure that the activation
-    // constraints are a priori satisfied.
-    //
-    // Conditional vs. Unconditional describes how we deal with
-    // activation failure of a dependency.  In the unconditional case,
-    // we propagate the activation failure to the depending module.
-    // In the conditional case, we activate a "trigger" in the active
-    // transition path which will cause the path to fail in particular
-    // app domains where the destination module failed to activate.
-    // (This trigger in the path typically has a perf cost even in the
-    // nonfailing case.)
-    //
-    // In either case we must try to perform the activation eagerly -
-    // even in the conditional case we have to know whether to turn on
-    // the trigger or not before we let the active transition path
-    // execute.
-
-    void AddActiveDependency(Module *pModule, BOOL unconditional);
 
     BYTE* GetNativeFixupBlobData(RVA fixup);
 
@@ -1633,7 +1483,7 @@ public:
     InstrumentedILOffsetMapping GetInstrumentedILOffsetMapping(mdMethodDef token);
 
 public:
-    // This helper returns to offsets for the slots/bytes/handles. They return the offset in bytes from the beggining
+    // This helper returns to offsets for the slots/bytes/handles. They return the offset in bytes from the beginning
     // of the 1st GC pointer in the statics block for the module.
     void        GetOffsetsForRegularStaticData(
                     mdTypeDef cl,
@@ -1664,7 +1514,7 @@ public:
         return &m_FixupCrst;
     }
 
-    void                AllocateRegularStaticHandles(AppDomain* pDomainMT);
+    void                AllocateRegularStaticHandles();
 
     void                FreeModuleIndex();
 
@@ -1707,6 +1557,9 @@ public:
     LoaderHeap              *GetThunkHeap();
     // Self-initializing accessor for domain-independent IJW thunk heap
     LoaderHeap              *GetDllThunkHeap();
+
+    const ReadyToRun_MethodIsGenericMap *m_pMethodIsGenericMap = &ReadyToRun_MethodIsGenericMap::EmptyInstance;
+    const ReadyToRun_TypeGenericInfoMap *m_pTypeGenericInfoMap = &ReadyToRun_TypeGenericInfoMap::EmptyInstance;
 
 protected:
 
@@ -1797,20 +1650,10 @@ public:
         return (m_DefaultDllImportSearchPathsAttributeValue & 0x2) != 0;
     }
 
-    //-----------------------------------------------------------------------------------------
-    // True iff metadata version string is 1.* or 2.*.
-    // @TODO (post-Dev10): All places that need this information should call this function
-    // instead of parsing the version themselves.
-    //-----------------------------------------------------------------------------------------
-    BOOL                    IsPreV4Assembly();
-
 protected:
-
 
     // initialize Crst controlling the Dynamic IL hashtables
     void                    InitializeDynamicILCrst();
-
-public:
 
 private:
 
@@ -1826,7 +1669,7 @@ private:
                                                 // this map *always* overrides the Metadata RVA
         PTR_DynamicILBlobTable   m_pDynamicILBlobTable;
 
-                                                // maps tokens for to their corresponding overriden IL blobs
+                                                // maps tokens for to their corresponding overridden IL blobs
                                                 // this map conditionally overrides the Metadata RVA and the DynamicILBlobTable
         PTR_DynamicILBlobTable   m_pTemporaryILBlobTable;
 
@@ -1908,12 +1751,8 @@ private:
     // A dynamic module will eagerly serialize its metadata to this buffer.
     PTR_SBuffer m_pDynamicMetadata;
 
-    // If true, does not eagerly serialize metadata in code:ReflectionModule.CaptureModuleMetaDataToMemory.
-    // This is used to allow bulk emitting types without re-emitting the metadata between each type.
-    bool m_fSuppressMetadataCapture;
-
 #if !defined DACCESS_COMPILE
-    ReflectionModule(Assembly *pAssembly, mdFile token, PEAssembly *pPEAssembly);
+    ReflectionModule(Assembly *pAssembly, PEAssembly *pPEAssembly);
 #endif // !DACCESS_COMPILE
 
 public:

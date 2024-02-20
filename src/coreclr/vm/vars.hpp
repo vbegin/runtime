@@ -89,16 +89,8 @@ class Crst;
 class RCWCleanupList;
 #endif // FEATURE_COMINTEROP
 
-//
-// loader handles are opaque types that track object pointers that have a lifetime
-// that matches that of a loader allocator
-//
-struct LOADERHANDLE__
-{
-    void* unused;
-};
 typedef TADDR LOADERHANDLE;
-
+typedef TADDR RUNTIMETYPEHANDLE;
 
 #ifdef DACCESS_COMPILE
 void OBJECTHANDLE_EnumMemoryRegions(OBJECTHANDLE handle);
@@ -212,7 +204,7 @@ class OBJECTREF {
         OBJECTREF& operator=(const OBJECTREF &objref);
         OBJECTREF& operator=(TADDR nul);
 
-            // allow explict casts
+            // allow explicit casts
         explicit OBJECTREF(Object *pObject);
 
         void Validate(BOOL bDeep = TRUE, BOOL bVerifyNextHeader = TRUE, BOOL bVerifySyncBlock = TRUE);
@@ -368,16 +360,17 @@ GPTR_DECL(MethodTable,      g_pThreadAbortExceptionClass);
 GPTR_DECL(MethodTable,      g_pOutOfMemoryExceptionClass);
 GPTR_DECL(MethodTable,      g_pStackOverflowExceptionClass);
 GPTR_DECL(MethodTable,      g_pExecutionEngineExceptionClass);
-GPTR_DECL(MethodTable,      g_pThreadAbortExceptionClass);
 GPTR_DECL(MethodTable,      g_pDelegateClass);
 GPTR_DECL(MethodTable,      g_pMulticastDelegateClass);
 GPTR_DECL(MethodTable,      g_pFreeObjectMethodTable);
 GPTR_DECL(MethodTable,      g_pValueTypeClass);
 GPTR_DECL(MethodTable,      g_pEnumClass);
 GPTR_DECL(MethodTable,      g_pThreadClass);
-GPTR_DECL(MethodTable,      g_pOverlappedDataClass);
 
 GPTR_DECL(MethodTable,      g_TypedReferenceMT);
+
+GPTR_DECL(MethodTable,      g_pWeakReferenceClass);
+GPTR_DECL(MethodTable,      g_pWeakReferenceOfTClass);
 
 #ifdef FEATURE_COMINTEROP
 GPTR_DECL(MethodTable,      g_pBaseCOMObject);
@@ -396,6 +389,16 @@ GVAL_DECL(DWORD,            g_debuggerWordTLSIndex);
 #endif
 GVAL_DECL(DWORD,            g_TlsIndex);
 
+#ifdef FEATURE_EH_FUNCLETS
+GPTR_DECL(MethodTable,      g_pEHClass);
+GPTR_DECL(MethodTable,      g_pExceptionServicesInternalCallsClass);
+GPTR_DECL(MethodTable,      g_pStackFrameIteratorClass);
+GVAL_DECL(bool,             g_isNewExceptionHandlingEnabled);
+#endif
+
+// Full path to the managed entry assembly - stored for ease of identifying the entry asssembly for diagnostics
+GVAL_DECL(PTR_WSTR, g_EntryAssemblyPath);
+
 // Global System Information
 extern SYSTEM_INFO g_SystemInfo;
 
@@ -407,6 +410,8 @@ EXTERN OBJECTHANDLE         g_pPreallocatedExecutionEngineException;
 
 // we use this as a dummy object to indicate free space in the handle tables -- this object is never visible to the world
 EXTERN OBJECTHANDLE         g_pPreallocatedSentinelObject;
+
+EXTERN MethodTable*         g_pCastHelpers;
 
 GPTR_DECL(Thread,g_pFinalizerThread);
 GPTR_DECL(Thread,g_pSuspensionThread);
@@ -477,7 +482,7 @@ EXTERN DWORD g_fFastExitProcess;
 EXTERN BOOL g_fFatalErrorOccurredOnGCThread;
 EXTERN Volatile<LONG> g_fForbidEnterEE;
 GVAL_DECL(bool, g_fProcessDetach);
-#ifdef EnC_SUPPORTED
+#ifdef FEATURE_METADATA_UPDATER
 GVAL_DECL(bool, g_metadataUpdatesApplied);
 #endif
 EXTERN bool g_fManagedAttach;
@@ -503,11 +508,6 @@ extern Volatile<BOOL> g_TriggerHeapDump;
 #endif // TARGET_UNIX
 
 #ifndef DACCESS_COMPILE
-//
-// Allow use of native images?
-//
-extern bool g_fAllowNativeImages;
-
 //
 // Default install library
 //
@@ -620,25 +620,6 @@ GVAL_DECL(SIZE_T, g_runtimeVirtualSize);
 #ifndef MAXULONGLONG
 #define MAXULONGLONG                     UI64(0xffffffffffffffff)
 #endif
-
-struct TPIndex
-{
-    DWORD m_dwIndex;
-    TPIndex ()
-    : m_dwIndex(0)
-    {}
-    explicit TPIndex (DWORD id)
-    : m_dwIndex(id)
-    {}
-    BOOL operator==(const TPIndex& tpindex) const
-    {
-        return m_dwIndex == tpindex.m_dwIndex;
-    }
-    BOOL operator!=(const TPIndex& tpindex) const
-    {
-        return m_dwIndex != tpindex.m_dwIndex;
-    }
-};
 
 // Every Module is assigned a ModuleIndex, regardless of whether the Module is domain
 // neutral or domain specific. When a domain specific Module is unloaded, its ModuleIndex

@@ -283,7 +283,7 @@ namespace System.ComponentModel
         ///
         /// Add operations are cancellable via the <see cref="ICancelAddNew" /> interface. The position of the
         /// new item is tracked until the add operation is either cancelled by a call to <see cref="CancelNew" />,
-        /// explicitly commited by a call to <see cref="EndNew" />, or implicitly commmited some other operation
+        /// explicitly committed by a call to <see cref="EndNew" />, or implicitly commmited some other operation
         /// changes the contents of the list (such as an Insert or Remove). When an add operation is
         /// cancelled, the new item is removed from the list.
         /// </summary>
@@ -301,8 +301,6 @@ namespace System.ComponentModel
             return newItem;
         }
 
-        private bool AddingNewHandled => _onAddingNew != null && _onAddingNew.GetInvocationList().Length > 0;
-
         /// <summary>
         /// Creates a new item and adds it to the list.
         ///
@@ -313,7 +311,7 @@ namespace System.ComponentModel
         protected virtual object? AddNewCore()
         {
             // Allow event handler to supply the new item for us
-            // If event hander did not supply new item, create one ourselves
+            // If event handler did not supply new item, create one ourselves
             object? newItem = FireAddingNew() ?? Activator.CreateInstance(typeof(T));
 
             // Add item to end of list. Note: If event handler returned an item not of type T,
@@ -336,7 +334,7 @@ namespace System.ComponentModel
                 }
                 // Even if the item doesn't have a default constructor, the user can hook AddingNew to provide an item.
                 // If there's a handler for this, we should allow new.
-                return AddingNewHandled;
+                return _onAddingNew != null;
             }
             set
             {

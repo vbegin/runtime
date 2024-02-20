@@ -4,10 +4,10 @@
 using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 using System.Runtime.Versioning;
+using System.Security.Principal;
+using System.Text;
 
 namespace System.DirectoryServices.Protocols
 {
@@ -707,7 +707,7 @@ namespace System.DirectoryServices.Protocols
             }
         }
 
-        public override byte[] GetValue()
+        public override unsafe byte[] GetValue()
         {
             SortKeyInterop[] nativeSortKeys = new SortKeyInterop[_keys.Length];
             for (int i = 0; i < _keys.Length; ++i)
@@ -722,18 +722,16 @@ namespace System.DirectoryServices.Protocols
 
             try
             {
-                IntPtr tempPtr = IntPtr.Zero;
+                void** pMemHandle = (void**)memHandle;
                 IntPtr sortPtr = IntPtr.Zero;
                 int i = 0;
                 for (i = 0; i < keyCount; i++)
                 {
                     sortPtr = Marshal.AllocHGlobal(structSize);
                     Marshal.StructureToPtr(nativeSortKeys[i], sortPtr, false);
-                    tempPtr = (IntPtr)((long)memHandle + IntPtr.Size * i);
-                    Marshal.WriteIntPtr(tempPtr, sortPtr);
+                    pMemHandle[i] = (void*)sortPtr;
                 }
-                tempPtr = (IntPtr)((long)memHandle + IntPtr.Size * i);
-                Marshal.WriteIntPtr(tempPtr, IntPtr.Zero);
+                pMemHandle[i] = null;
 
                 bool critical = IsCritical;
                 int error = LdapPal.CreateDirectorySortControl(UtilityHandle.GetHandle(), memHandle, critical ? (byte)1 : (byte)0, ref control);

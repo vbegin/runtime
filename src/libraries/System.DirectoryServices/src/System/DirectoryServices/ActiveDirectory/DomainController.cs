@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Net;
-using System.ComponentModel;
 using System.Collections;
-using System.Globalization;
-using System.Runtime.InteropServices;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
+using System.Net;
+using System.Runtime.InteropServices;
 
 namespace System.DirectoryServices.ActiveDirectory
 {
@@ -410,7 +410,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 // Increment the RIDAvailablePool by 30k.
                 if (role == ActiveDirectoryRole.RidRole)
                 {
-                    System.DirectoryServices.Interop.UnsafeNativeMethods.IADsLargeInteger ridPool = (System.DirectoryServices.Interop.UnsafeNativeMethods.IADsLargeInteger)roleObjectEntry.Properties[PropertyManager.RIDAvailablePool].Value!;
+                    System.DirectoryServices.UnsafeNativeMethods.IADsLargeInteger ridPool = (System.DirectoryServices.UnsafeNativeMethods.IADsLargeInteger)roleObjectEntry.Properties[PropertyManager.RIDAvailablePool].Value!;
 
                     // check the overflow of the low part
                     if (ridPool.LowPart + UpdateRidPoolSeizureValue < ridPool.LowPart)
@@ -1003,12 +1003,12 @@ namespace System.DirectoryServices.ActiveDirectory
             // call DsGetDcName
             errorCode = Locator.DsGetDcNameWrapper(null, domainName, siteName, (long)flag | (long)PrivateLocatorFlags.DirectoryServicesRequired, out domainControllerInfo);
 
-            if (errorCode == NativeMethods.ERROR_NO_SUCH_DOMAIN)
+            if (errorCode == Interop.Errors.ERROR_NO_SUCH_DOMAIN)
             {
                 throw new ActiveDirectoryObjectNotFoundException(SR.Format(SR.DCNotFoundInDomain, domainName), typeof(DomainController), null);
             }
             // this can only occur when flag is being explicitly passed (since the flags that we pass internally are valid)
-            if (errorCode == NativeMethods.ERROR_INVALID_FLAGS)
+            if (errorCode == Interop.Errors.ERROR_INVALID_FLAGS)
             {
                 throw new ArgumentException(SR.InvalidFlags, nameof(flag));
             }
@@ -1042,7 +1042,7 @@ namespace System.DirectoryServices.ActiveDirectory
                 DomainControllerInfo domainControllerInfo;
                 int errorCode = Locator.DsGetDcNameWrapper(null, domainName ?? DirectoryContext.GetLoggedOnDomain(), null, (long)PrivateLocatorFlags.DirectoryServicesRequired, out domainControllerInfo);
 
-                if (errorCode == NativeMethods.ERROR_NO_SUCH_DOMAIN)
+                if (errorCode == Interop.Errors.ERROR_NO_SUCH_DOMAIN)
                 {
                     // return an empty collection
                     return new DomainControllerCollection(dcList);
@@ -1087,7 +1087,7 @@ namespace System.DirectoryServices.ActiveDirectory
             var dsGetDomainControllerInfo = (delegate* unmanaged<IntPtr, char*, int, int*, IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsGetDomainControllerInfoW");
             if (dsGetDomainControllerInfo == null)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             fixed (char* domainName = Domain.Name)
@@ -1171,7 +1171,7 @@ namespace System.DirectoryServices.ActiveDirectory
                         var dsFreeDomainControllerInfo = (delegate* unmanaged<int, int, IntPtr, void>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsFreeDomainControllerInfoW");
                         if (dsFreeDomainControllerInfo == null)
                         {
-                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
                         }
                         dsFreeDomainControllerInfo(dcInfoLevel, dcCount, dcInfoPtr);
                     }
@@ -1259,7 +1259,7 @@ namespace System.DirectoryServices.ActiveDirectory
             var dsListRoles = (delegate* unmanaged<IntPtr, IntPtr*, int>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsListRolesW");
             if (dsListRoles == null)
             {
-                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
             }
 
             result = dsListRoles(_dsHandle, &rolesPtr);
@@ -1276,7 +1276,7 @@ namespace System.DirectoryServices.ActiveDirectory
                         Marshal.PtrToStructure(currentItem, dsNameResultItem);
 
                         // check if the role owner is this dc
-                        if (dsNameResultItem.status == NativeMethods.DsNameNoError)
+                        if (dsNameResultItem.status == NativeMethods.DS_NAME_NO_ERROR)
                         {
                             if (dsNameResultItem.name!.Equals(NtdsaObjectName))
                             {
@@ -1298,7 +1298,7 @@ namespace System.DirectoryServices.ActiveDirectory
                         var dsFreeNameResult = (delegate* unmanaged<IntPtr, void>)global::Interop.Kernel32.GetProcAddress(DirectoryContext.ADHandle, "DsFreeNameResultW");
                         if (dsFreeNameResult == null)
                         {
-                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastWin32Error());
+                            throw ExceptionHelper.GetExceptionFromErrorCode(Marshal.GetLastPInvokeError());
                         }
                         dsFreeNameResult(rolesPtr);
                     }

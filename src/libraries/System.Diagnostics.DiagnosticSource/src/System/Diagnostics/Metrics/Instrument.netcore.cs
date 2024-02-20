@@ -2,8 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace System.Diagnostics.Metrics
 {
@@ -104,11 +104,11 @@ namespace System.Diagnostics.Metrics
             KeyValuePair<string, object?>[]? tags = tagList.Tags;
             if (tags is not null)
             {
-                RecordMeasurement(measurement, tags.AsSpan().Slice(0, tagList.Count));
+                RecordMeasurement(measurement, tags.AsSpan(0, tagList.Count));
                 return;
             }
 
             RecordMeasurement(measurement, MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in tagList.Tag1), tagList.Count));
-       }
+        }
     }
 }

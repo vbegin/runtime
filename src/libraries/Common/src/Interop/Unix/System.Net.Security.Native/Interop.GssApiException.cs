@@ -71,15 +71,21 @@ internal static partial class Interop
 
             private static string? GetGssApiDisplayStatus(Status status, bool isMinor)
             {
+                if (!System.Net.NegotiateAuthenticationPal.HasSystemNetSecurityNative)
+                {
+                    // avoid calling into libSystem.Net.Security.Native.
+                    return null;
+                }
+
                 GssBuffer displayBuffer = default(GssBuffer);
 
                 try
                 {
                     Interop.NetSecurityNative.Status minStat;
                     Interop.NetSecurityNative.Status displayCallStatus = isMinor ?
-                        DisplayMinorStatus(out minStat, status, ref displayBuffer):
+                        DisplayMinorStatus(out minStat, status, ref displayBuffer) :
                         DisplayMajorStatus(out minStat, status, ref displayBuffer);
-                    return (Status.GSS_S_COMPLETE != displayCallStatus) ? null : Marshal.PtrToStringAnsi(displayBuffer._data);
+                    return (Status.GSS_S_COMPLETE != displayCallStatus) ? null : Marshal.PtrToStringUTF8(displayBuffer._data);
                 }
                 finally
                 {

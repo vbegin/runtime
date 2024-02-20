@@ -1,14 +1,14 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
 using System.Linq;
 using System.Text;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     public partial class TCErrorConditionWriter// : XmlWriterTestCaseBase
     {
@@ -41,7 +41,7 @@ namespace System.Xml.Tests
                 }
             }
             catch (ArgumentNullException) { return; }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -412,7 +412,7 @@ namespace System.Xml.Tests
                     Assert.True((param == 14), "exception expected only for doctype");
                     return;
                 }
-                catch (InvalidOperationException) { Assert.True(false, "InvalidOperationException not expected here"); }
+                catch (InvalidOperationException) { Assert.Fail("InvalidOperationException not expected here"); }
             }
             finally
             {
@@ -487,7 +487,7 @@ namespace System.Xml.Tests
                     catch (IndexOutOfRangeException) { Assert.True((utils.WriterType == WriterType.CharCheckingWriter)); }
                 }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -522,7 +522,7 @@ namespace System.Xml.Tests
                 }
                 catch (ArgumentOutOfRangeException) { return; }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -689,7 +689,7 @@ namespace System.Xml.Tests
                 }
                 catch (ArgumentNullException) { return; }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -758,7 +758,7 @@ namespace System.Xml.Tests
                 }
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -832,7 +832,7 @@ namespace System.Xml.Tests
                 }
                 catch (XmlException) { return; }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -969,7 +969,7 @@ namespace System.Xml.Tests
                 }
                 catch (XmlException) { return; }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -1112,7 +1112,7 @@ namespace System.Xml.Tests
                     catch (XmlException) { return; }
                 }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -1141,7 +1141,7 @@ namespace System.Xml.Tests
             {
                 w.Dispose();
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]
@@ -1369,7 +1369,7 @@ namespace System.Xml.Tests
                     catch (InvalidCastException) { CError.WriteLine(e.Message); return; }
                 }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]

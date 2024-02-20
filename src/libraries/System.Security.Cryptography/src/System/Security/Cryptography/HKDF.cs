@@ -66,7 +66,7 @@ namespace System.Security.Cryptography
         private static void Extract(HashAlgorithmName hashAlgorithmName, int hashLength, ReadOnlySpan<byte> ikm, ReadOnlySpan<byte> salt, Span<byte> prk)
         {
             Debug.Assert(HashLength(hashAlgorithmName) == hashLength);
-            int written = HashOneShotHelpers.MacData(hashAlgorithmName, salt, ikm, prk);
+            int written = CryptographicOperations.HmacData(hashAlgorithmName, salt, ikm, prk);
             Debug.Assert(written == prk.Length, $"Bytes written is {written} bytes which does not match output length ({prk.Length} bytes)");
         }
 
@@ -85,8 +85,7 @@ namespace System.Security.Cryptography
         {
             ArgumentNullException.ThrowIfNull(prk);
 
-            if (outputLength <= 0)
-                throw new ArgumentOutOfRangeException(nameof(outputLength), SR.ArgumentOutOfRange_NeedPosNum);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(outputLength);
 
             int hashLength = HashLength(hashAlgorithmName);
 
@@ -210,8 +209,7 @@ namespace System.Security.Cryptography
         {
             ArgumentNullException.ThrowIfNull(ikm);
 
-            if (outputLength <= 0)
-                throw new ArgumentOutOfRangeException(nameof(outputLength), SR.ArgumentOutOfRange_NeedPosNum);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(outputLength);
 
             int hashLength = HashLength(hashAlgorithmName);
             Debug.Assert(hashLength <= 512 / 8, "hashLength is larger than expected, consider increasing this value or using regular allocation");
@@ -288,11 +286,21 @@ namespace System.Security.Cryptography
             {
                 return HMACSHA512.HashSizeInBytes;
             }
+            else if (hashAlgorithmName == HashAlgorithmName.SHA3_256)
+            {
+                return HMACSHA3_256.HashSizeInBytes;
+            }
+            else if (hashAlgorithmName == HashAlgorithmName.SHA3_384)
+            {
+                return HMACSHA3_384.HashSizeInBytes;
+            }
+            else if (hashAlgorithmName == HashAlgorithmName.SHA3_512)
+            {
+                return HMACSHA3_512.HashSizeInBytes;
+            }
             else if (hashAlgorithmName == HashAlgorithmName.MD5)
             {
-#pragma warning disable CA1416 // HMACMD5 is unsupported on browser, throwing is handled later when making the HMAC call
                 return HMACMD5.HashSizeInBytes;
-#pragma warning restore CA1416
             }
             else
             {

@@ -1,19 +1,19 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.ComponentModel;
-using System.IO;
 using System.Collections;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Xml.Schema;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.IO;
 using System.Security;
 using System.Text;
 using System.Xml;
+using System.Xml.Schema;
 using MS.Internal.Xml.Cache;
 using MS.Internal.Xml.XPath;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Xml.XPath
 {
@@ -1291,7 +1291,7 @@ namespace System.Xml.XPath
 
         public virtual void ReplaceSelf(string newNode)
         {
-            XmlReader reader = CreateContextReader(newNode, false);
+            XmlTextReader reader = CreateContextReader(newNode, false);
             ReplaceSelf(reader);
         }
 
@@ -1730,25 +1730,19 @@ namespace System.Xml.XPath
             }
         }
 
-        internal static readonly char[] NodeTypeLetter = new char[] {
-            'R',    // Root
-            'E',    // Element
-            'A',    // Attribute
-            'N',    // Namespace
-            'T',    // Text
-            'S',    // SignificantWhitespace
-            'W',    // Whitespace
-            'P',    // ProcessingInstruction
-            'C',    // Comment
-            'X',    // All
-        };
+        // (R)oot
+        // (E)lement
+        // (A)ttribute
+        // (N)amespace
+        // (T)ext
+        // (S)ignificantWhitespace
+        // (W)hitespace
+        // (P)rocessingInstruction
+        // (C)omment
+        // (X) All
+        internal const string NodeTypeLetter = "REANTSWPCX";
 
-        internal static readonly char[] UniqueIdTbl = new char[] {
-            'A',  'B',  'C',  'D',  'E',  'F',  'G',  'H',  'I',  'J',
-            'K',  'L',  'M',  'N',  'O',  'P',  'Q',  'R',  'S',  'T',
-            'U',  'V',  'W',  'X',  'Y',  'Z',  '1',  '2',  '3',  '4',
-            '5',  '6'
-        };
+        internal const string UniqueIdTbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
 
         // Requirements for id:
         //  1. must consist of alphanumeric characters only
@@ -1776,14 +1770,14 @@ namespace System.Xml.XPath
                     }
                     if (idx <= 0x1f)
                     {
-                        sb.Append(UniqueIdTbl[idx]);
+                        sb.Append(UniqueIdTbl[(int)idx]);
                     }
                     else
                     {
                         sb.Append('0');
                         do
                         {
-                            sb.Append(UniqueIdTbl[idx & 0x1f]);
+                            sb.Append(UniqueIdTbl[(int)(idx & 0x1f)]);
                             idx >>= 5;
                         } while (idx != 0);
                         sb.Append('0');
@@ -1793,7 +1787,7 @@ namespace System.Xml.XPath
             }
         }
 
-        private static XPathExpression CompileMatchPattern(string xpath)
+        private static CompiledXpathExpr CompileMatchPattern(string xpath)
         {
             bool hasPrefix;
             Query query = new QueryBuilder().BuildPatternQuery(xpath, out hasPrefix);
@@ -1992,12 +1986,12 @@ namespace System.Xml.XPath
             return false;
         }
 
-        private XmlReader CreateReader()
+        private XPathNavigatorReader CreateReader()
         {
             return XPathNavigatorReader.Create(this);
         }
 
-        private XmlReader CreateContextReader(string xml, bool fromCurrentNode)
+        private XmlTextReader CreateContextReader(string xml, bool fromCurrentNode)
         {
             ArgumentNullException.ThrowIfNull(xml);
 

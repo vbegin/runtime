@@ -11,7 +11,7 @@ namespace System.Data.ProviderBase
     internal class DbMetaDataFactory
     { // V1.2.3300
 
-        private DataSet _metaDataCollectionsDataSet;
+        private readonly DataSet _metaDataCollectionsDataSet;
         private string _normalizedServerVersion;
         private string _serverVersionString;
         // well known column names
@@ -301,7 +301,7 @@ namespace System.Data.ProviderBase
                             // have an inexact match - ok only if it is the only one
                             if (exactCollectionName != null)
                             {
-                                // can't fail here becasue we may still find an exact match
+                                // can't fail here because we may still find an exact match
                                 haveMultipleInexactMatches = true;
                             }
                             requestedCollectionRow = row;
@@ -325,7 +325,7 @@ namespace System.Data.ProviderBase
 
             if (!haveExactMatch && haveMultipleInexactMatches)
             {
-                throw ADP.AmbigousCollectionName(collectionName);
+                throw ADP.AmbiguousCollectionName(collectionName);
             }
 
             return requestedCollectionRow;
@@ -453,7 +453,7 @@ namespace System.Data.ProviderBase
 
                     // TODO: Consider an alternate method that doesn't involve special casing -- perhaps _prepareCollection
 
-                    // for the data source infomation table we need to fix up the version columns at run time
+                    // for the data source information table we need to fix up the version columns at run time
                     // since the version is determined at run time
                     if (exactCollectionName == DbMetaDataCollectionNames.DataSourceInformation)
                     {

@@ -113,7 +113,7 @@ struct EHblkDsc
 
     // After funclets are created, this is the index of corresponding FuncInfoDsc
     // Special case for Filter/Filter-handler:
-    //   Like the IL the filter funclet immediately preceeds the filter-handler funclet.
+    //   Like the IL the filter funclet immediately precedes the filter-handler funclet.
     //   So this index points to the filter-handler funclet. If you want the filter
     //   funclet index, just subtract 1.
     unsigned short ebdFuncIndex;
@@ -129,11 +129,11 @@ struct EHblkDsc
     // Returns the last block of the filter. Assumes the EH clause is a try/filter/filter-handler type.
     BasicBlock* BBFilterLast();
 
-    bool HasCatchHandler();
-    bool HasFilter();
-    bool HasFinallyHandler();
-    bool HasFaultHandler();
-    bool HasFinallyOrFaultHandler();
+    bool HasCatchHandler() const;
+    bool HasFilter() const;
+    bool HasFinallyHandler() const;
+    bool HasFaultHandler() const;
+    bool HasFinallyOrFaultHandler() const;
 
     // Returns the block to which control will flow if an (otherwise-uncaught) exception is raised
     // in the try.  This is normally "ebdHndBeg", unless the try region has a filter, in which case that is returned.

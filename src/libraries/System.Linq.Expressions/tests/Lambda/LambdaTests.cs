@@ -941,7 +941,7 @@ namespace System.Linq.Expressions.Tests
             Assert.Equal(42, del.DynamicInvoke());
         }
 
-        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotNetFramework), nameof(PlatformDetection.IsNotMonoRuntime), nameof(PlatformDetection.IsNotNativeAot))]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotMonoRuntime), nameof(PlatformDetection.IsNotNativeAot))]
         public void ValidateThatInterpreterWithSimpleTypeUsesNonDynamicThunk()
         {
             Expression<Action> action = () => Console.WriteLine("");
@@ -959,14 +959,14 @@ namespace System.Linq.Expressions.Tests
             Assert.True(func2.Compile(preferInterpretation:true).Method.GetType().Name == "RuntimeMethodInfo");
         }
 
-        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotNetFramework), nameof(PlatformDetection.IsNotMonoRuntime), nameof(PlatformDetection.IsNotNativeAot))]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotMonoRuntime), nameof(PlatformDetection.IsNotNativeAot))]
         public void ValidateThatInterpreterWithSimpleTypeUsesDynamicThunk()
         {
             Expression<Action<object,object,object>> complexaction = (object o1, object o2, object o3) => Console.WriteLine("");
-            Assert.True(complexaction.Compile(preferInterpretation:true).Method.GetType().Name == "RTDynamicMethod");
+            Assert.IsType<DynamicMethod>(complexaction.Compile(preferInterpretation:true).Method);
 
             Expression<Func<object, object, object,object>> complexfunc = (object o1, object o2, object o3) => null;
-            Assert.True(complexfunc.Compile(preferInterpretation:true).Method.GetType().Name == "RTDynamicMethod");
+            Assert.IsType<DynamicMethod>(complexfunc.Compile(preferInterpretation: true).Method);
         }
 
         private interface IInterface

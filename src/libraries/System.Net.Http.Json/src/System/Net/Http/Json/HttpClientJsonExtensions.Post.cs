@@ -12,6 +12,7 @@ namespace System.Net.Http.Json
     public static partial class HttpClientJsonExtensions
     {
         [RequiresUnreferencedCode(HttpContentJsonExtensions.SerializationUnreferencedCodeMessage)]
+        [RequiresDynamicCode(HttpContentJsonExtensions.SerializationDynamicCodeMessage)]
         public static Task<HttpResponseMessage> PostAsJsonAsync<TValue>(this HttpClient client, [StringSyntax(StringSyntaxAttribute.Uri)] string? requestUri, TValue value, JsonSerializerOptions? options = null, CancellationToken cancellationToken = default)
         {
             if (client is null)
@@ -24,6 +25,7 @@ namespace System.Net.Http.Json
         }
 
         [RequiresUnreferencedCode(HttpContentJsonExtensions.SerializationUnreferencedCodeMessage)]
+        [RequiresDynamicCode(HttpContentJsonExtensions.SerializationDynamicCodeMessage)]
         public static Task<HttpResponseMessage> PostAsJsonAsync<TValue>(this HttpClient client, Uri? requestUri, TValue value, JsonSerializerOptions? options = null, CancellationToken cancellationToken = default)
         {
             if (client is null)
@@ -36,10 +38,12 @@ namespace System.Net.Http.Json
         }
 
         [RequiresUnreferencedCode(HttpContentJsonExtensions.SerializationUnreferencedCodeMessage)]
+        [RequiresDynamicCode(HttpContentJsonExtensions.SerializationDynamicCodeMessage)]
         public static Task<HttpResponseMessage> PostAsJsonAsync<TValue>(this HttpClient client, [StringSyntax(StringSyntaxAttribute.Uri)] string? requestUri, TValue value, CancellationToken cancellationToken)
             => client.PostAsJsonAsync(requestUri, value, options: null, cancellationToken);
 
         [RequiresUnreferencedCode(HttpContentJsonExtensions.SerializationUnreferencedCodeMessage)]
+        [RequiresDynamicCode(HttpContentJsonExtensions.SerializationDynamicCodeMessage)]
         public static Task<HttpResponseMessage> PostAsJsonAsync<TValue>(this HttpClient client, Uri? requestUri, TValue value, CancellationToken cancellationToken)
             => client.PostAsJsonAsync(requestUri, value, options: null, cancellationToken);
 
@@ -50,7 +54,7 @@ namespace System.Net.Http.Json
                 throw new ArgumentNullException(nameof(client));
             }
 
-            JsonContent<TValue> content = new(value, jsonTypeInfo);
+            JsonContent content = JsonContent.Create(value, jsonTypeInfo);
             return client.PostAsync(requestUri, content, cancellationToken);
         }
 
@@ -61,7 +65,7 @@ namespace System.Net.Http.Json
                 throw new ArgumentNullException(nameof(client));
             }
 
-            JsonContent<TValue> content = new(value, jsonTypeInfo);
+            JsonContent content = JsonContent.Create(value, jsonTypeInfo);
             return client.PostAsync(requestUri, content, cancellationToken);
         }
     }

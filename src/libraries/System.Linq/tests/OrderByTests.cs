@@ -511,7 +511,7 @@ namespace System.Linq.Tests
         [Fact]
         public void CultureOrderBy()
         {
-            string[] source = new[] { "Apple0", "Æble0", "Apple1", "Æble1", "Apple2", "Æble2" };
+            string[] source = new[] { "Apple0", "\uFFFDble0", "Apple1", "\uFFFDble1", "Apple2", "\uFFFDble2" };
 
             CultureInfo dk = new CultureInfo("da-DK");
             CultureInfo au = new CultureInfo("en-AU");
@@ -583,7 +583,7 @@ namespace System.Linq.Tests
         [Fact]
         public void CultureOrderByElementAt()
         {
-            string[] source = new[] { "Apple0", "Æble0", "Apple1", "Æble1", "Apple2", "Æble2" };
+            string[] source = new[] { "Apple0", "\uFFFDble0", "Apple1", "\uFFFDble1", "Apple2", "\uFFFDble2" };
 
             CultureInfo dk = new CultureInfo("da-DK");
             CultureInfo au = new CultureInfo("en-AU");
@@ -612,6 +612,25 @@ namespace System.Linq.Tests
                 {
                     Assert.Equal(resultAU[i], delaySortedSource.ElementAt(i), StringComparer.Ordinal);
                 }
+            }
+        }
+
+        [Fact]
+        public void OrderBy_FirstLast_MatchesArray()
+        {
+            object[][] arrays =
+            [
+                [1],
+                [1, 1],
+                [1, 2, 1],
+                [1, 2, 1, 3],
+                [2, 1, 3, 1, 4],
+            ];
+
+            foreach (object[] objects in arrays)
+            {
+                Assert.Same(objects.OrderBy(x => x).First(), objects.OrderBy(x => x).ToArray().First());
+                Assert.Same(objects.OrderBy(x => x).Last(), objects.OrderBy(x => x).ToArray().Last());
             }
         }
     }

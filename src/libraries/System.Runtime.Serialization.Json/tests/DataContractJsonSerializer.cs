@@ -17,6 +17,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using Xunit;
+using System.Runtime.Serialization.Tests;
 
 public static partial class DataContractJsonSerializerTests
 {
@@ -140,7 +141,9 @@ public static partial class DataContractJsonSerializerTests
     public static void DCJS_DoubleAsRoot()
     {
         Assert.StrictEqual(-1.2, SerializeAndDeserialize<double>(-1.2, "-1.2"));
-        Assert.StrictEqual(0, SerializeAndDeserialize<double>(0, "0"));
+        Assert.StrictEqual(0.0, SerializeAndDeserialize<double>(0.0, "0"));
+        Assert.StrictEqual(0.0, SerializeAndDeserialize<double>(-0.0, "-0"));
+        Assert.Equal("-0", SerializeAndDeserialize<double>(-0.0, "-0").ToString());
         Assert.StrictEqual(2.3, SerializeAndDeserialize<double>(2.3, "2.3"));
         Assert.StrictEqual(double.MinValue, SerializeAndDeserialize<double>(double.MinValue, "-1.7976931348623157E+308"));
         Assert.StrictEqual(double.MaxValue, SerializeAndDeserialize<double>(double.MaxValue, "1.7976931348623157E+308"));
@@ -150,7 +153,9 @@ public static partial class DataContractJsonSerializerTests
     public static void DCJS_FloatAsRoot()
     {
         Assert.StrictEqual((float)-1.2, SerializeAndDeserialize<float>((float)-1.2, "-1.2"));
-        Assert.StrictEqual((float)0, SerializeAndDeserialize<float>((float)0, "0"));
+        Assert.StrictEqual((float)0.0, SerializeAndDeserialize<float>((float)0.0, "0"));
+        Assert.StrictEqual((float)0.0, SerializeAndDeserialize<float>((float)-0.0, "-0"));
+        Assert.Equal("-0", SerializeAndDeserialize<float>((float)-0.0, "-0").ToString());
         Assert.StrictEqual((float)2.3, SerializeAndDeserialize<float>((float)2.3, "2.3"));
     }
 
@@ -2354,7 +2359,7 @@ public static partial class DataContractJsonSerializerTests
         }
         catch (Exception e)
         {
-            Assert.True(false, $"Error occurred when comparing results: {Environment.NewLine}{e.Message}{Environment.NewLine}Expected: {baseline1}{Environment.NewLine}Actual: {actualOutput1}");
+            Assert.Fail($"Error occurred when comparing results: {Environment.NewLine}{e.Message}{Environment.NewLine}Expected: {baseline1}{Environment.NewLine}Actual: {actualOutput1}");
         }
 
 
@@ -2383,7 +2388,7 @@ public static partial class DataContractJsonSerializerTests
         }
         catch (Exception e)
         {
-            Assert.True(false, $"Error occurred when comparing results: {Environment.NewLine}{e.Message}{Environment.NewLine}Expected: {baseline2}{Environment.NewLine}Actual: {actualOutput2}");
+            Assert.Fail($"Error occurred when comparing results: {Environment.NewLine}{e.Message}{Environment.NewLine}Expected: {baseline2}{Environment.NewLine}Actual: {actualOutput2}");
         }
     }
 
@@ -2594,7 +2599,7 @@ public static partial class DataContractJsonSerializerTests
         Assert.Equal(value, actual);
     }
 
-    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotInvariantGlobalization))]
+    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotInvariantGlobalization), nameof(PlatformDetection.IsNotHybridGlobalizationOnBrowser))]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/60462", TestPlatforms.iOS | TestPlatforms.tvOS)]
     public static void DCJS_VerifyDateTimeForFormatStringDCJsonSerSettings()
     {
@@ -2655,12 +2660,12 @@ public static partial class DataContractJsonSerializerTests
         Assert.True(actual6 == dateTime);
     }
 
-    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotInvariantGlobalization))]
+    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotInvariantGlobalization), nameof(PlatformDetection.IsNotHybridGlobalizationOnBrowser))]
     public static void DCJS_VerifyDateTimeForDateTimeFormat()
     {
         var jsonTypes = new JsonTypes();
         var dateTime = new DateTime(DateTime.Now.Year, 12, 1);
-        var expectedString = "\"" + dateTime.ToString("MMMM") + "\"";
+        var expectedString = $"\"{dateTime:MMMM}\"";
         var dcjsSettings = new DataContractJsonSerializerSettings()
         {
             DateTimeFormat = jsonTypes.DTF_MMMM,
@@ -2973,7 +2978,7 @@ public static partial class DataContractJsonSerializerTests
             try
             {
                 jsonReader.Dispose();
-                Assert.False(true);
+                Assert.Fail();
             }
             catch (Exception ex)
             {

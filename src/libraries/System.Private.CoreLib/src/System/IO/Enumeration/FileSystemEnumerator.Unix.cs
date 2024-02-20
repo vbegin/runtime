@@ -76,7 +76,7 @@ namespace System.IO.Enumeration
                 {
                     return IntPtr.Zero;
                 }
-                throw Interop.GetExceptionForIoErrno(info, path, isDirectory: true);
+                throw Interop.GetExceptionForIoErrno(info, path, isDirError: true);
             }
             return handle;
         }
@@ -129,7 +129,7 @@ namespace System.IO.Enumeration
                             }
                         }
 
-                        if (!isSpecialDirectory && _options.AttributesToSkip != 0)
+                        if (!isSpecialDirectory && _options.AttributesToSkip != FileAttributes.None)
                         {
                             // entry.IsHidden and entry.IsReadOnly will hit the disk if the caches had not been
                             // initialized yet and we could not soft-retrieve the attributes in Initialize
@@ -198,7 +198,7 @@ namespace System.IO.Enumeration
                     }
                     else
                     {
-                        throw Interop.GetExceptionForIoErrno(new Interop.ErrorInfo(result), _currentPath, isDirectory: true);
+                        throw Interop.GetExceptionForIoErrno(new Interop.ErrorInfo(result), _currentPath, isDirError: true);
                     }
             }
         }

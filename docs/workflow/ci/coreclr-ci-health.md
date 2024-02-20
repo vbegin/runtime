@@ -4,8 +4,6 @@
 
 Note that this document focuses on coreclr testing in `dotnet/runtime`.
 
-https://github.com/dotnet/runtime/issues/702 was opened as a way to simply view in one place all issues that are affecting `dotnet/runtime`'s CI.
-
 ## TOC
 
 1. [Terminology](#Terminology)
@@ -111,7 +109,7 @@ The **Failure Trend** graph attempts to show what is failing in bar graph and gi
 
 The **Failed Runs** graph is the most interesting for finding specific issues. As of writing the `Top 10 failing tasks` are:
 
-*Note* that any one of these buckets can include random one off infrastructure failures or systimatic Azure Dev Ops failures. For example the build bucket can include issues like:
+*Note* that any one of these buckets can include random one off infrastructure failures or systematic Azure Dev Ops failures. For example the build bucket can include issues like:
 
 >  fips.c(143): OpenSSL internal error
 

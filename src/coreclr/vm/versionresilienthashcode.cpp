@@ -127,7 +127,7 @@ int GetVersionResilientTypeHashCode(TypeHandle type)
         IfFailThrow(pMT->GetMDImport()->GetNameOfTypeDef(pMT->GetCl(), &szName, &szNamespace));
         int hashcode = ComputeNameHashCode(szNamespace, szName);
 
-        MethodTable *pMTEnclosing = pMT->LoadEnclosingMethodTable(CLASS_LOAD_UNRESTOREDTYPEKEY);
+        MethodTable *pMTEnclosing = pMT->LoadEnclosingMethodTable(CLASS_LOAD_APPROXPARENTS);
         if (pMTEnclosing != NULL)
         {
             hashcode = ComputeNestedTypeHashCode(GetVersionResilientTypeHashCode(TypeHandle(pMTEnclosing)), hashcode);
@@ -286,7 +286,7 @@ bool AddVersionResilientHashCodeForInstruction(ILInstructionParser *parser, xxHa
             hash->Add(varValue);
             break;
         }
-        
+
         case InlineVar: // 2 byte value which is token change resilient
         {
             uint16_t varValue;
@@ -387,6 +387,12 @@ bool GetVersionResilientILCodeHashCode(MethodDesc *pMD, int* hashCode, unsigned*
         localSig = pResolver->GetLocalSig();
 
         initLocals = (options & CORINFO_OPT_INIT_LOCALS) == CORINFO_OPT_INIT_LOCALS;
+    }
+    else if (!pMD->HasILHeader())
+    {
+        // Dynamically generated IL methods like UnsafeAccessors may not have
+        // an IL header.
+        return false;
     }
     else
     {

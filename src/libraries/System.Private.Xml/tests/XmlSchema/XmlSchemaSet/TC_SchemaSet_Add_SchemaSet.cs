@@ -6,7 +6,7 @@ using System.Xml.Schema;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaTests
 {
     public class TC_SchemaSet_Add_SchemaSet : TC_SchemaSetBase
     {
@@ -32,7 +32,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -139,7 +139,7 @@ namespace System.Xml.Tests
             {
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -167,7 +167,7 @@ namespace System.Xml.Tests
             {
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -194,7 +194,7 @@ namespace System.Xml.Tests
             {
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -230,7 +230,7 @@ namespace System.Xml.Tests
             }
 
             Assert.Equal(0, schemaSet2.Count); // no schema should be added
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Fact]
@@ -261,7 +261,7 @@ namespace System.Xml.Tests
             }
             catch (XmlSchemaException)
             {
-                Assert.True(false);
+                Assert.Fail();
             }
             return;
         }

@@ -7,6 +7,7 @@ using System.Reflection;
 
 namespace System.Runtime.Serialization
 {
+    [Obsolete(Obsoletions.LegacyFormatterMessage, DiagnosticId = Obsoletions.LegacyFormatterDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
     public class ObjectManager
     {
         private const int DefaultInitialSize = 16;
@@ -14,7 +15,7 @@ namespace System.Runtime.Serialization
         private const int ArrayMask = MaxArraySize - 1;
         private const int MaxReferenceDepth = 100;
 
-        private const string ObjectManagerUnreferencedCodeMessage = "ObjectManager is not trim compatible because the Type of objects being managed cannot be statically discovered.";
+        private const string ObjectManagerUnreferencedCodeMessage = "ObjectManager is not trim compatible because the type of objects being managed cannot be statically discovered.";
 
         private static readonly FieldInfo s_nullableValueField = typeof(Nullable<>).GetField("value", BindingFlags.NonPublic | BindingFlags.Instance)!;
 

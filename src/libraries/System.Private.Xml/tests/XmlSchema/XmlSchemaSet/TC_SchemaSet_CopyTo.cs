@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Xunit;
-using Xunit.Abstractions;
 using System.Collections;
 using System.Xml.Schema;
+using Xunit;
+using Xunit.Abstractions;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlSchemaTests
 {
     //[TestCase(Name = "TC_SchemaSet_CopyTo", Desc = "")]
     public class TC_SchemaSet_CopyTo : TC_SchemaSetBase
@@ -35,7 +35,7 @@ namespace System.Xml.Tests
                 // GLOBALIZATION
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -55,7 +55,7 @@ namespace System.Xml.Tests
                 // GLOBALIZATION
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ namespace System.Xml.Tests
                 // GLOBALIZATION
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -98,7 +98,7 @@ namespace System.Xml.Tests
                 // GLOBALIZATION
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -120,7 +120,7 @@ namespace System.Xml.Tests
                 // GLOBALIZATION
                 return;
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         //-----------------------------------------------------------------------------------
@@ -174,7 +174,7 @@ namespace System.Xml.Tests
                 return;
             }
 
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

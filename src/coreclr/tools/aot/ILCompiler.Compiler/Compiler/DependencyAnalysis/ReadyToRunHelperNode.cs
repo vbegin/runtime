@@ -46,9 +46,9 @@ namespace ILCompiler.DependencyAnalysis
     public partial class ReadyToRunHelperNode : AssemblyStubNode, INodeWithDebugInfo
     {
         private readonly ReadyToRunHelperId _id;
-        private readonly Object _target;
+        private readonly object _target;
 
-        public ReadyToRunHelperNode(ReadyToRunHelperId id, Object target)
+        public ReadyToRunHelperNode(ReadyToRunHelperId id, object target)
         {
             _id = id;
             _target = target;
@@ -86,7 +86,7 @@ namespace ILCompiler.DependencyAnalysis
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
 
         public ReadyToRunHelperId Id => _id;
-        public Object Target =>  _target;
+        public object Target =>  _target;
 
         public override void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
         {
@@ -160,12 +160,20 @@ namespace ILCompiler.DependencyAnalysis
 #endif
                 }
 
-                factory.MetadataManager.GetDependenciesDueToDelegateCreation(ref dependencyList, factory, info.PossiblyUnresolvedTargetMethod);
-
                 return dependencyList;
             }
 
             return null;
+        }
+
+        public override bool HasConditionalStaticDependencies => _id == ReadyToRunHelperId.DelegateCtor;
+
+        public override IEnumerable<CombinedDependencyListEntry> GetConditionalStaticDependencies(NodeFactory factory)
+        {
+            List<CombinedDependencyListEntry> dependencyList = new List<CombinedDependencyListEntry>();
+            var info = (DelegateCreationInfo)_target;
+            factory.MetadataManager.GetDependenciesDueToDelegateCreation(ref dependencyList, factory, info.DelegateType, info.PossiblyUnresolvedTargetMethod);
+            return dependencyList;
         }
 
         IEnumerable<NativeSequencePoint> INodeWithDebugInfo.GetNativeSequencePoints()
@@ -187,8 +195,8 @@ namespace ILCompiler.DependencyAnalysis
                 {
                     return new NativeSequencePoint[]
                     {
-                        new NativeSequencePoint(0, String.Empty, WellKnownLineNumber.DebuggerStepThrough),
-                        new NativeSequencePoint(debuggerStepInOffset, String.Empty, WellKnownLineNumber.DebuggerStepIn)
+                        new NativeSequencePoint(0, string.Empty, WellKnownLineNumber.DebuggerStepThrough),
+                        new NativeSequencePoint(debuggerStepInOffset, string.Empty, WellKnownLineNumber.DebuggerStepIn)
                     };
                 }
             }
@@ -224,7 +232,7 @@ namespace ILCompiler.DependencyAnalysis
                 default:
                     throw new NotImplementedException();
             }
-            
+
         }
 #endif
     }

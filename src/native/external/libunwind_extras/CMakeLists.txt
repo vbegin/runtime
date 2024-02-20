@@ -9,6 +9,7 @@ add_definitions(-DHAVE___THREAD=0)
 add_definitions(-D_GNU_SOURCE)
 add_definitions(-DPACKAGE_STRING="")
 add_definitions(-DPACKAGE_BUGREPORT="")
+add_definitions(-DHAVE_DL_ITERATE_PHDR=1)
 
 if(CLR_CMAKE_HOST_UNIX)
     if (CLR_CMAKE_HOST_ARCH_AMD64)
@@ -25,6 +26,8 @@ if(CLR_CMAKE_HOST_UNIX)
       set(arch s390x)
     elseif(CLR_CMAKE_HOST_ARCH_LOONGARCH64)
       set(arch loongarch64)
+    elseif(CLR_CMAKE_HOST_ARCH_RISCV64)
+      set(arch riscv64)
     elseif(CLR_CMAKE_HOST_ARCH_POWERPC64)
       set(arch ppc64le)
     endif ()
@@ -71,6 +74,8 @@ if(CLR_CMAKE_HOST_UNIX)
         add_compile_options(-Wno-incompatible-pointer-types)
     elseif(CLR_CMAKE_HOST_ARCH_LOONGARCH64)
         ###TODO: maybe add options for LOONGARCH64
+    elseif(CLR_CMAKE_HOST_ARCH_RISCV64)
+        ###TODO: maybe add options for RISCV64
     endif()
 
     if (CLR_CMAKE_HOST_OSX)
@@ -87,24 +92,19 @@ endif(CLR_CMAKE_HOST_UNIX)
 
 if(CLR_CMAKE_HOST_WIN32)
     if (CLR_CMAKE_TARGET_ARCH_AMD64)
-      set(TARGET_AMD64 1)
       set(arch x86_64)
       add_definitions(-D__x86_64__)
       add_definitions(-D__amd64__)
     elseif(CLR_CMAKE_TARGET_ARCH_ARM64)
-      set(TARGET_AARCH64 1)
       set(arch aarch64)
       add_definitions(-D__aarch64__)
     elseif(CLR_CMAKE_TARGET_ARCH_ARM)
-      set(TARGET_ARM 1)
       set(arch arm)
       add_definitions(-D__arm__)
     elseif(CLR_CMAKE_TARGET_ARCH_ARMV6)
-      set(TARGET_ARM 1)
       set(arch arm)
       add_definitions(-D__arm__)
     elseif(CLR_CMAKE_TARGET_ARCH_S390X)
-      set(TARGET_S390X 1)
       set(arch s390x)
       add_definitions(-D__s390x__)
     else ()
@@ -124,7 +124,6 @@ if(CLR_CMAKE_HOST_WIN32)
     endif ()
 
     # Assume we are using default MSVC compiler
-    add_compile_options(/TC) # compile all files as C
     add_compile_options(/permissive-)
 
     # include paths
@@ -163,6 +162,10 @@ endif()
 include(configure.cmake)
 include(${CLR_SRC_NATIVE_DIR}/external/libunwind.cmake)
 
+if(CLR_CMAKE_HOST_WIN32)
+    set_source_files_properties(${LIBUNWIND_SOURCES} PROPERTIES COMPILE_FLAGS /TC) # compile all files as C
+endif(CLR_CMAKE_HOST_WIN32)
+
 if(CLR_CMAKE_HOST_UNIX)
     if(CLR_CMAKE_HOST_OSX)
         add_library(libunwind_dac OBJECT ${LIBUNWIND_SOURCES})
@@ -170,6 +173,8 @@ if(CLR_CMAKE_HOST_UNIX)
         add_library(libunwind OBJECT ${LIBUNWIND_SOURCES})
     endif(CLR_CMAKE_HOST_OSX)
 else(CLR_CMAKE_HOST_UNIX)
+    set_source_files_properties(${CLR_DIR}/pal/src/exception/remote-unwind.cpp PROPERTIES COMPILE_FLAGS /TP INCLUDE_DIRECTORIES ${CLR_DIR}/inc)
+
     add_library(libunwind_xdac OBJECT
       ${CLR_DIR}/pal/src/exception/remote-unwind.cpp
       ${LIBUNWIND_SOURCES})

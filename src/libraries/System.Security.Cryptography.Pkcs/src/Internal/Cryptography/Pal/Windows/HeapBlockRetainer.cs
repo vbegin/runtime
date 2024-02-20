@@ -3,11 +3,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
-
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace Internal.Cryptography.Pal.Windows
@@ -42,15 +41,17 @@ namespace Internal.Cryptography.Pal.Windows
             return Alloc(cbSize);
         }
 
-        public IntPtr AllocAsciiString(string s)
+        public unsafe IntPtr AllocAsciiString(string s)
         {
-            byte[] b = Encoding.ASCII.GetBytes(s);
-            IntPtr pb = Alloc(b.Length + 1);
-            Marshal.Copy(b, 0, pb, b.Length);
-            unsafe
-            {
-                ((byte*)pb)[b.Length] = 0; // NUL termination.
-            }
+            int length = Encoding.ASCII.GetByteCount(s);
+            length++; // for null termination
+
+            IntPtr pb = Alloc(length);
+
+            var ascii = new Span<byte>((byte*)pb, length);
+            Encoding.ASCII.GetBytes(s, ascii);
+            ascii[^1] = 0;
+
             return pb;
         }
 

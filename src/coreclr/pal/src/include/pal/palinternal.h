@@ -33,7 +33,7 @@ There are 2 types of namespace collisions that must be handled.
    about the multiple declarations.
 
    To avoid this, the inclusion of pal.h must be wrapped in a
-   #define/#undef pair, which will effectiveily "hide" the pal.h
+   #define/#undef pair, which will effectively "hide" the pal.h
    declaration by renaming it to something else. this is done by palinternal.h
    in this way :
 
@@ -163,9 +163,7 @@ function_name() to call the system's implementation
 
 /* C runtime functions needed to be renamed to avoid duplicate definition
    of those functions when including standard C header files */
-#if !defined(_DEBUG)
 #define memcpy DUMMY_memcpy
-#endif //!defined(_DEBUG)
 #define memcmp DUMMY_memcmp
 #define memset DUMMY_memset
 #define memmove DUMMY_memmove
@@ -184,6 +182,13 @@ function_name() to call the system's implementation
 #define strrchr DUMMY_strrchr
 #define strpbrk DUMMY_strpbrk
 #define strtod DUMMY_strtod
+#define strtoul DUMMY_strtoul
+#define strtoull DUMMY_strtoull
+#define strnlen  DUMMY_strnlen
+#define strcasecmp DUMMY_strcasecmp
+#define strncasecmp DUMMY_strncasecmp
+#define strdup DUMMY_strdup
+#define strtok_r DUMMY_strtok_r
 #define tolower DUMMY_tolower
 #define toupper DUMMY_toupper
 #define isprint DUMMY_isprint
@@ -231,6 +236,44 @@ function_name() to call the system's implementation
 #define tanf DUMMY_tanf
 #define tanhf DUMMY_tanhf
 #define truncf DUMMY_truncf
+#define acos DUMMMY_acos
+#define asin DUMMMY_asin
+#define atan2 DUMMMY_atan2
+#define exp DUMMMY_exp
+#define ilogb DUMMMY_ilogb
+#define log DUMMMY_log
+#define log10 DUMMMY_log10
+#define pow DUMMMY_pow
+#define sincos DUMMMY_sincos
+#define acosf DUMMMY_acosf
+#define asinf DUMMMY_asinf
+#define atan2f DUMMMY_atan2f
+#define expf DUMMMY_expf
+#define ilogbf DUMMMY_ilogbf
+#define logf DUMMMY_logf
+#define log10f DUMMMY_log10f
+#define powf DUMMMY_powf
+#define sincosf DUMMMY_sincosf
+#define copysign DUMMY_copysign
+#define copysignf DUMMY_copysignf
+#define remove DUMMY_remove
+#define printf DUMMY_printf
+#define vprintf DUMMY_vprintf
+#define fopen DUMMY_fopen
+#define setvbuf DUMMY_setvbuf
+#define fprintf DUMMY_fprintf
+#define vfprintf DUMMY_vfprintf
+#define fgets DUMMY_fgets
+#define ferror DUMMY_ferror
+#define fread DUMMY_fread
+#define fwrite DUMMY_fwrite
+#define ftell DUMMY_ftell
+#define fclose DUMMY_fclose
+#define fflush DUMMY_fflush
+#define fputs DUMMY_fputs
+#define fseek DUMMY_fseek
+#define fgetpos DUMMY_fgetpos
+#define fsetpos DUMMY_fsetpos
 
 /* RAND_MAX needed to be renamed to avoid duplicate definition when including
    stdlib.h header files. PAL_RAND_MAX should have the same value as RAND_MAX
@@ -325,7 +368,8 @@ function_name() to call the system's implementation
 #define intptr_t PAL_intptr_t
 #define uintptr_t PAL_uintptr_t
 #define timeval PAL_timeval
-#define FILE PAL_FILE
+
+#define DEFINE_DUMMY_FILE_TYPE
 
 #include "pal.h"
 #include "palprivate.h"
@@ -373,8 +417,11 @@ function_name() to call the system's implementation
 #undef strpbrk
 #undef strtoul
 #undef strtoull
+#undef strcasecmp
+#undef strncasecmp
+#undef strdup
 #undef strtod
-#undef strtok
+#undef strtok_r
 #undef strdup
 #undef tolower
 #undef toupper
@@ -402,7 +449,6 @@ function_name() to call the system's implementation
 #undef qsort
 #undef bsearch
 #undef time
-#undef FILE
 #undef fclose
 #undef fopen
 #undef fread
@@ -416,7 +462,6 @@ function_name() to call the system's implementation
 #undef fgetpos
 #undef fsetpos
 #undef getcwd
-#undef _flushall
 #undef setvbuf
 #undef unlink
 #undef size_t
@@ -425,6 +470,7 @@ function_name() to call the system's implementation
 #undef va_start
 #undef va_end
 #undef va_copy
+#undef va_arg
 #undef stdin
 #undef stdout
 #undef stderr
@@ -454,6 +500,7 @@ function_name() to call the system's implementation
 #undef pow
 #undef sin
 #undef sincos
+#undef copysign
 #undef sinh
 #undef sqrt
 #undef tan
@@ -483,50 +530,50 @@ function_name() to call the system's implementation
 #undef powf
 #undef sinf
 #undef sincosf
+#undef copysignf
 #undef sinhf
 #undef sqrtf
 #undef tanf
 #undef tanhf
 #undef truncf
+#undef acos 
+#undef asin 
+#undef atan2 
+#undef exp 
+#undef ilogb 
+#undef log 
+#undef log10 
+#undef pow 
+#undef sincos 
+#undef acosf 
+#undef asinf 
+#undef atan2f 
+#undef expf 
+#undef ilogbf 
+#undef logf 
+#undef log10f 
+#undef powf 
+#undef sincosf 
 #undef rand
 #undef srand
 #undef errno
 #undef getenv
 #undef open
 #undef glob
-
+#undef remove
+#undef printf
+#undef vprintf
 #undef ptrdiff_t
 #undef intptr_t
 #undef uintptr_t
 #undef timeval
 
-
-#undef printf
 #undef fprintf
-#undef fwprintf
 #undef vfprintf
-#undef vfwprintf
-#undef vprintf
-#undef wprintf
-#undef wcstod
-#undef wcstoul
-#undef _wcstoui64
-#undef wcscat
-#undef wcscpy
-#undef wcslen
-#undef wcsncmp
-#undef wcschr
-#undef wcsrchr
-#undef swscanf
-#undef wcspbrk
-#undef wcsstr
-#undef wcscmp
-#undef wcsncpy
 #undef iswupper
 #undef iswspace
 #undef towlower
 #undef towupper
-#undef wvsnprintf
 
 #ifdef HOST_AMD64
 #undef _mm_getcsr
@@ -586,6 +633,7 @@ function_name() to call the system's implementation
 #include <unistd.h>
 #include <fcntl.h>
 #include <glob.h>
+#include <errno.h>
 
 #ifdef __APPLE__
 
@@ -650,9 +698,6 @@ typedef enum _TimeConversionConstants
 
 #ifdef __cplusplus
 }
-
-bool
-ReadMemoryValueFromFile(const char* filename, uint64_t* val);
 
 #ifdef __APPLE__
 bool
@@ -729,5 +774,7 @@ const char StackOverflowMessage[] = "Stack overflow.\n";
 #else
 #define FALLTHROUGH
 #endif
+
+DWORD PALAPI GetCurrentSessionId();
 
 #endif /* _PAL_INTERNAL_H_ */

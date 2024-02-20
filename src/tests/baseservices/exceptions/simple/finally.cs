@@ -2,10 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 using System;
 using System.Threading;
+using Xunit;
 
 public class Finally
 {
-	public static int Main()
+	[Fact]
+	public static int TestEntryPoint()
 	{
 		Finally f = new Finally();
 
@@ -29,7 +31,7 @@ public class Finally
 	{
 		bool retVal = true;
 
-		TestLibrary.TestFramework.LogInformation("[Postive]");
+		TestLibrary.TestFramework.LogInformation("[Positive]");
 		retVal = PosTest1() && retVal;
 		retVal = PosTest2() && retVal;
 		retVal = PosTest3() && retVal;

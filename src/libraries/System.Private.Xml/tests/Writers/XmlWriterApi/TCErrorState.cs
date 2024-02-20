@@ -2,10 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using OLEDB.Test.ModuleCore;
-using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     //[TestCase(Name = "Invalid State Combinations", Pri = 1)]
     public class TCErrorState
@@ -31,7 +30,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // EntityRef after Document should error - EPILOG
@@ -56,7 +55,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // CharEntity after Document should error - PROLOG
@@ -79,7 +78,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // CharEntity after Document should error - EPILOG
@@ -104,7 +103,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // SurrogateCharEntity after Document should error - PROLOG
@@ -127,7 +126,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // SurrogateCharEntity after Document should error - EPILOG
@@ -152,7 +151,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // Attribute after Document should error - PROLOG
@@ -175,7 +174,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // Attribute after Document should error - EPILOG
@@ -200,7 +199,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // CDATA after Document should error - PROLOG
@@ -248,7 +247,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // Element followed by Document should error
@@ -271,7 +270,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
 
         // Element followed by DocType should error
@@ -294,7 +293,7 @@ namespace System.Xml.Tests
                 }
             }
             CError.WriteLine("Did not throw exception");
-            Assert.True(false);
+            Assert.Fail();
         }
     }
 }

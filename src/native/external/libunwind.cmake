@@ -1,3 +1,5 @@
+# IMPORTANT: do not use add_compile_options(), add_definitions() or similar functions here since it will leak to the including projects
+
 include_directories(${CMAKE_CURRENT_LIST_DIR}/libunwind/include/tdep)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/libunwind/include)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/libunwind/src)
@@ -37,12 +39,13 @@ set(libunwind_la_SOURCES_generic
     # the source is excluded here to prevent name clash
     #mi/Gget_accessors.c
     mi/Gget_proc_info_by_ip.c mi/Gget_proc_name.c
-    mi/Gget_proc_info_in_range.c
+    dwarf/Gget_proc_info_in_range.c
     mi/Gput_dynamic_unwind_info.c mi/Gdestroy_addr_space.c
     mi/Gget_reg.c mi/Gset_reg.c
     mi/Gget_fpreg.c mi/Gset_fpreg.c
     mi/Gset_caching_policy.c
     mi/Gset_cache_size.c
+    mi/Gaddress_validator.c
 )
 
 set(libunwind_la_SOURCES_os_linux
@@ -79,6 +82,8 @@ if(CLR_CMAKE_TARGET_LINUX)
     set(libunwind_la_SOURCES_x86_64_os_local    x86_64/Los-linux.c)
     set(libunwind_la_SOURCES_arm_os             arm/Gos-linux.c)
     set(libunwind_la_SOURCES_arm_os_local       arm/Los-linux.c)
+    set(libunwind_la_SOURCES_aarch64_os         aarch64/Gos-linux.c)
+    set(libunwind_la_SOURCES_aarch64_os_local   aarch64/Los-linux.c)
     list(APPEND libunwind_coredump_la_SOURCES   coredump/_UCD_access_reg_linux.c)
 elseif(CLR_CMAKE_TARGET_FREEBSD)
     set(libunwind_la_SOURCES_os                 ${libunwind_la_SOURCES_os_freebsd})
@@ -90,6 +95,8 @@ elseif(CLR_CMAKE_TARGET_FREEBSD)
     set(libunwind_la_SOURCES_x86_64_os_local    x86_64/Los-freebsd.c)
     set(libunwind_la_SOURCES_arm_os             arm/Gos-freebsd.c)
     set(libunwind_la_SOURCES_arm_os_local       arm/Los-freebsd.c)
+    set(libunwind_la_SOURCES_aarch64_os         aarch64/Gos-freebsd.c)
+    set(libunwind_la_SOURCES_aarch64_os_local   aarch64/Los-freebsd.c)
     list(APPEND libunwind_coredump_la_SOURCES   coredump/_UCD_access_reg_freebsd.c)
 elseif(CLR_CMAKE_HOST_SUNOS)
     set(libunwind_la_SOURCES_os                 ${libunwind_la_SOURCES_os_solaris})
@@ -117,7 +124,7 @@ set(libunwind_la_SOURCES_local_nounwind
     mi/Ldyn-extract.c mi/Lfind_dynamic_proc_info.c
     mi/Lget_accessors.c
     mi/Lget_proc_info_by_ip.c mi/Lget_proc_name.c
-    mi/Lget_proc_info_in_range.c
+    dwarf/Lget_proc_info_in_range.c
     mi/Lput_dynamic_unwind_info.c mi/Ldestroy_addr_space.c
     mi/Lget_reg.c   mi/Lset_reg.c
     mi/Lget_fpreg.c mi/Lset_fpreg.c
@@ -184,6 +191,34 @@ set(libunwind_loongarch_la_SOURCES_loongarch
 	loongarch64/Gis_signal_frame.c loongarch64/Gregs.c loongarch64/Gresume.c loongarch64/Gstep.c
 )
 
+# The list of files that go into libunwind and libunwind-riscv:
+set(libunwind_la_SOURCES_riscv_common
+    ${libunwind_la_SOURCES_common}
+    riscv/is_fpreg.c
+    riscv/regname.c
+)
+
+# The list of files that go into libunwind:
+set(libunwind_la_SOURCES_riscv
+    ${libunwind_la_SOURCES_riscv_common}
+    ${libunwind_la_SOURCES_local}
+    riscv/Lget_proc_info.c  riscv/Linit.c  riscv/Lis_signal_frame.c
+    riscv/Lstep.c
+    riscv/getcontext.S
+    riscv/setcontext.S
+    riscv/Lget_save_loc.c
+    riscv/Linit_local.c   riscv/Lregs.c
+    riscv/Lcreate_addr_space.c  riscv/Lglobal.c  riscv/Linit_remote.c  riscv/Lresume.c
+)
+
+set(libunwind_riscv_la_SOURCES_riscv
+    ${libunwind_la_SOURCES_riscv_common}
+    ${libunwind_la_SOURCES_generic}
+	riscv/Gcreate_addr_space.c riscv/Gget_proc_info.c riscv/Gget_save_loc.c
+	riscv/Gglobal.c riscv/Ginit.c riscv/Ginit_local.c riscv/Ginit_remote.c
+	riscv/Gis_signal_frame.c riscv/Gregs.c riscv/Gresume.c riscv/Gstep.c
+)
+
 # The list of files that go into libunwind and libunwind-aarch64:
 set(libunwind_la_SOURCES_aarch64_common
     ${libunwind_la_SOURCES_common}
@@ -194,6 +229,7 @@ set(libunwind_la_SOURCES_aarch64_common
 # The list of files that go into libunwind:
 set(libunwind_la_SOURCES_aarch64
     ${libunwind_la_SOURCES_aarch64_common}
+    ${libunwind_la_SOURCES_aarch64_os_local}
     ${libunwind_la_SOURCES_local}
     aarch64/Lapply_reg_state.c aarch64/Lreg_states_iterate.c
     aarch64/Lcreate_addr_space.c aarch64/Lget_proc_info.c
@@ -204,8 +240,10 @@ set(libunwind_la_SOURCES_aarch64
     aarch64/getcontext.S
 )
 
+# The list of files that go into libunwind-aarch64:
 set(libunwind_aarch64_la_SOURCES_aarch64
     ${libunwind_la_SOURCES_aarch64_common}
+    ${libunwind_la_SOURCES_aarch64_os}
     ${libunwind_la_SOURCES_generic}
     aarch64/Gapply_reg_state.c aarch64/Greg_states_iterate.c
     aarch64/Gcreate_addr_space.c aarch64/Gget_proc_info.c
@@ -345,10 +383,9 @@ set(libunwind_la_SOURCES_ppc64le_common
 set(libunwind_la_SOURCES_ppc64le
     ${libunwind_la_SOURCES_ppc64le_common}
     ${libunwind_la_SOURCES_local}
-    ppc64/setcontext.S 
     ppc64/Lapply_reg_state.c ppc64/Lreg_states_iterate.c
     ppc64/Lcreate_addr_space.c ppc/Lget_save_loc.c ppc64/Lglobal.c
-    ppc64/Linit.c ppc/Linit_local.c 
+    ppc64/Linit.c ppc/Linit_local.c
     ppc64/Lregs.c ppc64/Lresume.c
     ppc/Lis_signal_frame.c ppc64/Lstep.c
 )
@@ -403,6 +440,11 @@ if(CLR_CMAKE_HOST_UNIX)
         set(libunwind_remote_la_SOURCES             ${libunwind_loongarch_la_SOURCES_loongarch})
         set(libunwind_elf_la_SOURCES                ${libunwind_elf64_la_SOURCES})
         list(APPEND libunwind_setjmp_la_SOURCES     loongarch64/siglongjmp.S)
+    elseif(CLR_CMAKE_HOST_ARCH_RISCV64)
+        set(libunwind_la_SOURCES                    ${libunwind_la_SOURCES_riscv})
+        set(libunwind_remote_la_SOURCES             ${libunwind_riscv_la_SOURCES_riscv})
+        set(libunwind_elf_la_SOURCES                ${libunwind_elf64_la_SOURCES})
+        list(APPEND libunwind_setjmp_la_SOURCES     riscv/siglongjmp.S)
     endif()
 
     if(CLR_CMAKE_HOST_OSX)
@@ -459,8 +501,6 @@ else(CLR_CMAKE_HOST_UNIX)
         set(libunwind_elf_la_SOURCES                ${libunwind_elf64_la_SOURCES})
     endif()
 
-    set_source_files_properties(${CLR_DIR}/pal/src/exception/remote-unwind.cpp PROPERTIES COMPILE_FLAGS /TP INCLUDE_DIRECTORIES ${CLR_DIR}/inc)
-
     set(LIBUNWIND_SOURCES_BASE
       remote/win/missing-functions.c
       # ${libunwind_la_SOURCES}  Local...
@@ -473,9 +513,5 @@ else(CLR_CMAKE_HOST_UNIX)
       ${libunwind_elf_la_SOURCES}
     )
 endif(CLR_CMAKE_HOST_UNIX)
-
-if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-Wno-implicit-int-conversion>)
-endif()
 
 addprefix(LIBUNWIND_SOURCES "${CMAKE_CURRENT_LIST_DIR}/libunwind/src" "${LIBUNWIND_SOURCES_BASE}")

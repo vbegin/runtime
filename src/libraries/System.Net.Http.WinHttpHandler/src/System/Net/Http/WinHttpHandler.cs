@@ -1136,7 +1136,7 @@ namespace System.Net.Http
             if (WinHttpTrailersHelper.OsSupportsTrailers)
             {
                 // Setting WINHTTP_OPTION_REQUIRE_STREAM_END to TRUE is needed for WinHttp to read trailing headers
-                // in case the response has Content-Lenght defined.
+                // in case the response has Content-Length defined.
                 // According to the WinHttp team, the feature-detection logic in WinHttpTrailersHelper.OsSupportsTrailers
                 // should also indicate the support of WINHTTP_OPTION_REQUIRE_STREAM_END.
                 // WINHTTP_OPTION_REQUIRE_STREAM_END doesn't have effect on HTTP 1.1 requests, therefore it's safe to set it on
@@ -1260,7 +1260,7 @@ namespace System.Net.Http
             SetRequestHandleRedirectionOptions(state.RequestHandle);
             SetRequestHandleCookieOptions(state.RequestHandle);
             SetRequestHandleTlsOptions(state.RequestHandle);
-            SetRequestHandleClientCertificateOptions(state.RequestHandle, state.RequestMessage.RequestUri, state.RequestMessage.Version);
+            SetRequestHandleClientCertificateOptions(state.RequestHandle, state.RequestMessage.RequestUri);
             SetRequestHandleCredentialsOptions(state);
             SetRequestHandleBufferingOptions(state.RequestHandle);
             SetRequestHandleHttp2Options(state.RequestHandle, state.RequestMessage.Version);
@@ -1422,7 +1422,7 @@ namespace System.Net.Http
             }
         }
 
-        private void SetRequestHandleClientCertificateOptions(SafeWinHttpHandle requestHandle, Uri requestUri, Version requestVersion)
+        private void SetRequestHandleClientCertificateOptions(SafeWinHttpHandle requestHandle, Uri requestUri)
         {
             if (requestUri.Scheme != UriScheme.Https)
             {

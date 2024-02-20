@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Cache;
 using System.Net.Http;
+using System.Net.Http.Functional.Tests;
 using System.Net.Sockets;
 using System.Net.Test.Common;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -24,14 +25,12 @@ namespace System.Net.Tests
 {
     using Configuration = System.Net.Test.Common.Configuration;
 
-    [ActiveIssue("https://github.com/dotnet/runtime/issues/57506", typeof(PlatformDetection), nameof(PlatformDetection.IsMonoRuntime), nameof(PlatformDetection.IsMariner))]
     public sealed class HttpWebRequestTest_Async : HttpWebRequestTest
     {
         public HttpWebRequestTest_Async(ITestOutputHelper output) : base(output) { }
         protected override Task<WebResponse> GetResponseAsync(HttpWebRequest request) => request.GetResponseAsync();
     }
 
-    [ActiveIssue("https://github.com/dotnet/runtime/issues/57506", typeof(PlatformDetection), nameof(PlatformDetection.IsMonoRuntime), nameof(PlatformDetection.IsMariner))]
     public sealed class HttpWebRequestTest_Sync : HttpWebRequestTest
     {
         public HttpWebRequestTest_Sync(ITestOutputHelper output) : base(output) { }
@@ -326,7 +325,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task ContentLength_Get_ExpectSameAsGetResponseStream(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -441,11 +439,11 @@ namespace System.Net.Tests
         }
 
         [Theory, MemberData(nameof(EchoServers))]
-        public void MaximumAutomaticRedirections_SetZeroOrNegative_ThrowsArgumentException(Uri remoteServer)
+        public void MaximumAutomaticRedirections_SetZeroOrNegative_ThrowsArgumentOutOfRangeException(Uri remoteServer)
         {
             HttpWebRequest request = WebRequest.CreateHttp(remoteServer);
-            AssertExtensions.Throws<ArgumentException>("value", () => request.MaximumAutomaticRedirections = 0);
-            AssertExtensions.Throws<ArgumentException>("value", () => request.MaximumAutomaticRedirections = -1);
+            AssertExtensions.Throws<ArgumentOutOfRangeException>("value", () => request.MaximumAutomaticRedirections = 0);
+            AssertExtensions.Throws<ArgumentOutOfRangeException>("value", () => request.MaximumAutomaticRedirections = -1);
         }
 
         [Theory, MemberData(nameof(EchoServers))]
@@ -1367,7 +1365,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task GetResponseAsync_GetResponseStream_ContainsHost(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1414,7 +1411,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task GetResponseAsync_PostRequestStream_ContainsData(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1460,7 +1456,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         [ActiveIssue("https://github.com/dotnet/runtime/issues/56798", TestPlatforms.tvOS)]
         public async Task GetResponseAsync_UseDefaultCredentials_ExpectSuccess(bool useSsl)
         {
@@ -1501,7 +1496,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         [ActiveIssue("https://github.com/dotnet/runtime/issues/56798", TestPlatforms.tvOS)]
         public async Task HaveResponse_GetResponseAsync_ExpectTrue(bool useSsl)
         {
@@ -1521,7 +1515,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task Headers_GetResponseHeaders_ContainsExpectedValue(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1563,7 +1556,7 @@ namespace System.Net.Tests
         public void Method_SetInvalidString_ThrowsArgumentException(Uri remoteServer)
         {
             HttpWebRequest request = WebRequest.CreateHttp(remoteServer);
-            AssertExtensions.Throws<ArgumentException>("value", () => request.Method = null);
+            AssertExtensions.Throws<ArgumentNullException>("value", () => request.Method = null);
             AssertExtensions.Throws<ArgumentException>("value", () => request.Method = string.Empty);
             AssertExtensions.Throws<ArgumentException>("value", () => request.Method = "Method(2");
         }
@@ -1621,7 +1614,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task ResponseUri_GetResponseAsync_ExpectSameUri(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1645,7 +1637,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task SimpleScenario_UseGETVerb_Success(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1662,7 +1653,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task SimpleScenario_UsePOSTVerb_Success(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1685,7 +1675,6 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/37087", TestPlatforms.Android)]
         public async Task ContentType_AddHeaderWithNoContent_SendRequest_HeaderGetsSent(bool useSsl)
         {
             const string ContentType = "text/plain; charset=utf-8";
@@ -1990,12 +1979,12 @@ namespace System.Net.Tests
         }
 
         [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
-        [InlineData(RequestCacheLevel.NoCacheNoStore, new string[] { "Pragma: no-cache", "Cache-Control: no-store, no-cache" })]
-        [InlineData(RequestCacheLevel.Reload, new string[] { "Pragma: no-cache", "Cache-Control: no-cache" })]
+        [InlineData(RequestCacheLevel.NoCacheNoStore, "Cache-Control: no-store, no-cache")]
+        [InlineData(RequestCacheLevel.Reload, "Cache-Control: no-cache")]
         public void SendHttpGetRequest_WithGlobalCachePolicy_AddCacheHeaders(
-            RequestCacheLevel requestCacheLevel, string[] expectedHeaders)
+            RequestCacheLevel requestCacheLevel, string expectedHeader)
         {
-            RemoteExecutor.Invoke(async (async, reqCacheLevel, eh0, eh1) =>
+            RemoteExecutor.Invoke(async (async, reqCacheLevel, eh) =>
             {
                 await LoopbackServer.CreateServerAsync(async (server, uri) =>
                 {
@@ -2006,8 +1995,8 @@ namespace System.Net.Tests
                     await server.AcceptConnectionAsync(async connection =>
                     {
                         List<string> headers = await connection.ReadRequestHeaderAndSendResponseAsync();
-                        Assert.Contains(eh0, headers);
-                        Assert.Contains(eh1, headers);
+                        Assert.Contains("Pragma: no-cache", headers);
+                        Assert.Contains(eh, headers);
                     });
 
                     using (var response = (HttpWebResponse)await getResponse)
@@ -2015,7 +2004,7 @@ namespace System.Net.Tests
                         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                     }
                 });
-            }, (this is HttpWebRequestTest_Async).ToString(), requestCacheLevel.ToString(), expectedHeaders[0], expectedHeaders[1]).Dispose();
+            }, (this is HttpWebRequestTest_Async).ToString(), requestCacheLevel.ToString(), expectedHeader).Dispose();
         }
 
         [Theory]
@@ -2086,6 +2075,96 @@ namespace System.Net.Tests
                     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                 }
             });
+        }
+
+        [Fact]
+        public async Task SendHttpPostRequest_WithContinueTimeoutAndBody_BodyIsDelayed()
+        {
+            await LoopbackServer.CreateClientAndServerAsync(
+                async (uri) =>
+                {
+                    HttpWebRequest request = WebRequest.CreateHttp(uri);
+                    request.Method = "POST";
+                    request.ServicePoint.Expect100Continue = true;
+                    request.ContinueTimeout = 30000;
+                    Stream requestStream = await request.GetRequestStreamAsync();
+                    requestStream.Write("aaaa\r\n\r\n"u8);
+                    await request.GetResponseAsync();
+                },
+                async (server) =>
+                {
+                    await server.AcceptConnectionAsync(async (client) => 
+                    {
+                        await client.ReadRequestHeaderAsync();
+                        // This should time out, because we're expecting the body itself but we'll get it after 30 sec.
+                        await Assert.ThrowsAsync<TimeoutException>(() => client.ReadLineAsync().WaitAsync(TimeSpan.FromMilliseconds(100)));
+                        await client.SendResponseAsync();
+                    });
+                }
+            );
+        }
+
+        [Theory]
+        [InlineData(true, 1)]
+        [InlineData(false, 30000)]
+        public async Task SendHttpPostRequest_WithContinueTimeoutAndBody_Success(bool expect100Continue, int continueTimeout)
+        {
+            await LoopbackServer.CreateClientAndServerAsync(
+                async (uri) =>
+                {
+                    HttpWebRequest request = WebRequest.CreateHttp(uri);
+                    request.Method = "POST";
+                    request.ServicePoint.Expect100Continue = expect100Continue;
+                    request.ContinueTimeout = continueTimeout;
+                    Stream requestStream = await request.GetRequestStreamAsync();
+                    requestStream.Write("aaaa\r\n\r\n"u8);
+                    await request.GetResponseAsync();
+                },
+                async (server) =>
+                {
+                    await server.AcceptConnectionAsync(async (client) => 
+                    {
+                        await client.ReadRequestHeaderAsync();
+                        // This should not time out, because we're expecting the body itself and we should get it after 1 sec.
+                        string data = await client.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                        Assert.StartsWith("aaaa", data);
+                        await client.SendResponseAsync();
+                    });
+                });
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task SendHttpPostRequest_When100ContinueSet_ReceivedByServer(bool expect100Continue)
+        {
+            await LoopbackServer.CreateClientAndServerAsync(
+                async (uri) =>
+                {
+                    HttpWebRequest request = WebRequest.CreateHttp(uri);
+                    request.Method = "POST";
+                    request.ServicePoint.Expect100Continue = expect100Continue;
+                    await request.GetResponseAsync();
+                },
+                async (server) =>
+                {
+                    await server.AcceptConnectionAsync(
+                        async (client) =>
+                        {
+                            List<string> headers = await client.ReadRequestHeaderAsync();
+                            if (expect100Continue)
+                            {
+                                Assert.Contains("Expect: 100-continue", headers);
+                            }
+                            else
+                            {
+                                Assert.DoesNotContain("Expect: 100-continue", headers);
+                            }
+                            await client.SendResponseAsync();
+                        }
+                    );
+                }
+            );
         }
 
         private void RequestStreamCallback(IAsyncResult asynchronousResult)

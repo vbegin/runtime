@@ -1,13 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using OLEDB.Test.ModuleCore;
 using System.IO;
 using System.Text;
+using OLEDB.Test.ModuleCore;
 using XmlCoreTest.Common;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlWriterApiTests
 {
     //[TestCase(Name = "XmlWriterSettings: NamespaceHandling")]
     public partial class TCNamespaceHandling
@@ -431,7 +431,7 @@ namespace System.Xml.Tests
                 }
                 catch (XmlException e) { CError.WriteLine(e); return; }
             }
-            Assert.True(false);
+            Assert.Fail();
         }
 
         [Theory]

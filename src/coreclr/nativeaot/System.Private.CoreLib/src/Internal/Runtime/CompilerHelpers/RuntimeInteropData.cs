@@ -4,10 +4,11 @@
 
 using System;
 using System.Runtime;
+using System.Runtime.InteropServices;
+
+using Internal.NativeFormat;
 using Internal.Runtime.Augments;
 using Internal.Runtime.TypeLoader;
-using Internal.NativeFormat;
-using System.Runtime.InteropServices;
 
 namespace Internal.Runtime.CompilerHelpers
 {
@@ -20,31 +21,43 @@ namespace Internal.Runtime.CompilerHelpers
                 return offset;
             }
 
+            Type structureType = Type.GetTypeFromHandle(structureTypeHandle)!;
+
             // if we can find the struct but couldn't find its field, throw Argument Exception
             if (structExists)
             {
-                throw new ArgumentException(SR.Format(SR.Argument_OffsetOfFieldNotFound, RuntimeAugments.GetLastResortString(structureTypeHandle)), nameof(fieldName));
+                throw new ArgumentException(SR.Format(SR.Argument_OffsetOfFieldNotFound, structureType), nameof(fieldName));
             }
 
-            throw new MissingInteropDataException(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle));
+            throw new NotSupportedException(SR.Format(SR.StructMarshalling_MissingInteropData, structureType));
         }
 
-        public static int GetStructUnsafeStructSize(RuntimeTypeHandle structureTypeHandle)
+        public static unsafe int GetStructUnsafeStructSize(RuntimeTypeHandle structureTypeHandle)
         {
             if (TryGetStructUnsafeStructSize(structureTypeHandle, out int size))
             {
                 return size;
             }
 
+            MethodTable* structureMT = structureTypeHandle.ToMethodTable();
+
             // IsBlittable() checks whether the type contains GC references. It is approximate check with false positives.
             // This fallback path will return incorrect answer for types that do not contain GC references, but that are
             // not actually blittable; e.g. for types with bool fields.
-            if (structureTypeHandle.IsBlittable() && structureTypeHandle.IsValueType())
+            if (structureTypeHandle.IsBlittable() && structureMT->IsValueType)
             {
-                return structureTypeHandle.GetValueTypeSize();
+                return (int)structureMT->ValueTypeSize;
             }
 
-            throw new MissingInteropDataException(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle));
+            // If the type is an interface or a generic type, the reason is likely that.
+            Type structureType = Type.GetTypeFromHandle(structureTypeHandle)!;
+            if (structureMT->IsInterface || structureMT->IsGeneric)
+            {
+                throw new ArgumentException(SR.Format(SR.Arg_CannotMarshal, structureType));
+            }
+
+            // Otherwise assume we miss interop data for the type.
+            throw new NotSupportedException(SR.Format(SR.StructMarshalling_MissingInteropData, structureType));
         }
 
         public static IntPtr GetStructUnmarshalStub(RuntimeTypeHandle structureTypeHandle)
@@ -54,7 +67,7 @@ namespace Internal.Runtime.CompilerHelpers
                 return stub;
             }
 
-            throw new MissingInteropDataException(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle));
+            throw new NotSupportedException(SR.Format(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle)));
         }
 
         public static IntPtr GetStructMarshalStub(RuntimeTypeHandle structureTypeHandle)
@@ -64,7 +77,7 @@ namespace Internal.Runtime.CompilerHelpers
                 return stub;
             }
 
-            throw new MissingInteropDataException(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle));
+            throw new NotSupportedException(SR.Format(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle)));
         }
 
         public static IntPtr GetDestroyStructureStub(RuntimeTypeHandle structureTypeHandle, out bool hasInvalidLayout)
@@ -74,7 +87,7 @@ namespace Internal.Runtime.CompilerHelpers
                 return stub;
             }
 
-            throw new MissingInteropDataException(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle));
+            throw new NotSupportedException(SR.Format(SR.StructMarshalling_MissingInteropData, Type.GetTypeFromHandle(structureTypeHandle)));
         }
 
 
@@ -82,7 +95,7 @@ namespace Internal.Runtime.CompilerHelpers
         {
             GetMarshallersForDelegate(delegateTypeHandle, out _, out _, out IntPtr delegateCreationStub);
             if (delegateCreationStub == IntPtr.Zero)
-                throw new MissingInteropDataException(SR.DelegateMarshalling_MissingInteropData, Type.GetTypeFromHandle(delegateTypeHandle));
+                throw new NotSupportedException(SR.Format(SR.DelegateMarshalling_MissingInteropData, Type.GetTypeFromHandle(delegateTypeHandle)));
             return delegateCreationStub;
         }
 
@@ -91,7 +104,7 @@ namespace Internal.Runtime.CompilerHelpers
             GetMarshallersForDelegate(delegateTypeHandle, out IntPtr openStub, out IntPtr closedStub, out _);
             IntPtr pStub = openStaticDelegate ? openStub : closedStub;
             if (pStub == IntPtr.Zero)
-                throw new MissingInteropDataException(SR.DelegateMarshalling_MissingInteropData, Type.GetTypeFromHandle(delegateTypeHandle));
+                throw new NotSupportedException(SR.Format(SR.DelegateMarshalling_MissingInteropData, Type.GetTypeFromHandle(delegateTypeHandle)));
             return pStub;
         }
 

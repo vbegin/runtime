@@ -153,6 +153,7 @@ public:
     HRESULT GetReJitInfo(VMPTR_Module vmModule, mdMethodDef methodTk, OUT VMPTR_ReJitInfo* pReJitInfo);
     HRESULT GetActiveRejitILCodeVersionNode(VMPTR_Module vmModule, mdMethodDef methodTk, OUT VMPTR_ILCodeVersionNode* pVmILCodeVersionNode);
     HRESULT GetReJitInfo(VMPTR_MethodDesc vmMethod, CORDB_ADDRESS codeStartAddress, OUT VMPTR_ReJitInfo* pReJitInfo);
+    HRESULT AreOptimizationsDisabled(VMPTR_Module vmModule, mdMethodDef methodTk, OUT BOOL* pOptimizationsDisabled);
     HRESULT GetNativeCodeVersionNode(VMPTR_MethodDesc vmMethod, CORDB_ADDRESS codeStartAddress, OUT VMPTR_NativeCodeVersionNode* pVmNativeCodeVersionNode);
     HRESULT GetSharedReJitInfo(VMPTR_ReJitInfo vmReJitInfo, VMPTR_SharedReJitInfo* pSharedReJitInfo);
     HRESULT GetILCodeVersionNode(VMPTR_NativeCodeVersionNode vmNativeCodeVersionNode, VMPTR_ILCodeVersionNode* pVmILCodeVersionNode);
@@ -414,7 +415,7 @@ private:
     // Returns:
     //   S_OK on success.
     //   If it's a jitted method, error codes equivalent to GetMethodDescPtrFromIp
-    //   E_INVALIDARG if a non-jitted metod can't be located in the stubs.
+    //   E_INVALIDARG if a non-jitted method can't be located in the stubs.
     HRESULT GetMethodDescPtrFromIpEx(
         TADDR funcIp,
         OUT VMPTR_MethodDesc *ppMD);
@@ -1023,7 +1024,7 @@ protected:
     // if the specified module is a WinRT module then isWinRT will equal TRUE
     HRESULT IsWinRTModule(VMPTR_Module vmModule, BOOL& isWinRT);
 
-    // Determines the app domain id for the object refered to by a given VMPTR_OBJECTHANDLE
+    // Determines the app domain id for the object referred to by a given VMPTR_OBJECTHANDLE
     ULONG GetAppDomainIdFromVmObjectHandle(VMPTR_OBJECTHANDLE vmHandle);
 
 private:
@@ -1176,7 +1177,7 @@ protected:
 class DacRefWalker
 {
 public:
-    DacRefWalker(ClrDataAccess *dac, BOOL walkStacks, BOOL walkFQ, UINT32 handleMask);
+    DacRefWalker(ClrDataAccess *dac, BOOL walkStacks, BOOL walkFQ, UINT32 handleMask, BOOL resolvePointers);
     ~DacRefWalker();
 
     HRESULT Init();
@@ -1194,6 +1195,7 @@ private:
 
     // Stacks
     DacStackReferenceWalker *mStackWalker;
+    BOOL mResolvePointers;
 
     // Handles
     DacHandleWalker *mHandleWalker;

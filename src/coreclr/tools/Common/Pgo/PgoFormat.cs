@@ -5,8 +5,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
-using ILCompiler;
 
 namespace Internal.Pgo
 {
@@ -50,6 +48,11 @@ namespace Internal.Pgo
         EdgeLongCount = (DescriptorMin * 6) | EightByte, // edge counter using unsigned 8 byte int
         GetLikelyClass = (DescriptorMin * 7) | TypeHandle, // Compressed get likely class data
         GetLikelyMethod = (DescriptorMin * 7) | MethodHandle, // Compressed get likely method data
+
+        // Same as type/method histograms, but for generic integer values
+        ValueHistogramIntCount = (DescriptorMin * 8) | FourByte | AlignPointer,
+        ValueHistogramLongCount = (DescriptorMin * 8) | EightByte,
+        ValueHistogram = (DescriptorMin * 9) | EightByte,
     }
 
     public interface IPgoSchemaDataLoader<TType, TMethod>
@@ -113,8 +116,8 @@ namespace Internal.Pgo
 
         public class PgoEncodedCompressedIntParser : IEnumerable<long>, IEnumerator<long>
         {
-            long _current;
-            byte[] _bytes;
+            private long _current;
+            private byte[] _bytes;
 
             public PgoEncodedCompressedIntParser(byte[] bytes, int startOffset)
             {
@@ -319,7 +322,7 @@ namespace Internal.Pgo
                     else
                         curSchema.ILOffset = checked((int)value);
 
-                    processingState = processingState & ~InstrumentationDataProcessingState.ILOffset;
+                    processingState &= ~InstrumentationDataProcessingState.ILOffset;
                 }
                 else if ((processingState & InstrumentationDataProcessingState.Type) == InstrumentationDataProcessingState.Type)
                 {
@@ -328,7 +331,7 @@ namespace Internal.Pgo
                     else
                         curSchema.InstrumentationKind = (PgoInstrumentationKind)value;
 
-                    processingState = processingState & ~InstrumentationDataProcessingState.Type;
+                    processingState &= ~InstrumentationDataProcessingState.Type;
                 }
                 else if ((processingState & InstrumentationDataProcessingState.Count) == InstrumentationDataProcessingState.Count)
                 {
@@ -336,7 +339,7 @@ namespace Internal.Pgo
                         curSchema.Count = checked((int)(value + (long)curSchema.Count));
                     else
                         curSchema.Count = checked((int)value);
-                    processingState = processingState & ~InstrumentationDataProcessingState.Count;
+                    processingState &= ~InstrumentationDataProcessingState.Count;
                 }
                 else if ((processingState & InstrumentationDataProcessingState.Other) == InstrumentationDataProcessingState.Other)
                 {
@@ -344,7 +347,7 @@ namespace Internal.Pgo
                         curSchema.Other = checked((int)(value + (long)curSchema.Other));
                     else
                         curSchema.Other = checked((int)value);
-                    processingState = processingState & ~InstrumentationDataProcessingState.Other;
+                    processingState &= ~InstrumentationDataProcessingState.Other;
                 }
 
                 if (processingState == InstrumentationDataProcessingState.Done)
@@ -412,13 +415,13 @@ namespace Internal.Pgo
                 if (!emitAllElementsUnconditionally)
                 {
                     if (ilOffsetDiff != 0)
-                        modifyMask = modifyMask | InstrumentationDataProcessingState.ILOffset;
+                        modifyMask |= InstrumentationDataProcessingState.ILOffset;
                     if (TypeDiff != 0)
-                        modifyMask = modifyMask | InstrumentationDataProcessingState.Type;
+                        modifyMask |= InstrumentationDataProcessingState.Type;
                     if (CountDiff != 0)
-                        modifyMask = modifyMask | InstrumentationDataProcessingState.Count;
+                        modifyMask |= InstrumentationDataProcessingState.Count;
                     if (OtherDiff != 0)
-                        modifyMask = modifyMask | InstrumentationDataProcessingState.Other;
+                        modifyMask |= InstrumentationDataProcessingState.Other;
                 }
                 else
                 {
@@ -511,7 +514,7 @@ namespace Internal.Pgo
         }
 
 
-        private class PgoSchemaMergeComparer : IComparer<PgoSchemaElem>, IEqualityComparer<PgoSchemaElem>
+        private sealed class PgoSchemaMergeComparer : IComparer<PgoSchemaElem>, IEqualityComparer<PgoSchemaElem>
         {
             public static PgoSchemaMergeComparer Singleton = new PgoSchemaMergeComparer();
 
@@ -563,7 +566,7 @@ namespace Internal.Pgo
 
                     if (!foundNumRuns)
                     {
-                        PgoSchemaElem oneRunSchema = new PgoSchemaElem();
+                        PgoSchemaElem oneRunSchema = default(PgoSchemaElem);
                         oneRunSchema.InstrumentationKind = PgoInstrumentationKind.NumRuns;
                         oneRunSchema.ILOffset = 0;
                         oneRunSchema.Other = 1;
@@ -578,7 +581,7 @@ namespace Internal.Pgo
                 return result;
             }
 
-            void MergeInSchemaElem(Dictionary<PgoSchemaElem, PgoSchemaElem> dataMerger, PgoSchemaElem schema)
+            static void MergeInSchemaElem(Dictionary<PgoSchemaElem, PgoSchemaElem> dataMerger, PgoSchemaElem schema)
             {
                 if (dataMerger.TryGetValue(schema, out var existingSchemaItem))
                 {
@@ -593,6 +596,8 @@ namespace Internal.Pgo
                         case PgoInstrumentationKind.EdgeLongCount:
                         case PgoInstrumentationKind.HandleHistogramIntCount:
                         case PgoInstrumentationKind.HandleHistogramLongCount:
+                        case PgoInstrumentationKind.ValueHistogramIntCount:
+                        case PgoInstrumentationKind.ValueHistogramLongCount:
                             if ((existingSchemaItem.Count != 1) || (schema.Count != 1))
                             {
                                 throw new Exception("Unable to merge pgo data. Invalid format");
@@ -614,6 +619,25 @@ namespace Internal.Pgo
                                 {
                                     newMergedTypeArray[i++] = type;
                                 }
+                                break;
+                            }
+
+                        case PgoInstrumentationKind.ValueHistogram:
+                            {
+                                if (mergedElem.DataObject.GetType() != schema.DataObject.GetType())
+                                {
+                                    throw new Exception($"Unable to merge ValueHistogram {mergedElem.DataObject} " +
+                                        $"with {schema.DataObject}. Are you merging 32bit MIBC with 64bit MIBC?");
+                                }
+
+                                mergedElem.Count = existingSchemaItem.Count + schema.Count;
+                                mergedElem.DataObject = mergedElem.DataObject switch
+                                    {
+                                        // Concat two int[] or long[] arrays
+                                        int[] mergedIntHistogram => (int[])[.. mergedIntHistogram, .. (int[])schema.DataObject],
+                                        long[] mergedLongHistogram => (long[])[.. mergedLongHistogram, .. (long[])schema.DataObject],
+                                        _ => throw new Exception("ValueHistogram is expected to be either int[] or long[]")
+                                    };
                                 break;
                             }
 
@@ -648,7 +672,7 @@ namespace Internal.Pgo
                     }
 
                     Debug.Assert(PgoSchemaMergeComparer.Singleton.Compare(schema, mergedElem) == 0);
-                    Debug.Assert(PgoSchemaMergeComparer.Singleton.Equals(schema, mergedElem) == true);
+                    Debug.Assert(PgoSchemaMergeComparer.Singleton.Equals(schema, mergedElem));
                     dataMerger[mergedElem] = mergedElem;
                 }
                 else

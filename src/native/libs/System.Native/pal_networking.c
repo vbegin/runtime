@@ -659,15 +659,17 @@ static bool IsInBounds(const void* void_baseAddr, size_t len, const void* void_v
     return valueAddr >= baseAddr && (valueAddr + valueSize) <= (baseAddr + len);
 }
 
-int32_t SystemNative_GetIPSocketAddressSizes(int32_t* ipv4SocketAddressSize, int32_t* ipv6SocketAddressSize)
+int32_t SystemNative_GetSocketAddressSizes(int32_t* ipv4SocketAddressSize, int32_t* ipv6SocketAddressSize, int32_t* udsSocketAddressSize, int32_t* maxSocketAddressSize)
 {
-    if (ipv4SocketAddressSize == NULL || ipv6SocketAddressSize == NULL)
+    if (ipv4SocketAddressSize == NULL || ipv6SocketAddressSize == NULL || udsSocketAddressSize == NULL || maxSocketAddressSize == NULL)
     {
         return Error_EFAULT;
     }
 
     *ipv4SocketAddressSize = sizeof(struct sockaddr_in);
     *ipv6SocketAddressSize = sizeof(struct sockaddr_in6);
+    *udsSocketAddressSize = sizeof(struct sockaddr_un);
+    *maxSocketAddressSize = sizeof(struct sockaddr_storage);
     return Error_SUCCESS;
 }
 
@@ -907,7 +909,7 @@ static int8_t IsStreamSocket(int socket)
 
 static void ConvertMessageHeaderToMsghdr(struct msghdr* header, const MessageHeader* messageHeader, int socket)
 {
-    // sendmsg/recvmsg can return EMSGSIZE when msg_iovlen is greather than IOV_MAX.
+    // sendmsg/recvmsg can return EMSGSIZE when msg_iovlen is greater than IOV_MAX.
     // We avoid this for stream sockets by truncating msg_iovlen to IOV_MAX. This is ok since sendmsg is
     // not required to send all data and recvmsg can be called again to receive more.
     int iovlen = (int)messageHeader->IOVectorCount;
@@ -928,7 +930,7 @@ int32_t SystemNative_GetControlMessageBufferSize(int32_t isIPv4, int32_t isIPv6)
 {
     // Note: it is possible that the address family of the socket is neither
     //       AF_INET nor AF_INET6. In this case both inputs will be 0 and
-    //       the controll message buffer size should be zero.
+    //       the control message buffer size should be zero.
     return (isIPv4 != 0 ? CMSG_SPACE(sizeof(struct in_pktinfo)) : 0) + (isIPv6 != 0 ? CMSG_SPACE(sizeof(struct in6_pktinfo)) : 0);
 }
 
@@ -1793,6 +1795,12 @@ static bool TryGetPlatformSocketOption(int32_t socketOptionLevel, int32_t socket
                     return true;
 #endif
 
+#ifdef IP_DONTFRAG
+                case SocketOptionName_SO_IP_DONTFRAGMENT:
+                    *optName = IP_DONTFRAG;
+                    return true;
+#endif
+
 #ifdef IP_ADD_SOURCE_MEMBERSHIP
                 case SocketOptionName_SO_IP_ADD_SOURCE_MEMBERSHIP:
                     *optName = IP_ADD_SOURCE_MEMBERSHIP;
@@ -1846,6 +1854,10 @@ static bool TryGetPlatformSocketOption(int32_t socketOptionLevel, int32_t socket
 
                 case SocketOptionName_SO_IP_MULTICAST_IF:
                     *optName = IPV6_MULTICAST_IF;
+                    return true;
+
+               case SocketOptionName_SO_IP_MULTICAST_LOOP:
+                    *optName = IPV6_MULTICAST_LOOP;
                     return true;
 
                 case SocketOptionName_SO_IP_MULTICAST_TTL:
@@ -3030,51 +3042,6 @@ int32_t SystemNative_PlatformSupportsDualModeIPv4PacketInfo(void)
 #else
     return 0;
 #endif
-}
-
-static char* GetNameFromUid(uid_t uid)
-{
-    size_t bufferLength = 512;
-    while (1)
-    {
-        char *buffer = (char*)malloc(bufferLength);
-        if (buffer == NULL)
-            return NULL;
-
-        struct passwd pw;
-        struct passwd* result;
-        if (getpwuid_r(uid, &pw, buffer, bufferLength, &result) == 0)
-        {
-            if (result == NULL)
-            {
-                errno = ENOENT;
-                free(buffer);
-                return NULL;
-            }
-            else
-            {
-                char* name = strdup(pw.pw_name);
-                free(buffer);
-                return name;
-            }
-        }
-
-        free(buffer);
-        size_t tmpBufferLength;
-        if (errno != ERANGE || !multiply_s(bufferLength, (size_t)2, &tmpBufferLength))
-        {
-            return NULL;
-        }
-        bufferLength = tmpBufferLength;
-    }
-}
-
-char* SystemNative_GetPeerUserName(intptr_t socket)
-{
-    uid_t euid;
-    return SystemNative_GetPeerID(socket, &euid) == 0 ?
-        GetNameFromUid(euid) :
-        NULL;
 }
 
 void SystemNative_GetDomainSocketSizes(int32_t* pathOffset, int32_t* pathSize, int32_t* addressSize)

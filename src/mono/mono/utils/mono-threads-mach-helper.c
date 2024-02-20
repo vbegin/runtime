@@ -59,10 +59,10 @@ mono_dead_letter_dealloc (id self, SEL _cmd)
 {
 	struct objc_super super;
 	super.receiver = self;
-#if !defined(__cplusplus) && !__OBJC2__
-	super.class = nsobject;
-#else
+#if defined(__cplusplus) || defined(HAVE_OBJC_SUPER_SUPER_CLASS)
 	super.super_class = nsobject;
+#else
+	super.class = nsobject;
 #endif
 	void (*objc_msgSendSuper_op)(struct objc_super *, SEL) = (void (*)(struct objc_super *, SEL)) objc_msgSendSuper;
 	objc_msgSendSuper_op (&super, dealloc);
@@ -122,8 +122,13 @@ mono_threads_init_dead_letter (void)
 	setObjectForKey = sel_registerName ("setObject:forKey:");
 	objectForKey = sel_registerName ("objectForKey:");
 
-	// define the dead letter class
-	mono_dead_letter_class = objc_allocateClassPair (nsobject, "MonoDeadLetter", 0);
+	char *class_name = g_strdup_printf ("MonoDeadLetter%p", &"MonoDeadLetter");
+
+	// Define the dead letter class
+	// The class name needs to be unique in the event different runtimes are loaded into the same process.
+	mono_dead_letter_class = objc_allocateClassPair (nsobject, class_name, 0);
+	g_free (class_name);
+
 	class_addMethod (mono_dead_letter_class, dealloc, (IMP)mono_dead_letter_dealloc, "v@:");
 	objc_registerClassPair (mono_dead_letter_class);
 

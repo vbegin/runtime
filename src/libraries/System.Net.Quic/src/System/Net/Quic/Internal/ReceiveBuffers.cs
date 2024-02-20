@@ -28,6 +28,14 @@ internal struct ReceiveBuffers
         }
     }
 
+    public bool HasCapacity()
+    {
+        lock (_syncRoot)
+        {
+            return _buffer.ActiveMemory.Length < MaxBufferedBytes;
+        }
+    }
+
     public int CopyFrom(ReadOnlySpan<QUIC_BUFFER> quicBuffers, int totalLength, bool final)
     {
         lock (_syncRoot)
@@ -58,7 +66,7 @@ internal struct ReceiveBuffers
         }
     }
 
-    public int CopyTo(Memory<byte> buffer, out bool isCompleted, out bool isEmpty)
+    public int CopyTo(Memory<byte> buffer, out bool completed, out bool empty)
     {
         lock (_syncRoot)
         {
@@ -71,8 +79,8 @@ internal struct ReceiveBuffers
                 _buffer.Discard(copied);
             }
 
-            isCompleted = _buffer.IsEmpty && _final;
-            isEmpty = _buffer.IsEmpty;
+            completed = _buffer.IsEmpty && _final;
+            empty = _buffer.IsEmpty;
 
             return copied;
         }

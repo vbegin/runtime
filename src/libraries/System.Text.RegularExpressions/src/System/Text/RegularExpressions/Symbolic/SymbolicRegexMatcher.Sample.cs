@@ -30,6 +30,8 @@ namespace System.Text.RegularExpressions.Symbolic
         [ExcludeFromCodeCoverage(Justification = "Currently only used for testing")]
         public override IEnumerable<string> SampleMatches(int k, int randomseed)
         {
+            var results = new List<string>();
+
             lock (this)
             {
                 // Zero is treated as no seed, instead using a system provided one
@@ -37,11 +39,13 @@ namespace System.Text.RegularExpressions.Symbolic
                 CharSetSolver charSetSolver = _builder._charSetSolver;
 
                 // Create helper BDDs for handling anchors and preferentially generating ASCII inputs
-                BDD asciiWordCharacters = charSetSolver.Or(new BDD[] {
-                charSetSolver.CreateBDDFromRange('A', 'Z'),
-                charSetSolver.CreateBDDFromRange('a', 'z'),
-                charSetSolver.CreateBDDFromChar('_'),
-                charSetSolver.CreateBDDFromRange('0', '9')});
+                BDD asciiWordCharacters = charSetSolver.Or(
+                [
+                    charSetSolver.CreateBDDFromRange('A', 'Z'),
+                    charSetSolver.CreateBDDFromRange('a', 'z'),
+                    charSetSolver.CreateBDDFromChar('_'),
+                    charSetSolver.CreateBDDFromRange('0', '9')
+                ]);
                 // Visible ASCII range for input character generation
                 BDD ascii = charSetSolver.CreateBDDFromRange('\x20', '\x7E');
                 BDD asciiNonWordCharacters = charSetSolver.And(ascii, charSetSolver.Not(asciiWordCharacters));
@@ -67,7 +71,7 @@ namespace System.Text.RegularExpressions.Symbolic
                     NfaMatchingState states = new();
                     // Here one could also consider previous characters for example for \b, \B, and ^ anchors
                     // and initialize inputSoFar accordingly
-                    states.InitializeFrom(this, _initialStates[GetCharKind<FullInputReader>(ReadOnlySpan<char>.Empty, -1)]);
+                    states.InitializeFrom(this, _initialStates[GetCharKind<FullInputReader>([], -1)]);
                     CurrentState statesWrapper = new(states);
 
                     // Used for end suffixes
@@ -79,11 +83,11 @@ namespace System.Text.RegularExpressions.Symbolic
 
                         // Gather the possible endings for satisfying nullability
                         possibleEndings.Clear();
-                        if (SymbolicRegexMatcher<TSet>.NfaStateHandler.CanBeNullable(this, in statesWrapper))
+                        StateFlags flags = SymbolicRegexMatcher<TSet>.NfaStateHandler.GetStateFlags(this, in statesWrapper);
+                        if (flags.CanBeNullable())
                         {
                             // Unconditionally final state or end of the input due to \Z anchor for example
-                            if (SymbolicRegexMatcher<TSet>.NfaStateHandler.IsNullable(this, in statesWrapper) ||
-                                SymbolicRegexMatcher<TSet>.NfaStateHandler.IsNullableFor(this, in statesWrapper, CharKind.BeginningEnd))
+                            if (flags.IsNullable() || SymbolicRegexMatcher<TSet>.NfaStateHandler.IsNullableFor(this, in statesWrapper, CharKind.BeginningEnd))
                             {
                                 possibleEndings.Add("");
                             }
@@ -119,7 +123,7 @@ namespace System.Text.RegularExpressions.Symbolic
                             // Choose to stop here based on a coin-toss
                             if (FlipBiasedCoin(random, SampleMatchesStoppingProbability))
                             {
-                                yield return latestCandidate.ToString();
+                                results.Add(latestCandidate.ToString());
                                 break;
                             }
                         }
@@ -153,12 +157,14 @@ namespace System.Text.RegularExpressions.Symbolic
                             // such as @"no\bway" or due to poor choice of c -- no anchor is enabled -- so this is a deadend.
                             if (latestCandidate != null)
                             {
-                                yield return latestCandidate.ToString();
+                                results.Add(latestCandidate.ToString());
                             }
                             break;
                         }
                     }
                 }
+
+                return results;
             }
 
             static BDD ToBDD(TSet set, ISolver<TSet> solver, CharSetSolver charSetSolver) => solver.ConvertToBDD(set, charSetSolver);
@@ -178,14 +184,7 @@ namespace System.Text.RegularExpressions.Symbolic
 
             static T[] Shuffle<T>(Random random, T[] array)
             {
-                // In-place Fisher-Yates shuffle
-                for (int i = 0; i < array.Length - 1; ++i)
-                {
-                    int j = random.Next(i, array.Length);
-                    var tmp = array[i];
-                    array[i] = array[j];
-                    array[j] = tmp;
-                }
+                random.Shuffle(array);
                 return array;
             }
         }

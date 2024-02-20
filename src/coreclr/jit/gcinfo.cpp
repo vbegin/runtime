@@ -239,24 +239,30 @@ GCInfo::WriteBarrierForm GCInfo::gcIsWriteBarrierCandidate(GenTreeStoreInd* stor
         return WBF_NoBarrier;
     }
 
-    // Ignore any assignments of NULL.
-    if ((store->Data()->GetVN(VNK_Liberal) == ValueNumStore::VNForNull()) || store->Data()->IsIntegralConst(0))
+    // Ignore any assignments of NULL or nongc object
+    GenTree* const data = store->Data()->gtSkipReloadOrCopy();
+    if (data->IsIntegralConst(0) || data->IsIconHandle(GTF_ICON_OBJ_HDL))
     {
         return WBF_NoBarrier;
     }
 
     if ((store->gtFlags & GTF_IND_TGT_NOT_HEAP) != 0)
     {
-        // This indirection is not from to the heap.
-        // This case occurs for stack-allocated objects.
+        // This indirection is known to not store to the heap.
         return WBF_NoBarrier;
+    }
+
+    if ((store->gtFlags & GTF_IND_TGT_HEAP) != 0)
+    {
+        // This indirection is known to store to the heap.
+        return WBF_BarrierUnchecked;
     }
 
     WriteBarrierForm wbf = gcWriteBarrierFormFromTargetAddress(store->Addr());
 
     if (wbf == WBF_BarrierUnknown)
     {
-        wbf = ((store->gtFlags & GTF_IND_TGT_HEAP) != 0) ? WBF_BarrierUnchecked : WBF_BarrierChecked;
+        wbf = WBF_BarrierChecked;
     }
 
     return wbf;
@@ -277,7 +283,13 @@ GCInfo::WriteBarrierForm GCInfo::gcIsWriteBarrierCandidate(GenTreeStoreInd* stor
 //
 GCInfo::WriteBarrierForm GCInfo::gcWriteBarrierFormFromTargetAddress(GenTree* tgtAddr)
 {
-    // We will assume there is no point in trying to deconstruct a TYP_I_IMPL address.
+    if (tgtAddr->OperIs(GT_LCL_ADDR))
+    {
+        // No need for a GC barrier when writing to a local variable.
+        return GCInfo::WBF_NoBarrier;
+    }
+
+    // No point in trying to further deconstruct a TYP_I_IMPL address.
     if (tgtAddr->TypeGet() == TYP_I_IMPL)
     {
         return GCInfo::WBF_BarrierUnknown;
@@ -302,9 +314,10 @@ GCInfo::WriteBarrierForm GCInfo::gcWriteBarrierFormFromTargetAddress(GenTree* tg
                 GenTree*  addOp2     = tgtAddr->AsOp()->gtGetOp2();
                 var_types addOp1Type = addOp1->TypeGet();
                 var_types addOp2Type = addOp2->TypeGet();
+
                 if (addOp1Type == TYP_BYREF || addOp1Type == TYP_REF)
                 {
-                    assert(addOp2Type != TYP_BYREF && addOp2Type != TYP_REF);
+                    assert(((addOp2Type != TYP_BYREF) || (addOp2->OperIs(GT_CNS_INT))) && (addOp2Type != TYP_REF));
                     tgtAddr        = addOp1;
                     simplifiedExpr = true;
                 }
@@ -338,12 +351,6 @@ GCInfo::WriteBarrierForm GCInfo::gcWriteBarrierFormFromTargetAddress(GenTree* tg
                 }
             }
         }
-    }
-
-    if (tgtAddr->IsLocalAddrExpr() != nullptr)
-    {
-        // No need for a GC barrier when writing to a local variable.
-        return GCInfo::WBF_NoBarrier;
     }
 
     if (tgtAddr->TypeGet() == TYP_REF)
@@ -452,11 +459,11 @@ void GCInfo::gcCountForHeader(UNALIGNED unsigned int* pUntrackedCount, UNALIGNED
 
                 if (offs < 0)
                 {
-                    printf("-%02XH", -offs);
+                    printf("-0x%02X", -offs);
                 }
                 else if (offs > 0)
                 {
-                    printf("+%02XH", +offs);
+                    printf("+0x%02X", +offs);
                 }
 
                 printf("]\n");
@@ -491,11 +498,11 @@ void GCInfo::gcCountForHeader(UNALIGNED unsigned int* pUntrackedCount, UNALIGNED
 
             if (offs < 0)
             {
-                printf("-%02XH", -offs);
+                printf("-0x%02X", -offs);
             }
             else if (offs > 0)
             {
-                printf("+%02XH", +offs);
+                printf("+0x%02X", +offs);
             }
 
             printf("]\n");

@@ -1,27 +1,26 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Win32.SafeHandles;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 using System.Security.Claims;
 using System.Text;
 using System.Threading;
-
+using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 using KERB_LOGON_SUBMIT_TYPE = Interop.SspiCli.KERB_LOGON_SUBMIT_TYPE;
 using KERB_S4U_LOGON = Interop.SspiCli.KERB_S4U_LOGON;
 using KerbS4uLogonFlags = Interop.SspiCli.KerbS4uLogonFlags;
-using LUID = Interop.LUID;
 using LSA_STRING = Interop.Advapi32.LSA_STRING;
+using LUID = Interop.LUID;
 using QUOTA_LIMITS = Interop.SspiCli.QUOTA_LIMITS;
 using SECURITY_LOGON_TYPE = Interop.SspiCli.SECURITY_LOGON_TYPE;
 using TOKEN_SOURCE = Interop.SspiCli.TOKEN_SOURCE;
-using System.Runtime.Serialization;
-using System.Threading.Tasks;
 
 namespace System.Security.Principal
 {
@@ -270,7 +269,7 @@ namespace System.Security.Principal
                     IntPtr.Zero,
                     0,
                     out _) &&
-                Marshal.GetLastWin32Error() == Interop.Errors.ERROR_INVALID_HANDLE)
+                Marshal.GetLastPInvokeError() == Interop.Errors.ERROR_INVALID_HANDLE)
             {
                 throw new ArgumentException(SR.Argument_InvalidImpersonationToken);
             }
@@ -320,6 +319,8 @@ namespace System.Security.Principal
             _safeTokenHandle = DuplicateAccessToken(userToken);
         }
 
+        [Obsolete(Obsoletions.LegacyFormatterImplMessage, DiagnosticId = Obsoletions.LegacyFormatterImplDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public WindowsIdentity(SerializationInfo info, StreamingContext context)
         {
             throw new PlatformNotSupportedException();
@@ -875,7 +876,7 @@ namespace System.Security.Principal
         {
             hr = 0;
             if (!Interop.Advapi32.OpenProcessToken(Interop.Kernel32.GetCurrentProcess(), desiredAccess, out SafeAccessTokenHandle safeTokenHandle))
-                hr = GetHRForWin32Error(Marshal.GetLastWin32Error());
+                hr = GetHRForWin32Error(Marshal.GetLastPInvokeError());
             return safeTokenHandle;
         }
 
@@ -915,7 +916,7 @@ namespace System.Security.Principal
                                                               safeLocalAllocHandle,
                                                               0,
                                                               out uint dwLength);
-                int dwErrorCode = Marshal.GetLastWin32Error();
+                int dwErrorCode = Marshal.GetLastPInvokeError();
                 switch (dwErrorCode)
                 {
                     case Interop.Errors.ERROR_BAD_LENGTH: // special case for TokenSessionId. Falling through
@@ -1249,7 +1250,7 @@ namespace System.Security.Principal
 
                 Interop.CLAIM_SECURITY_ATTRIBUTES_INFORMATION claimAttributes = *(Interop.CLAIM_SECURITY_ATTRIBUTES_INFORMATION*)(safeAllocHandle!.DangerousGetHandle());
                 // An attribute represents a collection of claims.  Inside each attribute a claim can be multivalued, we create a claim for each value.
-                // It is a ragged multi-dimentional array, where each cell can be of different lenghts.
+                // It is a ragged multi-dimentional array, where each cell can be of different lengths.
 
                 for (int attribute = 0; attribute < claimAttributes.AttributeCount; attribute++)
                 {

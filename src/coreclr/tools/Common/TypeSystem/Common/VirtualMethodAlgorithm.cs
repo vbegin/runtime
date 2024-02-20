@@ -12,7 +12,7 @@ namespace Internal.TypeSystem
     /// <remarks>
     /// The algorithms are expected to be directly used by <see cref="TypeSystemContext"/> derivatives
     /// only. The most obvious implementation of this algorithm that uses type's metadata to
-    /// compute the answers is in <see cref="MetadataVirtualMethodAlgorithm"/>.
+    /// compute the answers is in MetadataVirtualMethodAlgorithm.
     /// </remarks>
     public abstract class VirtualMethodAlgorithm
     {
@@ -29,6 +29,8 @@ namespace Internal.TypeSystem
         public abstract MethodDesc ResolveVariantInterfaceMethodToStaticVirtualMethodOnType(MethodDesc interfaceMethod, TypeDesc currentType);
 
         public abstract DefaultInterfaceMethodResolution ResolveInterfaceMethodToDefaultImplementationOnType(MethodDesc interfaceMethod, TypeDesc currentType, out MethodDesc impl);
+
+        public abstract DefaultInterfaceMethodResolution ResolveVariantInterfaceMethodToDefaultImplementationOnType(MethodDesc interfaceMethod, TypeDesc currentType, out MethodDesc impl);
 
         /// <summary>
         /// Resolves a virtual method call.
