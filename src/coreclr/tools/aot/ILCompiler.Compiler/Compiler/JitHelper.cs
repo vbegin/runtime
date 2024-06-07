@@ -67,6 +67,9 @@ namespace ILCompiler
                 case ReadyToRunHelper.CheckedWriteBarrier:
                     mangledName = context.Target.Architecture == TargetArchitecture.ARM64 ? "RhpCheckedAssignRefArm64" : "RhpCheckedAssignRef";
                     break;
+                case ReadyToRunHelper.BulkWriteBarrier:
+                   mangledName = "RhBuffer_BulkMoveWithWriteBarrier";
+                   break;
                 case ReadyToRunHelper.ByRefWriteBarrier:
                     mangledName = context.Target.Architecture == TargetArchitecture.ARM64 ? "RhpByRefAssignRefArm64" : "RhpByRefAssignRef";
                     break;
@@ -139,10 +142,16 @@ namespace ILCompiler
                     break;
 
                 case ReadyToRunHelper.MemCpy:
-                    mangledName = "memcpy"; // TODO: Null reference handling
+                    mangledName = "RhSpanHelpers_MemCopy";
                     break;
                 case ReadyToRunHelper.MemSet:
-                    mangledName = "memset"; // TODO: Null reference handling
+                    mangledName = "RhSpanHelpers_MemSet";
+                    break;
+                case ReadyToRunHelper.MemZero:
+                    mangledName = "RhSpanHelpers_MemZero";
+                    break;
+                case ReadyToRunHelper.NativeMemSet:
+                    mangledName = "memset";
                     break;
 
                 case ReadyToRunHelper.GetRuntimeTypeHandle:
@@ -179,33 +188,41 @@ namespace ILCompiler
                     break;
 
                 case ReadyToRunHelper.Dbl2IntOvf:
-                    methodDesc = context.GetHelperEntryPoint("MathHelpers", "Dbl2IntOvf");
+                    methodDesc = context.SystemModule.GetKnownType("System", "Math").GetKnownMethod("ConvertToInt32Checked", null);
                     break;
                 case ReadyToRunHelper.Dbl2UIntOvf:
-                    methodDesc = context.GetHelperEntryPoint("MathHelpers", "Dbl2UIntOvf");
+                    methodDesc = context.SystemModule.GetKnownType("System", "Math").GetKnownMethod("ConvertToUInt32Checked", null);
                     break;
                 case ReadyToRunHelper.Dbl2LngOvf:
-                    methodDesc = context.GetHelperEntryPoint("MathHelpers", "Dbl2LngOvf");
+                    methodDesc = context.SystemModule.GetKnownType("System", "Math").GetKnownMethod("ConvertToInt64Checked", null);
                     break;
                 case ReadyToRunHelper.Dbl2ULngOvf:
-                    methodDesc = context.GetHelperEntryPoint("MathHelpers", "Dbl2ULngOvf");
+                    methodDesc = context.SystemModule.GetKnownType("System", "Math").GetKnownMethod("ConvertToUInt64Checked", null);
                     break;
 
                 case ReadyToRunHelper.DblRem:
-                    mangledName = "RhpDblRem";
+                    mangledName = "fmod";
                     break;
                 case ReadyToRunHelper.FltRem:
-                    mangledName = "RhpFltRem";
+                    mangledName = "fmodf";
                     break;
 
                 case ReadyToRunHelper.LMul:
                     mangledName = "RhpLMul";
                     break;
                 case ReadyToRunHelper.LMulOfv:
-                    methodDesc = context.GetHelperEntryPoint("MathHelpers", "LMulOvf");
+                    {
+                        TypeDesc t = context.GetWellKnownType(WellKnownType.Int64);
+                        methodDesc = context.SystemModule.GetKnownType("System", "Math").GetKnownMethod("MultiplyChecked",
+                            new MethodSignature(MethodSignatureFlags.Static, 0, t, [t, t]));
+                    }
                     break;
                 case ReadyToRunHelper.ULMulOvf:
-                    methodDesc = context.GetHelperEntryPoint("MathHelpers", "ULMulOvf");
+                    {
+                        TypeDesc t = context.GetWellKnownType(WellKnownType.UInt64);
+                        methodDesc = context.SystemModule.GetKnownType("System", "Math").GetKnownMethod("MultiplyChecked",
+                            new MethodSignature(MethodSignatureFlags.Static, 0, t, [t, t]));
+                    }
                     break;
 
                 case ReadyToRunHelper.Mod:
@@ -340,14 +357,6 @@ namespace ILCompiler
                 return "RhpNewFinalizable";
 
             return "RhpNewFast";
-        }
-
-        public static string GetNewArrayHelperForType(TypeDesc type)
-        {
-            if (type.RequiresAlign8())
-                return "RhpNewArrayAlign8";
-
-            return "RhpNewArray";
         }
     }
 }
