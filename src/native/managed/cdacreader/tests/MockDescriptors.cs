@@ -5,15 +5,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Diagnostics.DataContractReader.Contracts;
 
 namespace Microsoft.Diagnostics.DataContractReader.UnitTests;
 
-public class MockDescriptors
+internal class MockDescriptors
 {
     private static readonly Target.TypeInfo MethodTableTypeInfo = new()
     {
-        Fields = {
+        Fields = new Dictionary<string, Target.FieldInfo> {
             { nameof(Data.MethodTable.MTFlags), new() { Offset = 4, Type = DataType.uint32}},
             { nameof(Data.MethodTable.BaseSize), new() { Offset = 8, Type = DataType.uint32}},
             { nameof(Data.MethodTable.MTFlags2), new() { Offset = 12, Type = DataType.uint32}},
@@ -28,7 +29,7 @@ public class MockDescriptors
 
     private static readonly Target.TypeInfo EEClassTypeInfo = new Target.TypeInfo()
     {
-        Fields = {
+        Fields = new Dictionary<string, Target.FieldInfo> {
             { nameof (Data.EEClass.MethodTable), new () { Offset = 8, Type = DataType.pointer}},
             { nameof (Data.EEClass.CorTypeAttr), new () { Offset = 16, Type = DataType.uint32}},
             { nameof (Data.EEClass.NumMethods), new () { Offset = 20, Type = DataType.uint16}},
@@ -39,21 +40,21 @@ public class MockDescriptors
 
     private static readonly Target.TypeInfo ArrayClassTypeInfo = new Target.TypeInfo()
     {
-        Fields = {
+        Fields = new Dictionary<string, Target.FieldInfo> {
             { nameof (Data.ArrayClass.Rank), new () { Offset = 0x70, Type = DataType.uint8}},
         }
     };
 
     private static readonly Target.TypeInfo ObjectTypeInfo = new()
     {
-        Fields = {
+        Fields = new Dictionary<string, Target.FieldInfo> {
             { "m_pMethTab", new() { Offset = 0, Type = DataType.pointer} },
         }
     };
 
     private static readonly Target.TypeInfo StringTypeInfo = new Target.TypeInfo()
     {
-        Fields = {
+        Fields = new Dictionary<string, Target.FieldInfo> {
             { "m_StringLength", new() { Offset = 0x8, Type = DataType.uint32} },
             { "m_FirstChar", new() { Offset = 0xc, Type = DataType.uint16} },
         }
@@ -61,10 +62,51 @@ public class MockDescriptors
 
     private static readonly Target.TypeInfo ArrayTypeInfo = new Target.TypeInfo()
     {
-        Fields = {
+        Fields = new Dictionary<string, Target.FieldInfo> {
             { "m_NumComponents", new() { Offset = 0x8, Type = DataType.uint32} },
         },
     };
+
+    private static readonly Target.TypeInfo SyncTableEntryInfo = new Target.TypeInfo()
+    {
+        Fields = new Dictionary<string, Target.FieldInfo> {
+            { nameof(Data.SyncTableEntry.SyncBlock), new() { Offset = 0, Type = DataType.pointer} },
+        },
+    };
+
+    private static readonly Target.TypeInfo SyncBlockTypeInfo = new Target.TypeInfo()
+    {
+        Fields = new Dictionary<string, Target.FieldInfo> {
+            { nameof(Data.SyncBlock.InteropInfo), new() { Offset = 0, Type = DataType.pointer} },
+        },
+    };
+
+    private static readonly Target.TypeInfo InteropSyncBlockTypeInfo = new Target.TypeInfo()
+    {
+        Fields = new Dictionary<string, Target.FieldInfo> {
+            { nameof(Data.InteropSyncBlockInfo.RCW), new() { Offset = 0, Type = DataType.pointer} },
+            { nameof(Data.InteropSyncBlockInfo.CCW), new() { Offset = 0x8, Type = DataType.pointer} },
+        },
+    };
+
+    private static readonly (string, DataType)[] ModuleFields =
+    [
+        (nameof(Data.Module.Assembly), DataType.pointer),
+        (nameof(Data.Module.Flags), DataType.uint32),
+        (nameof(Data.Module.Base), DataType.pointer),
+        (nameof(Data.Module.LoaderAllocator), DataType.pointer),
+        (nameof(Data.Module.ThunkHeap), DataType.pointer),
+        (nameof(Data.Module.DynamicMetadata), DataType.pointer),
+        (nameof(Data.Module.Path), DataType.pointer),
+        (nameof(Data.Module.FileName), DataType.pointer),
+        (nameof(Data.Module.FieldDefToDescMap), DataType.pointer),
+        (nameof(Data.Module.ManifestModuleReferencesMap), DataType.pointer),
+        (nameof(Data.Module.MemberRefToDescMap), DataType.pointer),
+        (nameof(Data.Module.MethodDefToDescMap), DataType.pointer),
+        (nameof(Data.Module.TypeDefToMethodTableMap), DataType.pointer),
+        (nameof(Data.Module.TypeRefToMethodTableMap), DataType.pointer),
+        (nameof(Data.Module.MethodDefToILCodeVersioningStateMap), DataType.pointer),
+    ];
 
     public static class RuntimeTypeSystem
     {
@@ -144,30 +186,42 @@ public class MockDescriptors
 
     public static class Object
     {
-        const ulong TestStringMethodTableGlobalAddress = 0x00000000_100000a0;
-        const ulong TestStringMethodTableAddress = 0x00000000_100000a8;
+        private const ulong TestStringMethodTableGlobalAddress = 0x00000000_100000a0;
+        private const ulong TestStringMethodTableAddress = 0x00000000_100000a8;
         internal const ulong TestArrayBoundsZeroGlobalAddress = 0x00000000_100000b0;
 
-        internal static Dictionary<DataType, Target.TypeInfo> Types(TargetTestHelpers helpers) => RuntimeTypeSystem.Types.Concat(
-        new Dictionary<DataType, Target.TypeInfo>(){
-            [DataType.Object] = ObjectTypeInfo,
-            [DataType.String] = StringTypeInfo,
-            [DataType.Array] = ArrayTypeInfo with { Size = helpers.ArrayBaseSize }
-        }).ToDictionary();
+        private const ulong TestSyncTableEntriesGlobalAddress = 0x00000000_100000c0;
+        private const ulong TestSyncTableEntriesAddress = 0x00000000_f0000000;
 
         internal const ulong TestObjectToMethodTableUnmask = 0x7;
+        internal const ulong TestSyncBlockValueToObjectOffset = sizeof(uint);
+
+        internal static Dictionary<DataType, Target.TypeInfo> Types(TargetTestHelpers helpers) => RuntimeTypeSystem.Types.Concat(
+        new Dictionary<DataType, Target.TypeInfo>()
+        {
+            [DataType.Object] = ObjectTypeInfo,
+            [DataType.String] = StringTypeInfo,
+            [DataType.Array] = ArrayTypeInfo with { Size = helpers.ArrayBaseSize },
+            [DataType.SyncTableEntry] = SyncTableEntryInfo with { Size = (uint)helpers.SizeOfTypeInfo(SyncTableEntryInfo) },
+            [DataType.SyncBlock] = SyncBlockTypeInfo,
+            [DataType.InteropSyncBlockInfo] = InteropSyncBlockTypeInfo,
+        }).ToDictionary();
+
         internal static (string Name, ulong Value, string? Type)[] Globals(TargetTestHelpers helpers) => RuntimeTypeSystem.Globals.Concat(
         [
             (nameof(Constants.Globals.ObjectToMethodTableUnmask), TestObjectToMethodTableUnmask, "uint8"),
             (nameof(Constants.Globals.StringMethodTable), TestStringMethodTableGlobalAddress, null),
             (nameof(Constants.Globals.ArrayBoundsZero), TestArrayBoundsZeroGlobalAddress, null),
+            (nameof(Constants.Globals.SyncTableEntries), TestSyncTableEntriesGlobalAddress, null),
             (nameof(Constants.Globals.ObjectHeaderSize), helpers.ObjHeaderSize, "uint32"),
+            (nameof(Constants.Globals.SyncBlockValueToObjectOffset), TestSyncBlockValueToObjectOffset, "uint16"),
         ]).ToArray();
 
         internal static MockMemorySpace.Builder AddGlobalPointers(TargetTestHelpers targetTestHelpers, MockMemorySpace.Builder builder)
         {
             builder = RuntimeTypeSystem.AddGlobalPointers(targetTestHelpers, builder);
             builder = AddStringMethodTablePointer(targetTestHelpers, builder);
+            builder = AddSyncTableEntriesPointer(targetTestHelpers, builder);
             return builder;
         }
 
@@ -181,12 +235,69 @@ public class MockDescriptors
             ]);
         }
 
+        private static MockMemorySpace.Builder AddSyncTableEntriesPointer(TargetTestHelpers targetTestHelpers, MockMemorySpace.Builder builder)
+        {
+            MockMemorySpace.HeapFragment fragment = new() { Name = "Address of Sync Table Entries", Address = TestSyncTableEntriesGlobalAddress, Data = new byte[targetTestHelpers.PointerSize] };
+            targetTestHelpers.WritePointer(fragment.Data, TestSyncTableEntriesAddress);
+            return builder.AddHeapFragment(fragment);
+        }
+
         internal static MockMemorySpace.Builder AddObject(TargetTestHelpers targetTestHelpers, MockMemorySpace.Builder builder, TargetPointer address, TargetPointer methodTable)
         {
             MockMemorySpace.HeapFragment fragment = new() { Name = $"Object : MT = '{methodTable}'", Address = address, Data = new byte[targetTestHelpers.SizeOfTypeInfo(ObjectTypeInfo)] };
             Span<byte> dest = fragment.Data;
             targetTestHelpers.WritePointer(dest.Slice(ObjectTypeInfo.Fields["m_pMethTab"].Offset), methodTable);
             return builder.AddHeapFragment(fragment);
+        }
+
+        internal static MockMemorySpace.Builder AddObjectWithSyncBlock(TargetTestHelpers targetTestHelpers, MockMemorySpace.Builder builder, TargetPointer address, TargetPointer methodTable, uint syncBlockIndex, TargetPointer rcw, TargetPointer ccw)
+        {
+            const uint IsSyncBlockIndexBits = 0x08000000;
+            const uint SyncBlockIndexMask = (1 << 26) - 1;
+            if ((syncBlockIndex & SyncBlockIndexMask) != syncBlockIndex)
+                throw new ArgumentOutOfRangeException(nameof(syncBlockIndex), "Invalid sync block index");
+
+            builder = AddObject(targetTestHelpers, builder, address, methodTable);
+
+            // Add the sync table value before the object
+            uint syncTableValue = IsSyncBlockIndexBits | syncBlockIndex;
+            TargetPointer syncTableValueAddr = address - TestSyncBlockValueToObjectOffset;
+            MockMemorySpace.HeapFragment fragment = new() { Name = $"Sync Table Value : index = {syncBlockIndex}", Address = syncTableValueAddr, Data = new byte[sizeof(uint)] };
+            targetTestHelpers.Write(fragment.Data, syncTableValue);
+            builder = builder.AddHeapFragment(fragment);
+
+            // Add the actual sync block and associated data
+            return AddSyncBlock(targetTestHelpers, builder, syncBlockIndex, rcw, ccw);
+        }
+
+        private static MockMemorySpace.Builder AddSyncBlock(TargetTestHelpers targetTestHelpers, MockMemorySpace.Builder builder, uint index, TargetPointer rcw, TargetPointer ccw)
+        {
+            // Tests write the sync blocks starting at TestSyncBlocksAddress
+            const ulong TestSyncBlocksAddress = 0x00000000_e0000000;
+            int syncBlockSize = targetTestHelpers.SizeOfTypeInfo(SyncBlockTypeInfo);
+            int interopSyncBlockInfoSize = targetTestHelpers.SizeOfTypeInfo(InteropSyncBlockTypeInfo);
+            ulong syncBlockAddr = TestSyncBlocksAddress + index * (ulong)(syncBlockSize + interopSyncBlockInfoSize);
+
+            // Add the sync table entry - pointing at the sync block
+            uint syncTableEntrySize = (uint)targetTestHelpers.SizeOfTypeInfo(SyncTableEntryInfo);
+            ulong syncTableEntryAddr = TestSyncTableEntriesAddress + index * syncTableEntrySize;
+            MockMemorySpace.HeapFragment syncTableEntry = new() { Name = $"SyncTableEntries[{index}]", Address = syncTableEntryAddr, Data = new byte[syncTableEntrySize] };
+            Span<byte> syncTableEntryData = syncTableEntry.Data;
+            targetTestHelpers.WritePointer(syncTableEntryData.Slice(SyncTableEntryInfo.Fields[nameof(Data.SyncTableEntry.SyncBlock)].Offset), syncBlockAddr);
+
+            // Add the sync block - pointing at the interop sync block info
+            ulong interopInfoAddr = syncBlockAddr + (ulong)syncBlockSize;
+            MockMemorySpace.HeapFragment syncBlock = new() { Name = $"Sync Block", Address = syncBlockAddr, Data = new byte[syncBlockSize] };
+            Span<byte> syncBlockData = syncBlock.Data;
+            targetTestHelpers.WritePointer(syncBlockData.Slice(SyncBlockTypeInfo.Fields[nameof(Data.SyncBlock.InteropInfo)].Offset), interopInfoAddr);
+
+            // Add the interop sync block info
+            MockMemorySpace.HeapFragment interopInfo = new() { Name = $"Interop Sync Block Info", Address = interopInfoAddr, Data = new byte[interopSyncBlockInfoSize] };
+            Span<byte> interopInfoData = interopInfo.Data;
+            targetTestHelpers.WritePointer(interopInfoData.Slice(InteropSyncBlockTypeInfo.Fields[nameof(Data.InteropSyncBlockInfo.RCW)].Offset), rcw);
+            targetTestHelpers.WritePointer(interopInfoData.Slice(InteropSyncBlockTypeInfo.Fields[nameof(Data.InteropSyncBlockInfo.CCW)].Offset), ccw);
+
+            return builder.AddHeapFragments([syncTableEntry, syncBlock, interopInfo]);
         }
 
         internal static MockMemorySpace.Builder AddStringObject(TargetTestHelpers targetTestHelpers, MockMemorySpace.Builder builder, TargetPointer address, string value)
@@ -232,6 +343,74 @@ public class MockDescriptors
             targetTestHelpers.WritePointer(dest.Slice(ObjectTypeInfo.Fields["m_pMethTab"].Offset), methodTableAddress);
             targetTestHelpers.Write(dest.Slice(ArrayTypeInfo.Fields["m_NumComponents"].Offset), (uint)array.Length);
             return builder.AddHeapFragment(fragment);
+        }
+    }
+
+    public class Loader
+    {
+        private const ulong DefaultAllocationRangeStart = 0x0001_0000;
+        private const ulong DefaultAllocationRangeEnd = 0x0002_0000;
+
+        private readonly MockMemorySpace.Builder _builder;
+        private readonly MockMemorySpace.BumpAllocator _allocator;
+
+        public Loader(MockMemorySpace.Builder builder)
+            : this(builder, (DefaultAllocationRangeStart, DefaultAllocationRangeEnd))
+        { }
+
+        public Loader(MockMemorySpace.Builder builder, (ulong Start, ulong End) allocationRange)
+        {
+            _builder = builder;
+            _allocator = _builder.CreateAllocator(allocationRange.Start, allocationRange.End);
+        }
+
+        internal static Dictionary<DataType, Target.TypeInfo> Types(TargetTestHelpers helpers)
+        {
+            TargetTestHelpers.LayoutResult layout = helpers.LayoutFields(ModuleFields);
+            return new()
+            {
+                [DataType.Module] = new Target.TypeInfo() { Fields = layout.Fields, Size = layout.Stride },
+            };
+        }
+
+        internal TargetPointer AddModule(TargetTestHelpers helpers, string? path = null, string? fileName = null)
+        {
+            Target.TypeInfo typeInfo = Types(helpers)[DataType.Module];
+            uint size = typeInfo.Size.Value;
+            MockMemorySpace.HeapFragment module = _allocator.Allocate(size, "Module");
+            _builder.AddHeapFragment(module);
+
+            if (path != null)
+            {
+                // Path data
+                Encoding encoding = helpers.Arch.IsLittleEndian ? Encoding.Unicode : Encoding.BigEndianUnicode;
+                ulong pathSize = (ulong)encoding.GetByteCount(path) + sizeof(char);
+                MockMemorySpace.HeapFragment pathFragment = _allocator.Allocate(pathSize, $"Module path = {path}");
+                helpers.WriteUtf16String(pathFragment.Data, path);
+                _builder.AddHeapFragment(pathFragment);
+
+                // Pointer to path
+                helpers.WritePointer(
+                    module.Data.AsSpan().Slice(typeInfo.Fields[nameof(Data.Module.Path)].Offset, helpers.PointerSize),
+                    pathFragment.Address);
+            }
+
+            if (fileName != null)
+            {
+                // File name data
+                Encoding encoding = helpers.Arch.IsLittleEndian ? Encoding.Unicode : Encoding.BigEndianUnicode;
+                ulong fileNameSize = (ulong)encoding.GetByteCount(fileName) + sizeof(char);
+                MockMemorySpace.HeapFragment fileNameFragment = _allocator.Allocate(fileNameSize, $"Module file name = {fileName}");
+                helpers.WriteUtf16String(fileNameFragment.Data, fileName);
+                _builder.AddHeapFragment(fileNameFragment);
+
+                // Pointer to file name
+                helpers.WritePointer(
+                    module.Data.AsSpan().Slice(typeInfo.Fields[nameof(Data.Module.FileName)].Offset, helpers.PointerSize),
+                    fileNameFragment.Address);
+            }
+
+            return module.Address;
         }
     }
 }
