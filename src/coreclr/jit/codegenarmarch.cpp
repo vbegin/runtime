@@ -186,8 +186,12 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_CNS_INT:
         case GT_CNS_DBL:
+#if defined(FEATURE_SIMD)
         case GT_CNS_VEC:
+#endif // FEATURE_SIMD
+#if defined(FEATURE_MASKED_HW_INTRINSICS)
         case GT_CNS_MSK:
+#endif // FEATURE_MASKED_HW_INTRINSICS
             genSetRegToConst(targetReg, targetType, treeNode);
             genProduceReg(treeNode);
             break;
@@ -212,7 +216,9 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
 
         case GT_OR:
+        case GT_OR_NOT:
         case GT_XOR:
+        case GT_XOR_NOT:
         case GT_AND:
         case GT_AND_NOT:
             assert(varTypeIsIntegralOrI(treeNode));
@@ -607,8 +613,6 @@ void CodeGen::genEmitGSCookieCheck(bool pushReg)
 {
     noway_assert(compiler->gsGlobalSecurityCookieAddr || compiler->gsGlobalSecurityCookieVal);
 
-    assert(GetEmitter()->emitGCDisabled());
-
     // We need two temporary registers, to load the GS cookie values and compare them. We can't use
     // any argument registers if 'pushReg' is true (meaning we have a JMP call). They should be
     // callee-trash registers, which should not contain anything interesting at this point.
@@ -788,7 +792,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     if (treeNode->putInIncomingArgArea())
     {
         varNumOut    = getFirstArgWithStackSlot();
-        argOffsetMax = compiler->compArgSize;
+        argOffsetMax = compiler->lvaParameterStackSize;
 #if FEATURE_FASTTAILCALL
         // This must be a fast tail call.
         assert(treeNode->gtCall->IsFastTailCall());
@@ -1470,6 +1474,23 @@ void CodeGen::genRangeCheck(GenTree* oper)
         src1    = arrLen;
         src2    = arrIndex;
         jmpKind = EJ_ls;
+
+#if defined(TARGET_ARM64)
+        if (arrIndex->IsIntegralConst(0))
+        {
+            assert(!arrLen->isContained());
+            // For (index == 0), we can just test if (length == 0) as this is the only case that would throw.
+            // This may lead to an optimization by using cbz/tbnz.
+            genJumpToThrowHlpBlk(
+                bndsChk->gtThrowKind,
+                [&](BasicBlock* target, bool isInline) {
+                genCompareImmAndJump(isInline ? GenCondition::NE : GenCondition::EQ, arrLen->GetRegNum(), 0,
+                                     emitActualTypeSize(arrLen), target);
+            },
+                bndsChk->gtIndRngFailBB);
+            return;
+        }
+#endif
     }
     else
     {
@@ -3505,7 +3526,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
 
         for (CallArg& arg : call->gtArgs.Args())
         {
-            for (const ABIPassingSegment& seg : arg.NewAbiInfo.Segments())
+            for (const ABIPassingSegment& seg : arg.AbiInfo.Segments())
             {
                 if (seg.IsPassedInRegister() && ((trashedByEpilog & seg.GetRegisterMask()) != 0))
                 {
@@ -4507,7 +4528,7 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
 //    src         - The source of the return
 //    retTypeDesc - The return type descriptor.
 //
-void CodeGen::genSIMDSplitReturn(GenTree* src, ReturnTypeDesc* retTypeDesc)
+void CodeGen::genSIMDSplitReturn(GenTree* src, const ReturnTypeDesc* retTypeDesc)
 {
     assert(varTypeIsSIMD(src));
     assert(src->isUsedFromReg());

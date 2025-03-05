@@ -377,6 +377,11 @@ namespace ILCompiler.DependencyAnalysis
                 return new GenericStaticBaseInfoNode(type);
             });
 
+            _objectGetTypeCalled = new NodeCache<MetadataType, ObjectGetTypeCalledNode>(type =>
+            {
+                return new ObjectGetTypeCalledNode(type);
+            });
+
             _objectGetTypeFlowDependencies = new NodeCache<MetadataType, ObjectGetTypeFlowDependenciesNode>(type =>
             {
                 return new ObjectGetTypeFlowDependenciesNode(type);
@@ -586,7 +591,7 @@ namespace ILCompiler.DependencyAnalysis
             {
                 if (type.IsGenericDefinition)
                 {
-                    return new GenericDefinitionEETypeNode(this, type);
+                    return new ReflectionInvisibleGenericDefinitionEETypeNode(this, type);
                 }
                 else if (type.IsCanonicalDefinitionType(CanonicalFormKind.Any))
                 {
@@ -615,7 +620,11 @@ namespace ILCompiler.DependencyAnalysis
 
             if (_compilationModuleGroup.ContainsType(type))
             {
-                if (type.IsCanonicalSubtype(CanonicalFormKind.Any))
+                if (type.IsGenericDefinition)
+                {
+                    return new ReflectionVisibleGenericDefinitionEETypeNode(this, type);
+                }
+                else if (type.IsCanonicalSubtype(CanonicalFormKind.Any))
                 {
                     return new CanonicalEETypeNode(this, type);
                 }
@@ -698,7 +707,7 @@ namespace ILCompiler.DependencyAnalysis
 
         public IEETypeNode MaximallyConstructableType(TypeDesc type)
         {
-            if (ConstructedEETypeNode.CreationAllowed(type))
+            if (ConstructedEETypeNode.CreationAllowed(type) || type.IsGenericDefinition)
                 return ConstructedTypeSymbol(type);
             else
                 return NecessaryTypeSymbol(type);
@@ -1147,6 +1156,12 @@ namespace ILCompiler.DependencyAnalysis
             return _genericStaticBaseInfos.GetOrAdd(type);
         }
 
+        private NodeCache<MetadataType, ObjectGetTypeCalledNode> _objectGetTypeCalled;
+        internal ObjectGetTypeCalledNode ObjectGetTypeCalled(MetadataType type)
+        {
+            return _objectGetTypeCalled.GetOrAdd(type);
+        }
+
         private NodeCache<MetadataType, ObjectGetTypeFlowDependenciesNode> _objectGetTypeFlowDependencies;
         internal ObjectGetTypeFlowDependenciesNode ObjectGetTypeFlowDependencies(MetadataType type)
         {
@@ -1368,7 +1383,7 @@ namespace ILCompiler.DependencyAnalysis
 
         public FrozenRuntimeTypeNode SerializedMaximallyConstructableRuntimeTypeObject(TypeDesc type)
         {
-            if (ConstructedEETypeNode.CreationAllowed(type))
+            if (ConstructedEETypeNode.CreationAllowed(type) || type.IsGenericDefinition)
                 return SerializedConstructedRuntimeTypeObject(type);
             return SerializedNecessaryRuntimeTypeObject(type);
         }
@@ -1423,12 +1438,16 @@ namespace ILCompiler.DependencyAnalysis
         /// Returns alternative symbol name that object writer should produce for given symbols
         /// in addition to the regular one.
         /// </summary>
-        public string GetSymbolAlternateName(ISymbolNode node)
+        public string GetSymbolAlternateName(ISymbolNode node, out bool isHidden)
         {
-            string value;
-            if (!NodeAliases.TryGetValue(node, out value))
+            if (!NodeAliases.TryGetValue(node, out var value))
+            {
+                isHidden = false;
                 return null;
-            return value;
+            }
+
+            isHidden = value.Hidden;
+            return value.Name;
         }
 
         public ArrayOfEmbeddedPointersNode<GCStaticsNode> GCStaticsRegion = new ArrayOfEmbeddedPointersNode<GCStaticsNode>(
@@ -1451,7 +1470,7 @@ namespace ILCompiler.DependencyAnalysis
 
         public ReadyToRunHeaderNode ReadyToRunHeader;
 
-        public Dictionary<ISymbolNode, string> NodeAliases = new Dictionary<ISymbolNode, string>();
+        public Dictionary<ISymbolNode, (string Name, bool Hidden)> NodeAliases = new Dictionary<ISymbolNode, (string, bool)>();
 
         protected internal TypeManagerIndirectionNode TypeManagerIndirection = new TypeManagerIndirectionNode();
 

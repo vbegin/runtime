@@ -23,7 +23,7 @@ Some of these properties require a unique build of the runtime, which means that
 
 ### Multi-threading
 
-Multi-threading support is enabled by `<WasmEnableThreads>true</WasmEnableThreads>`, and is currently disabled by default. It requires a unique build of the runtime.
+Multi-threading experiment is enabled by `<WasmEnableThreads>true</WasmEnableThreads>`, and is currently disabled by default. It requires a unique build of the runtime.
 
 Your HTTPS server and/or proxy must be configured to send HTTP headers similar to `Cross-Origin-Embedder-Policy:require-corp` and `Cross-Origin-Opener-Policy:same-origin` in order to enable multi-threading support in end-user web browsers for security reasons.
 
@@ -258,8 +258,6 @@ Browsers do not offer full support for the globalization APIs available in .NET,
 For some use cases, you may wish to override this behavior or create a custom ICU database. For more information on doing this, see [globalization-icu-wasm.md](../../../docs/design/features/globalization-icu-wasm.md).
 
 There are also rare use cases where your application does not rely on the contents of the ICU databases. In those scenarios, you can make your application smaller by enabling Invariant Globalization via the `<InvariantGlobalization>true</InvariantGlobalization>` msbuild property. For more details see [globalization-invariant-mode.md](../../../docs/design/features/globalization-invariant-mode.md).
-
-We are currently developing a third approach for locales where we offer a more limited feature set by relying on browser APIs, called "Hybrid Globalization". This provides more functionality than Invariant Culture mode without the need to ship the ICU library or its databases, which improves startup time. You can use the msbuild property `<HybridGlobalization>true</HybridGlobalization>` to test this in-development feature, but be aware that it is currently incomplete and may have performance issues. For more details see [globalization-hybrid-mode.md](../../../docs/design/features/globalization-hybrid-mode.md).
 
 Customized globalization settings require [wasm-tools workload](#wasm-tools-workload) to be installed.
 

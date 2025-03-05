@@ -28,6 +28,7 @@ const char *GetTType( TraceType tt)
         case TRACE_OTHER:                     return "TRACE_OTHER";
         case TRACE_UNJITTED_METHOD:           return "TRACE_UNJITTED_METHOD";
         case TRACE_MULTICAST_DELEGATE_HELPER: return "TRACE_MULTICAST_DELEGATE_HELPER";
+        case TRACE_EXTERNAL_METHOD_FIXUP:     return "TRACE_EXTERNAL_METHOD_FIXUP";
     }
     return "TRACE_REALLY_WACKED";
 }
@@ -121,6 +122,10 @@ const CHAR * TraceDestination::DbgToString(SString & buffer)
 
             case TRACE_MULTICAST_DELEGATE_HELPER:
                 pValue = "TRACE_MULTICAST_DELEGATE_HELPER";
+                break;
+
+            case TRACE_EXTERNAL_METHOD_FIXUP:
+                pValue = "TRACE_EXTERNAL_METHOD_FIXUP";
                 break;
 
             case TRACE_OTHER:
@@ -987,7 +992,6 @@ void PrecodeStubManager::Init()
 
 #endif // #ifndef DACCESS_COMPILE
 
-/* static */
 BOOL PrecodeStubManager::CheckIsStub_Internal(PCODE stubStartAddress)
 {
     CONTRACTL
@@ -999,7 +1003,24 @@ BOOL PrecodeStubManager::CheckIsStub_Internal(PCODE stubStartAddress)
     CONTRACTL_END;
 
     auto stubKind = RangeSectionStubManager::GetStubKind(stubStartAddress);
-    return (stubKind == STUB_CODE_BLOCK_FIXUPPRECODE) || (stubKind == STUB_CODE_BLOCK_STUBPRECODE);
+    if (stubKind == STUB_CODE_BLOCK_FIXUPPRECODE)
+    {
+        return TRUE;
+    }
+    else if (stubKind == STUB_CODE_BLOCK_STUBPRECODE)
+    {
+        Precode* pPrecode = Precode::GetPrecodeFromEntryPoint(stubStartAddress);
+        switch (pPrecode->GetType())
+        {
+            case PRECODE_STUB:
+            case PRECODE_NDIRECT_IMPORT:
+            case PRECODE_UMENTRY_THUNK:
+                return TRUE;
+            default:
+                return FALSE;
+        }
+    }
+    return FALSE;
 }
 
 BOOL PrecodeStubManager::DoTraceStub(PCODE stubStartAddress,
@@ -1022,8 +1043,16 @@ BOOL PrecodeStubManager::DoTraceStub(PCODE stubStartAddress,
     {
         // When the target slot points to the fixup part of the fixup precode, we need to compensate
         // for that to get the actual stub address
-        Precode* pPrecode = Precode::GetPrecodeFromEntryPoint(stubStartAddress - FixupPrecode::FixupCodeOffset, TRUE /* speculative */);
-        if ((pPrecode == NULL) || (pPrecode->GetType() != PRECODE_FIXUP))
+        Precode* pPrecode = NULL;
+        if (RangeSectionStubManager::GetStubKind(stubStartAddress) == STUB_CODE_BLOCK_FIXUPPRECODE)
+        {
+            pPrecode = Precode::GetPrecodeFromEntryPoint(stubStartAddress - FixupPrecode::FixupCodeOffset, TRUE /* speculative */);
+            if (pPrecode != NULL && pPrecode->GetType() != PRECODE_FIXUP)
+            {
+                pPrecode = NULL;
+            }
+        }
+        if (pPrecode == NULL)
         {
             pPrecode = Precode::GetPrecodeFromEntryPoint(stubStartAddress);
         }
@@ -1032,6 +1061,12 @@ BOOL PrecodeStubManager::DoTraceStub(PCODE stubStartAddress,
 
         switch (pPrecode->GetType())
         {
+        case PRECODE_UMENTRY_THUNK:
+            LOG((LF_CORDB, LL_EVERYTHING, "PrecodeStubManager::DoTraceStub called on UMEntryThunk\n"));
+            // We never trace through these stubs when stepping through managed code. The reason we handle this at all is so that
+            // is so that IsTransitionStub can recognize UMEntryThunks.
+            return FALSE;
+
         case PRECODE_STUB:
             break;
 
@@ -1387,54 +1422,6 @@ BOOL StubLinkStubManager::TraceManager(Thread *thread,
 #endif // #ifndef DACCESS_COMPILE
 
 // -------------------------------------------------------
-// Stub manager for thunks.
-//
-// Note, the only reason we have this stub manager is so that we can recgonize UMEntryThunks for IsTransitionStub. If it
-// turns out that having a full-blown stub manager for these things causes problems else where, then we can just attach
-// a range list to the thunk heap and have IsTransitionStub check that after checking with the main stub manager.
-// -------------------------------------------------------
-
-SPTR_IMPL(ThunkHeapStubManager, ThunkHeapStubManager, g_pManager);
-
-#ifndef DACCESS_COMPILE
-
-/* static */
-void ThunkHeapStubManager::Init()
-{
-    CONTRACTL
-    {
-        THROWS;
-        GC_NOTRIGGER;
-        MODE_ANY;
-        INJECT_FAULT(COMPlusThrowOM());
-    }
-    CONTRACTL_END;
-
-    g_pManager = new ThunkHeapStubManager();
-    StubManager::AddStubManager(g_pManager);
-}
-
-#endif // !DACCESS_COMPILE
-
-BOOL ThunkHeapStubManager::CheckIsStub_Internal(PCODE stubStartAddress)
-{
-    WRAPPER_NO_CONTRACT;
-    SUPPORTS_DAC;
-
-    // Its a stub if its in our heaps range.
-    return GetRangeList()->IsInRange(stubStartAddress);
-}
-
-BOOL ThunkHeapStubManager::DoTraceStub(PCODE stubStartAddress,
-                                       TraceDestination *trace)
-{
-    LIMITED_METHOD_CONTRACT;
-    // We never trace through these stubs when stepping through managed code. The only reason we have this stub manager
-    // is so that IsTransitionStub can recgonize UMEntryThunks.
-    return FALSE;
-}
-
-// -------------------------------------------------------
 // JumpStub stubs
 //
 // Stub manager for jump stubs created by ExecutionManager::jumpStub()
@@ -1563,13 +1550,7 @@ BOOL RangeSectionStubManager::DoTraceStub(PCODE stubStartAddress, TraceDestinati
 #ifdef DACCESS_COMPILE
         DacNotImpl();
 #else
-#if defined(TARGET_ARM64) && defined(__APPLE__)
-        // On ARM64 Mac, we cannot put a breakpoint inside of ExternalMethodFixupPatchLabel
-        LOG((LF_CORDB, LL_INFO10000, "RSM::DoTraceStub: Skipping on arm64-macOS\n"));
-        return FALSE;
-#else
-        trace->InitForManagerPush(GetEEFuncEntryPoint(ExternalMethodFixupPatchLabel), this);
-#endif //defined(TARGET_ARM64) && defined(__APPLE__)
+        trace->InitForExternalMethodFixup();
 #endif
         return TRUE;
 
@@ -1579,30 +1560,6 @@ BOOL RangeSectionStubManager::DoTraceStub(PCODE stubStartAddress, TraceDestinati
 
     return FALSE;
 }
-
-#ifndef DACCESS_COMPILE
-BOOL RangeSectionStubManager::TraceManager(Thread *thread,
-                            TraceDestination *trace,
-                            CONTEXT *pContext,
-                            BYTE **pRetAddr)
-{
-    CONTRACTL
-    {
-        NOTHROW;
-        GC_NOTRIGGER;
-        MODE_ANY;
-    }
-    CONTRACTL_END;
-
-    _ASSERTE(GetIP(pContext) == GetEEFuncEntryPoint(ExternalMethodFixupPatchLabel));
-
-    *pRetAddr = (BYTE *)StubManagerHelpers::GetReturnAddress(pContext);
-
-    PCODE target = StubManagerHelpers::GetTailCallTarget(pContext);
-    trace->InitForStub(target);
-    return TRUE;
-}
-#endif
 
 #ifdef DACCESS_COMPILE
 LPCWSTR RangeSectionStubManager::GetStubManagerName(PCODE addr)
@@ -1763,7 +1720,7 @@ BOOL ILStubManager::TraceManager(Thread *thread,
     PCODE stubIP = GetIP(pContext);
     *pRetAddr = (BYTE *)StubManagerHelpers::GetReturnAddress(pContext);
 
-    DynamicMethodDesc *pStubMD = Entry2MethodDesc(stubIP, NULL)->AsDynamicMethodDesc();
+    DynamicMethodDesc *pStubMD = NonVirtualEntry2MethodDesc(stubIP)->AsDynamicMethodDesc();
     TADDR arg = StubManagerHelpers::GetHiddenArg(pContext);
     Object * pThis = StubManagerHelpers::GetThisPtr(pContext);
     LOG((LF_CORDB, LL_INFO1000, "ILSM::TraceManager: Enter: StubMD 0x%p, HiddenArg 0x%p, ThisPtr 0x%p\n",
@@ -2203,16 +2160,6 @@ StubLinkStubManager::DoEnumMemoryRegions(CLRDataEnumMemoryFlags flags)
     WRAPPER_NO_CONTRACT;
     DAC_ENUM_VTHIS();
     EMEM_OUT(("MEM: %p StubLinkStubManager\n", dac_cast<TADDR>(this)));
-    GetRangeList()->EnumMemoryRegions(flags);
-}
-
-void
-ThunkHeapStubManager::DoEnumMemoryRegions(CLRDataEnumMemoryFlags flags)
-{
-    SUPPORTS_DAC;
-    WRAPPER_NO_CONTRACT;
-    DAC_ENUM_VTHIS();
-    EMEM_OUT(("MEM: %p ThunkHeapStubManager\n", dac_cast<TADDR>(this)));
     GetRangeList()->EnumMemoryRegions(flags);
 }
 

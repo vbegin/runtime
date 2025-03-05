@@ -57,8 +57,6 @@ public:
 
     static void ValidateDelegatePInvoke(MethodDesc* pMD);
 
-    static void RemoveEntryFromFPtrHash(UPTR key);
-
     // Decides if pcls derives from Delegate.
     static BOOL IsDelegate(MethodTable *pMT);
 
@@ -122,10 +120,6 @@ extern "C" BOOL QCALLTYPE Delegate_BindToMethodName(QCall::ObjectHandleOnStack d
 
 extern "C" BOOL QCALLTYPE Delegate_BindToMethodInfo(QCall::ObjectHandleOnStack d, QCall::ObjectHandleOnStack target,
     MethodDesc * method, QCall::TypeHandle pMethodType, DelegateBindingFlags flags);
-
-extern "C" void QCALLTYPE Delegate_InternalAlloc(QCall::TypeHandle pType, QCall::ObjectHandleOnStack d);
-
-extern "C" void QCALLTYPE Delegate_InternalAllocLike(QCall::ObjectHandleOnStack d);
 
 extern "C" void QCALLTYPE Delegate_FindMethodHandle(QCall::ObjectHandleOnStack d, QCall::ObjectHandleOnStack retMethodInfo);
 

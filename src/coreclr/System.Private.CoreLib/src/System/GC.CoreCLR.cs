@@ -15,6 +15,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -318,7 +319,16 @@ namespace System
                 void* fptr = GetNextFinalizeableObject(ObjectHandleOnStack.Create(ref target));
                 if (fptr == null)
                     break;
-                ((delegate*<object, void>)fptr)(target!);
+
+                try
+                {
+                    ((delegate*<object, void>)fptr)(target!);
+                }
+                catch (Exception ex) when (ExceptionHandling.IsHandledByGlobalHandler(ex))
+                {
+                    // the handler returned "true" means the exception is now "handled" and we should continue.
+                }
+
                 currentThread.ResetFinalizerThread();
                 count++;
             }
@@ -663,7 +673,7 @@ namespace System
             public bool scheduled;
             public bool abandoned;
 
-            public GCHandle action;
+            public GCHandle<Action> action;
         }
 
         internal enum EnableNoGCRegionCallbackStatus
@@ -699,7 +709,7 @@ namespace System
             try
             {
                 pWorkItem = (NoGCRegionCallbackFinalizerWorkItem*)NativeMemory.AllocZeroed((nuint)sizeof(NoGCRegionCallbackFinalizerWorkItem));
-                pWorkItem->action = GCHandle.Alloc(callback);
+                pWorkItem->action = new GCHandle<Action>(callback);
                 pWorkItem->callback = &Callback;
 
                 EnableNoGCRegionCallbackStatus status = (EnableNoGCRegionCallbackStatus)_EnableNoGCRegionCallback(pWorkItem, totalSize);
@@ -729,14 +739,13 @@ namespace System
             {
                 Debug.Assert(pWorkItem->scheduled);
                 if (!pWorkItem->abandoned)
-                    ((Action)(pWorkItem->action.Target!))();
+                    pWorkItem->action.Target();
                 Free(pWorkItem);
             }
 
             static void Free(NoGCRegionCallbackFinalizerWorkItem* pWorkItem)
             {
-                if (pWorkItem->action.IsAllocated)
-                    pWorkItem->action.Free();
+                pWorkItem->action.Dispose();
                 NativeMemory.Free(pWorkItem);
             }
         }

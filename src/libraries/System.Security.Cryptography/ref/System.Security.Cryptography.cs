@@ -1893,11 +1893,15 @@ namespace System.Security.Cryptography
     public static partial class PemEncoding
     {
         public static System.Security.Cryptography.PemFields Find(System.ReadOnlySpan<char> pemData) { throw null; }
+        public static System.Security.Cryptography.PemFields FindUtf8(System.ReadOnlySpan<byte> pemData) { throw null; }
         public static int GetEncodedSize(int labelLength, int dataLength) { throw null; }
         public static bool TryFind(System.ReadOnlySpan<char> pemData, out System.Security.Cryptography.PemFields fields) { throw null; }
+        public static bool TryFindUtf8(System.ReadOnlySpan<byte> pemData, out System.Security.Cryptography.PemFields fields) { throw null; }
         public static bool TryWrite(System.ReadOnlySpan<char> label, System.ReadOnlySpan<byte> data, System.Span<char> destination, out int charsWritten) { throw null; }
+        public static bool TryWriteUtf8(System.ReadOnlySpan<byte> utf8Label, System.ReadOnlySpan<byte> data, System.Span<byte> destination, out int bytesWritten) { throw null; }
         public static char[] Write(System.ReadOnlySpan<char> label, System.ReadOnlySpan<byte> data) { throw null; }
         public static string WriteString(System.ReadOnlySpan<char> label, System.ReadOnlySpan<byte> data) { throw null; }
+        public static byte[] WriteUtf8(System.ReadOnlySpan<byte> utf8Label, System.ReadOnlySpan<byte> data) { throw null; }
     }
     public readonly partial struct PemFields
     {
@@ -1907,9 +1911,9 @@ namespace System.Security.Cryptography
         public System.Range Label { get { throw null; } }
         public System.Range Location { get { throw null; } }
     }
+    [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCodeAttribute("PKCS1MaskGenerationMethod is not trim compatible because the algorithm implementation referenced by HashName might be removed.")]
     public partial class PKCS1MaskGenerationMethod : System.Security.Cryptography.MaskGenerationMethod
     {
-        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCodeAttribute("PKCS1MaskGenerationMethod is not trim compatible because the algorithm implementation referenced by HashName might be removed.")]
         public PKCS1MaskGenerationMethod() { }
         public string HashName { get { throw null; } set { } }
         public override byte[] GenerateMask(byte[] rgbSeed, int cbReturn) { throw null; }
@@ -1969,18 +1973,21 @@ namespace System.Security.Cryptography
     }
     public partial class Rfc2898DeriveBytes : System.Security.Cryptography.DeriveBytes
     {
-        [System.ObsoleteAttribute("The default hash algorithm and iteration counts in Rfc2898DeriveBytes constructors are outdated and insecure. Use a constructor that accepts the hash algorithm and the number of iterations.", DiagnosticId="SYSLIB0041", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(byte[] password, byte[] salt, int iterations) { }
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(byte[] password, byte[] salt, int iterations, System.Security.Cryptography.HashAlgorithmName hashAlgorithm) { }
-        [System.ObsoleteAttribute("The default hash algorithm and iteration counts in Rfc2898DeriveBytes constructors are outdated and insecure. Use a constructor that accepts the hash algorithm and the number of iterations.", DiagnosticId="SYSLIB0041", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(string password, byte[] salt) { }
-        [System.ObsoleteAttribute("The default hash algorithm and iteration counts in Rfc2898DeriveBytes constructors are outdated and insecure. Use a constructor that accepts the hash algorithm and the number of iterations.", DiagnosticId="SYSLIB0041", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(string password, byte[] salt, int iterations) { }
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(string password, byte[] salt, int iterations, System.Security.Cryptography.HashAlgorithmName hashAlgorithm) { }
-        [System.ObsoleteAttribute("The default hash algorithm and iteration counts in Rfc2898DeriveBytes constructors are outdated and insecure. Use a constructor that accepts the hash algorithm and the number of iterations.", DiagnosticId="SYSLIB0041", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(string password, int saltSize) { }
-        [System.ObsoleteAttribute("The default hash algorithm and iteration counts in Rfc2898DeriveBytes constructors are outdated and insecure. Use a constructor that accepts the hash algorithm and the number of iterations.", DiagnosticId="SYSLIB0041", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(string password, int saltSize, int iterations) { }
+        [System.ObsoleteAttribute("The constructors on Rfc2898DeriveBytes are obsolete. Use the static Pbkdf2 method instead.", DiagnosticId="SYSLIB0060", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         public Rfc2898DeriveBytes(string password, int saltSize, int iterations, System.Security.Cryptography.HashAlgorithmName hashAlgorithm) { }
         public System.Security.Cryptography.HashAlgorithmName HashAlgorithm { get { throw null; } }
         public int IterationCount { get { throw null; } set { } }
@@ -2900,6 +2907,12 @@ namespace System.Security.Cryptography.X509Certificates
         OpenExistingOnly = 4,
         IncludeArchived = 8,
     }
+    public enum Pkcs12ExportPbeParameters
+    {
+        Default = 0,
+        Pkcs12TripleDesSha1 = 1,
+        Pbes2Aes256Sha256 = 2,
+    }
     public sealed partial class Pkcs12LoaderLimits
     {
         public Pkcs12LoaderLimits() { }
@@ -3136,6 +3149,8 @@ namespace System.Security.Cryptography.X509Certificates
         [System.CLSCompliantAttribute(false)]
         public virtual byte[] Export(System.Security.Cryptography.X509Certificates.X509ContentType contentType, System.Security.SecureString? password) { throw null; }
         public virtual byte[] Export(System.Security.Cryptography.X509Certificates.X509ContentType contentType, string? password) { throw null; }
+        public byte[] ExportPkcs12(System.Security.Cryptography.PbeParameters exportParameters, string? password) { throw null; }
+        public byte[] ExportPkcs12(System.Security.Cryptography.X509Certificates.Pkcs12ExportPbeParameters exportParameters, string? password) { throw null; }
         protected static string FormatDate(System.DateTime date) { throw null; }
         public virtual byte[] GetCertHash() { throw null; }
         public virtual byte[] GetCertHash(System.Security.Cryptography.HashAlgorithmName hashAlgorithm) { throw null; }
@@ -3307,6 +3322,8 @@ namespace System.Security.Cryptography.X509Certificates
         public byte[]? Export(System.Security.Cryptography.X509Certificates.X509ContentType contentType) { throw null; }
         public byte[]? Export(System.Security.Cryptography.X509Certificates.X509ContentType contentType, string? password) { throw null; }
         public string ExportCertificatePems() { throw null; }
+        public byte[] ExportPkcs12(System.Security.Cryptography.PbeParameters exportParameters, string? password) { throw null; }
+        public byte[] ExportPkcs12(System.Security.Cryptography.X509Certificates.Pkcs12ExportPbeParameters exportParameters, string? password) { throw null; }
         [System.Runtime.Versioning.UnsupportedOSPlatformAttribute("ios")]
         [System.Runtime.Versioning.UnsupportedOSPlatformAttribute("tvos")]
         public string ExportPkcs7Pem() { throw null; }
