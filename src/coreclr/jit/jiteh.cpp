@@ -241,7 +241,7 @@ bool EHblkDsc::ebdIsSameTry(BasicBlock* ebdTryBeg, BasicBlock* ebdTryLast)
 
 void EHblkDsc::DispEntry(unsigned XTnum)
 {
-    printf(" %2u  ::", XTnum);
+    printf(" %2u     %2u  ::", ebdID, XTnum);
 
 #if defined(FEATURE_EH_WINDOWS_X86)
     if (ebdHandlerNestingLevel == 0)
@@ -638,6 +638,20 @@ bool Compiler::bbIsHandlerBeg(const BasicBlock* block)
 {
     const EHblkDsc* ehDsc = ehGetBlockHndDsc(block);
     return (ehDsc != nullptr) && ((block == ehDsc->ebdHndBeg) || (ehDsc->HasFilter() && (block == ehDsc->ebdFilter)));
+}
+
+// bbIsFuncletBeg() returns true if "block" is the start of a handler or filter region,
+// and if the handler/filter is a funclet.
+//
+bool Compiler::bbIsFuncletBeg(const BasicBlock* block)
+{
+    if (UsesFunclets())
+    {
+        assert(fgFuncletsCreated);
+        return bbIsHandlerBeg(block);
+    }
+
+    return false;
 }
 
 bool Compiler::ehHasCallableHandlers()
@@ -1258,6 +1272,30 @@ EHblkDsc* Compiler::ehInitTryBlockRange(BasicBlock* blk, BasicBlock** tryBeg, Ba
     return tryTab;
 }
 
+//------------------------------------------------------------------------
+// ehFindEHblkDscById: find an eh table entry by its ID
+//
+// Argument:
+//     ID to use in search
+//
+// Returns:
+//     Pointer to the entry, or nullptr
+//
+EHblkDsc* Compiler::ehFindEHblkDscById(unsigned short id)
+{
+    EHblkDsc* result = nullptr;
+    for (EHblkDsc* const xtab : EHClauses(this))
+    {
+        if (xtab->ebdID == id)
+        {
+            result = xtab;
+            break;
+        }
+    }
+
+    return result;
+}
+
 /*****************************************************************************
  *  This method updates the value of ebdTryBeg
  */
@@ -1728,8 +1766,9 @@ EHblkDsc* Compiler::fgTryAddEHTableEntries(unsigned XTnum, unsigned count, bool 
     if (deferAdding)
     {
         // We can add count entries...
+        // (we may not have allocated a table, so return a dummy non-null entry)
         //
-        return compHndBBtab;
+        return (EHblkDsc*)(0x1);
     }
 
     if (newCount > compHndBBtabAllocCount)
@@ -3208,12 +3247,6 @@ void Compiler::dispOutgoingEHClause(unsigned num, const CORINFO_EH_CLAUSE& claus
 
 void Compiler::fgVerifyHandlerTab()
 {
-    if (compIsForInlining())
-    {
-        // We don't inline functions with EH. Don't bother verifying the EH table in the inlinee Compiler.
-        return;
-    }
-
     if (compHndBBtabCount == 0)
     {
         return;
@@ -3230,6 +3263,9 @@ void Compiler::fgVerifyHandlerTab()
     // block (case 3)?
     bool multipleLastBlockNormalizationDone = false; // Currently disabled
 
+    BitVecTraits traits(impInlineRoot()->compEHID, this);
+    BitVec       ids(BitVecOps::MakeEmpty(&traits));
+
     assert(compHndBBtabCount <= compHndBBtabAllocCount);
 
     unsigned  XTnum;
@@ -3237,6 +3273,11 @@ void Compiler::fgVerifyHandlerTab()
 
     for (XTnum = 0, HBtab = compHndBBtab; XTnum < compHndBBtabCount; XTnum++, HBtab++)
     {
+        // EH IDs should be unique and in range
+        //
+        assert(HBtab->ebdID < impInlineRoot()->compEHID);
+        assert(BitVecOps::TryAddElemD(&traits, ids, HBtab->ebdID));
+
         assert(HBtab->ebdTryBeg != nullptr);
         assert(HBtab->ebdTryLast != nullptr);
         assert(HBtab->ebdHndBeg != nullptr);
@@ -3260,11 +3301,11 @@ void Compiler::fgVerifyHandlerTab()
 
         if (fgFuncletsCreated)
         {
-            assert(HBtab->ebdHndBeg->HasFlag(BBF_FUNCLET_BEG));
+            assert(bbIsFuncletBeg(HBtab->ebdHndBeg));
 
             if (HBtab->HasFilter())
             {
-                assert(HBtab->ebdFilter->HasFlag(BBF_FUNCLET_BEG));
+                assert(bbIsFuncletBeg(HBtab->ebdFilter));
             }
         }
     }
@@ -3701,11 +3742,9 @@ void Compiler::fgVerifyHandlerTab()
         {
             assert(block->bbCatchTyp == BBCT_NONE);
 
-            if (fgFuncletsCreated)
-            {
-                // Make sure blocks that aren't the first block of a funclet do not have the BBF_FUNCLET_BEG flag set.
-                assert(!block->HasFlag(BBF_FUNCLET_BEG));
-            }
+            // If this block wasn't marked as an EH handler 'begin' block,
+            // it shouldn't be the beginning of a funclet.
+            assert(!fgFuncletsCreated || !bbIsFuncletBeg(block));
         }
 
         // Check for legal block types
@@ -3763,7 +3802,7 @@ void Compiler::fgDispHandlerTab()
         return;
     }
 
-    printf("\nindex  ");
+    printf("\n  id,  index  ");
 #if defined(FEATURE_EH_WINDOWS_X86)
     if (!UsesFunclets())
     {
@@ -4442,13 +4481,6 @@ void Compiler::fgExtendEHRegionBefore(BasicBlock* block)
             block->bbRefs--;
             bPrev->bbRefs++;
 
-            if (fgFuncletsCreated)
-            {
-                assert(block->HasFlag(BBF_FUNCLET_BEG));
-                bPrev->SetFlags(BBF_FUNCLET_BEG);
-                block->RemoveFlags(BBF_FUNCLET_BEG);
-            }
-
             // If this is a handler for a filter, the last block of the filter will end with
             // a BBJ_EHFILTERRET block that jumps to the first block of its handler.
             // So we need to update it to keep things in sync.
@@ -4486,13 +4518,6 @@ void Compiler::fgExtendEHRegionBefore(BasicBlock* block)
 
             HBtab->ebdFilter = bPrev;
             bPrev->SetFlags(BBF_DONT_REMOVE);
-
-            if (fgFuncletsCreated)
-            {
-                assert(block->HasFlag(BBF_FUNCLET_BEG));
-                bPrev->SetFlags(BBF_FUNCLET_BEG);
-                block->RemoveFlags(BBF_FUNCLET_BEG);
-            }
 
             bPrev->bbRefs++;
         }
