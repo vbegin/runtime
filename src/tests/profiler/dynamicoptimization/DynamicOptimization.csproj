@@ -9,8 +9,6 @@
     runincontext loads even framework assemblies into the unloadable
     context, locals in this loop prevent unloading -->
     <UnloadabilityIncompatible>true</UnloadabilityIncompatible>
-    <!-- Temporarily disabled due to https://github.com/dotnet/runtime/issues/106241 -->
-    <GCStressIncompatible>true</GCStressIncompatible>
     <!-- Needed for JitOptimizationSensitive -->
     <RequiresProcessIsolation>true</RequiresProcessIsolation>
     <!-- Test expects particular JIT optimization levels -->
@@ -23,5 +21,8 @@
     <CMakeProjectReference Include="$(MSBuildThisFileDirectory)/../native/CMakeLists.txt" />
     <ProjectReference Include="../../tracing/eventpipe/common/eventpipe_common.csproj" />
     <ProjectReference Include="../../tracing/eventpipe/common/Microsoft.Diagnostics.NETCore.Client/Microsoft.Diagnostics.NETCore.Client.csproj" />
+
+    <!-- Test does not work with DOTNET_ForceRelocs=1 -->
+    <CLRTestEnvironmentVariable Include="DOTNET_ForceRelocs" Value="0" />
   </ItemGroup>
 </Project>

@@ -501,9 +501,7 @@ void LoaderAllocator::GCLoaderAllocators(LoaderAllocator* pOriginalLoaderAllocat
 {
     CONTRACTL
     {
-        THROWS;
-        GC_TRIGGERS;
-        MODE_PREEMPTIVE;
+        STANDARD_VM_CHECK;
         PRECONDITION(pOriginalLoaderAllocator != NULL);
         PRECONDITION(pOriginalLoaderAllocator->IsCollectible());
         PRECONDITION(pOriginalLoaderAllocator->Id()->GetType() == LAT_Assembly);
@@ -576,7 +574,7 @@ void LoaderAllocator::GCLoaderAllocators(LoaderAllocator* pOriginalLoaderAllocat
         // (Also debugging NULL AVs if someone uses it accidentally is so much easier)
         pDomainLoaderAllocatorDestroyIterator->m_pFirstDomainAssemblyFromSameALCToDelete = NULL;
 
-        pDomainLoaderAllocatorDestroyIterator->ReleaseManagedAssemblyLoadContext();
+        pDomainLoaderAllocatorDestroyIterator->ReleaseAssemblyLoadContext();
 
         // The native objects in dependent handles may refer to the virtual call stub manager's heaps, so clear the dependent
         // handles first
@@ -1168,7 +1166,7 @@ void LoaderAllocator::Init(BYTE *pExecutableHeapMemory)
                                                                       initReservedMem,
                                                                       dwExecutableHeapReserveSize,
                                                                       NULL,
-                                                                      UnlockedLoaderHeap::HeapKind::Executable
+                                                                      LoaderHeapImplementationKind::Executable
                                                                       );
         initReservedMem += dwExecutableHeapReserveSize;
     }
@@ -1201,39 +1199,29 @@ void LoaderAllocator::Init(BYTE *pExecutableHeapMemory)
                                                        initReservedMem,
                                                        dwStubHeapReserveSize,
                                                        STUBMANAGER_RANGELIST(StubLinkStubManager),
-                                                       UnlockedLoaderHeap::HeapKind::Executable);
+                                                       LoaderHeapImplementationKind::Executable);
 
     initReservedMem += dwStubHeapReserveSize;
 
-    m_pNewStubPrecodeHeap = new (&m_NewStubPrecodeHeapInstance) LoaderHeap(2 * GetStubCodePageSize(),
-                                                                           2 * GetStubCodePageSize(),
+    m_pNewStubPrecodeHeap = new (&m_NewStubPrecodeHeapInstance) InterleavedLoaderHeap(
                                                                            &m_stubPrecodeRangeList,
-                                                                           UnlockedLoaderHeap::HeapKind::Interleaved,
                                                                            false /* fUnlocked */,
-                                                                           StubPrecode::GenerateCodePage,
-                                                                           StubPrecode::CodeSize);
+                                                                           &s_stubPrecodeHeapConfig);
 
 #if defined(FEATURE_STUBPRECODE_DYNAMIC_HELPERS) && defined(FEATURE_READYTORUN)
     if (IsCollectible())
     {
         m_pDynamicHelpersStubHeap = m_pNewStubPrecodeHeap;
     }
-    m_pDynamicHelpersStubHeap = new (&m_DynamicHelpersHeapInstance) LoaderHeap(2 * GetStubCodePageSize(),
-                                                                               2 * GetStubCodePageSize(),
+    m_pDynamicHelpersStubHeap = new (&m_DynamicHelpersHeapInstance) InterleavedLoaderHeap(
                                                                                &m_dynamicHelpersRangeList,
-                                                                               UnlockedLoaderHeap::HeapKind::Interleaved,
                                                                                false /* fUnlocked */,
-                                                                               StubPrecode::GenerateCodePage,
-                                                                               StubPrecode::CodeSize);
+                                                                               &s_stubPrecodeHeapConfig);
 #endif // defined(FEATURE_STUBPRECODE_DYNAMIC_HELPERS) && defined(FEATURE_READYTORUN)
 
-    m_pFixupPrecodeHeap = new (&m_FixupPrecodeHeapInstance) LoaderHeap(2 * GetStubCodePageSize(),
-                                                                       2 * GetStubCodePageSize(),
-                                                                       &m_fixupPrecodeRangeList,
-                                                                       UnlockedLoaderHeap::HeapKind::Interleaved,
+    m_pFixupPrecodeHeap = new (&m_FixupPrecodeHeapInstance) InterleavedLoaderHeap(&m_fixupPrecodeRangeList,
                                                                        false /* fUnlocked */,
-                                                                       FixupPrecode::GenerateCodePage,
-                                                                       FixupPrecode::CodeSize);
+                                                                       &s_fixupStubPrecodeHeapConfig);
 
     // Initialize the EE marshaling data to NULL.
     m_pMarshalingData = NULL;
@@ -1414,7 +1402,7 @@ void LoaderAllocator::Terminate()
 
     if (m_pFixupPrecodeHeap != NULL)
     {
-        m_pFixupPrecodeHeap->~LoaderHeap();
+        m_pFixupPrecodeHeap->~InterleavedLoaderHeap();
         m_pFixupPrecodeHeap = NULL;
     }
 
@@ -1424,7 +1412,7 @@ void LoaderAllocator::Terminate()
         {
             if (m_pDynamicHelpersStubHeap != m_pNewStubPrecodeHeap)
             {
-                m_pDynamicHelpersStubHeap->~LoaderHeap();
+                m_pDynamicHelpersStubHeap->~InterleavedLoaderHeap();
             }
             m_pDynamicHelpersStubHeap = NULL;
         }
@@ -1439,7 +1427,7 @@ void LoaderAllocator::Terminate()
 
     if (m_pNewStubPrecodeHeap != NULL)
     {
-        m_pNewStubPrecodeHeap->~LoaderHeap();
+        m_pNewStubPrecodeHeap->~InterleavedLoaderHeap();
         m_pNewStubPrecodeHeap = NULL;
     }
 
@@ -2080,7 +2068,7 @@ void LoaderAllocator::CleanupFailedTypeInit()
     }
 }
 
-void AssemblyLoaderAllocator::ReleaseManagedAssemblyLoadContext()
+void AssemblyLoaderAllocator::ReleaseAssemblyLoadContext()
 {
     CONTRACTL
     {
