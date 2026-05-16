@@ -58,14 +58,14 @@ private:
         // We use movaps when non-VEX because it is a smaller instruction;
         // however the VEX version vmovaps would be used which is the same size as vmovdqa;
         // also vmovdqa has more available CPU ports on older processors so we switch to that
-        return compiler->canUseVexEncoding() ? INS_movdqa32 : INS_movaps;
+        return m_compiler->canUseVexEncoding() ? INS_movdqa32 : INS_movaps;
     }
     instruction simdUnalignedMovIns()
     {
         // We use movups when non-VEX because it is a smaller instruction;
         // however the VEX version vmovups would be used which is the same size as vmovdqu;
         // but vmovdqu has more available CPU ports on older processors so we switch to that
-        return compiler->canUseVexEncoding() ? INS_movdqu32 : INS_movups;
+        return m_compiler->canUseVexEncoding() ? INS_movdqu32 : INS_movups;
     }
 #endif // defined(TARGET_XARCH)
 
@@ -161,6 +161,7 @@ private:
     //-------------------------------------------------------------------------
 
     void genReportEH();
+    void genReportEHClauses(EHClauseInfo* clauses);
 
     // Allocates storage for the GC info, writes the GC info into that storage, records the address of the
     // GC info of the method with the EE, and returns a pointer to the "info" portion (just post-header) of
@@ -209,15 +210,23 @@ protected:
     void genInitializeRegisterState();
 
     void genCodeForBBlist();
+    void genCodeForFunclet(FuncInfoDsc* funcInfo);
+    void genCodeForBlock(BasicBlock* block);
 
 #if defined(TARGET_WASM)
     ArrayStack<WasmInterval*>* wasmControlFlowStack = nullptr;
     unsigned                   wasmCursor           = 0;
     unsigned                   findTargetDepth(BasicBlock* target);
+    void                       WasmProduceReg(GenTree* node);
+    regNumber                  GetMultiUseOperandReg(GenTree* operand);
+    void                       genEmitNullCheck(regNumber reg);
+    unsigned                   GetStackPointerRegIndex() const;
+    unsigned                   GetFramePointerRegIndex() const;
+    void                       ensureCurrentFuncIsUnwindable();
 #endif
 
-    void        genEmitStartBlock(BasicBlock* block);
-    BasicBlock* genEmitEndBlock(BasicBlock* block);
+    void genEmitStartBlock(BasicBlock* block);
+    void genEmitEndBlock(BasicBlock* block);
 
 public:
     void genSpillVar(GenTree* tree);
@@ -250,7 +259,7 @@ protected:
     // genEmitInlineThrow: Generate code for an inline exception.
     void genEmitInlineThrow(SpecialCodeKind codeKind)
     {
-        genEmitHelperCall(compiler->acdHelper(codeKind), 0, EA_UNKNOWN);
+        genEmitHelperCall(m_compiler->acdHelper(codeKind), 0, EA_UNKNOWN);
     }
 
     // throwCodeFn callback follows concept -> void(*)(BasicBlock* target, bool isInline)
@@ -299,7 +308,12 @@ protected:
     }
 #endif
 
+#if defined(TARGET_WASM)
+    void genJumpToThrowHlpBlk(SpecialCodeKind codeKind);
+    void genCodeForBinaryOverflow(GenTreeOp* node);
+#else
     void genJumpToThrowHlpBlk(emitJumpKind jumpKind, SpecialCodeKind codeKind, BasicBlock* failBlk = nullptr);
+#endif
 
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     void genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
@@ -324,8 +338,11 @@ protected:
     // Prolog functions and data (there are a few exceptions for more generally used things)
     //
 
-    void      genEstablishFramePointer(int delta, bool reportUnwindData);
-    void      genHomeRegisterParams(regNumber initReg, bool* initRegStillZeroed);
+    void genEstablishFramePointer(int delta, bool reportUnwindData);
+    void genHomeRegisterParams(regNumber initReg, bool* initRegStillZeroed);
+#ifdef TARGET_WASM
+    void genHomeRegisterParamsOutsideProlog();
+#endif
     regMaskTP genGetParameterHomingTempRegisterCandidates();
 
     var_types genParamStackType(LclVarDsc* dsc, const ABIPassingSegment& seg);
@@ -333,11 +350,7 @@ protected:
              unsigned lclNum, unsigned offset, unsigned paramLclNum, const ABIPassingSegment& seg, class RegGraph* graph);
     void genSpillOrAddNonStandardRegisterParam(unsigned lclNum, regNumber sourceReg, class RegGraph* graph);
     void genEnregisterIncomingStackArgs();
-#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     void genEnregisterOSRArgsAndLocals(regNumber initReg, bool* pInitRegZeroed);
-#else
-    void genEnregisterOSRArgsAndLocals();
-#endif
 
     void genHomeStackSegment(unsigned lclNum, const ABIPassingSegment& seg, regNumber initReg, bool* pInitRegZeroed);
     void genHomeSwiftStructStackParameters();
@@ -348,6 +361,7 @@ protected:
     void genClearStackVec3ArgUpperBits();
 #endif // UNIX_AMD64_ABI && FEATURE_SIMD
 
+    void genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed);
 #if defined(TARGET_ARM64)
     bool genInstrWithConstant(instruction ins,
                               emitAttr    attr,
@@ -369,15 +383,23 @@ protected:
 
     void genPrologSaveReg(regNumber reg1, int spOffset, int spDelta, regNumber tmpReg, bool* pTmpRegIsZero);
 
-    void genEpilogRestoreRegPair(regNumber reg1,
-                                 regNumber reg2,
-                                 int       spOffset,
-                                 int       spDelta,
-                                 bool      useSaveNextPair,
-                                 regNumber tmpReg,
-                                 bool*     pTmpRegIsZero);
+    void genRestoreRegPair(regNumber reg1,
+                           regNumber reg2,
+                           regNumber baseReg,
+                           int       spOffset,
+                           int       spDelta,
+                           bool      useSaveNextPair,
+                           regNumber tmpReg,
+                           bool*     pTmpRegIsZero,
+                           bool      reportUnwindData);
 
-    void genEpilogRestoreReg(regNumber reg1, int spOffset, int spDelta, regNumber tmpReg, bool* pTmpRegIsZero);
+    void genRestoreReg(regNumber reg1,
+                       regNumber baseReg,
+                       int       spOffset,
+                       int       spDelta,
+                       regNumber tmpReg,
+                       bool*     pTmpRegIsZero,
+                       bool      reportUnwindData);
 
     // A simple struct to keep register pairs for prolog and epilog.
     struct RegPair
@@ -408,12 +430,15 @@ protected:
     static int genGetSlotSizeForRegsInMask(regMaskTP regsMask);
 
     void genSaveCalleeSavedRegisterGroup(regMaskTP regsMask, int spDelta, int spOffset);
-    void genRestoreCalleeSavedRegisterGroup(regMaskTP regsMask, int spDelta, int spOffset);
+    void genRestoreCalleeSavedRegisterGroup(
+        regMaskTP regsMask, regNumber baseReg, int spDelta, int spOffset, bool reportUnwindData);
 
     void genSaveCalleeSavedRegistersHelp(regMaskTP regsToSaveMask, int lowestCalleeSavedOffset, int spDelta);
     void genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask, int lowestCalleeSavedOffset, int spDelta);
 
-    void genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed);
+#if defined(TARGET_ARM64)
+    void genUnknownSizeFrame();
+#endif
 
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     bool genInstrWithConstant(instruction ins,
@@ -427,17 +452,14 @@ protected:
     void genStackPointerAdjustment(ssize_t spAdjustment, regNumber tmpReg, bool* pTmpRegIsZero, bool reportUnwindData);
 
     void genSaveCalleeSavedRegistersHelp(regMaskTP regsToSaveMask, int lowestCalleeSavedOffset);
-    void genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask, int lowestCalleeSavedOffset);
-    void genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed);
-
-#else
-    void genPushCalleeSavedRegisters();
+    void genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask,
+                                            regNumber baseReg,
+                                            int       lowestCalleeSavedOffset,
+                                            bool      reportUnwindData);
 #endif
 
-#if defined(TARGET_AMD64)
-    void genOSRRecordTier0CalleeSavedRegistersAndFrame();
+    void genOSRHandleTier0CalleeSavedRegistersAndFrame();
     void genOSRSaveRemainingCalleeSavedRegisters();
-#endif // TARGET_AMD64
 
     void genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pInitRegZeroed, regMaskTP maskArgRegsLiveIn);
 
@@ -593,7 +615,7 @@ protected:
     void genReserveFuncletProlog(BasicBlock* block);
     void genReserveFuncletEpilog(BasicBlock* block);
     void genFuncletProlog(BasicBlock* block);
-    void genFuncletEpilog();
+    void genFuncletEpilog(BasicBlock* block);
     void genCaptureFuncletPrologEpilogInfo();
 
     void genUpdateCurrentFunclet(BasicBlock* block);
@@ -762,6 +784,7 @@ protected:
 
 #if defined(TARGET_WASM)
     void genCodeForConstant(GenTree* treeNode);
+    void genCatchArg(GenTree* treeNode);
 #endif
 
 #if defined(TARGET_X86)
@@ -1128,6 +1151,7 @@ protected:
     void genCodeForShiftRMW(GenTreeStoreInd* storeInd);
 #endif // TARGET_XARCH
 
+    void genCodeForCatchArg(GenTree* tree);
     void genCodeForCast(GenTreeOp* tree);
     void genCodeForLclAddr(GenTreeLclFld* lclAddrNode);
     void genCodeForIndexAddr(GenTreeIndexAddr* tree);
@@ -1226,6 +1250,7 @@ protected:
     void                 genJumpTable(GenTree* tree);
     void                 genTableBasedSwitch(GenTree* tree);
     void                 genAsyncResumeInfo(GenTreeVal* tree);
+    void                 genFtnEntry(GenTree* tree);
     UNATIVE_OFFSET       genEmitAsyncResumeInfoTable(emitter::dataSection** dataSec);
     CORINFO_FIELD_HANDLE genEmitAsyncResumeInfo(unsigned stateNum);
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
@@ -1246,7 +1271,7 @@ protected:
     void        genCallPlaceRegArgs(GenTreeCall* call);
     void        genJmpPlaceArgs(GenTree* jmp);
     void        genJmpPlaceVarArgs();
-    BasicBlock* genCallFinally(BasicBlock* block);
+    void        genCallFinally(BasicBlock* block);
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     void genCodeForJumpCompare(GenTreeOpCC* tree);
 #endif
@@ -1283,11 +1308,14 @@ protected:
 
     void genReturn(GenTree* treeNode);
     void genReturnSuspend(GenTreeUnOp* treeNode);
+    void genPatchpoint(GenTreeOp* treeNode);
     void genMarkReturnGCInfo();
 
 #ifdef SWIFT_SUPPORT
     void genSwiftErrorReturn(GenTree* treeNode);
 #endif // SWIFT_SUPPORT
+
+    void genNonLocalJmp(GenTreeUnOp* treeNode);
 
 #ifdef TARGET_XARCH
     void           genStackPointerConstantAdjustment(ssize_t spDelta, bool trackSpAdjustments);
@@ -1309,7 +1337,7 @@ protected:
         {
             return false;
         }
-        return compiler->lvaGetDesc(tree->AsLclVarCommon())->lvIsRegCandidate();
+        return m_compiler->lvaGetDesc(tree->AsLclVarCommon())->lvIsRegCandidate();
     }
 
 #ifdef TARGET_X86

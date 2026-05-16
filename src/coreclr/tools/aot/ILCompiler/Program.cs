@@ -129,30 +129,7 @@ namespace ILCompiler
                     genericCycleDepthCutoff: Get(_command.MaxGenericCycleDepth),
                     genericCycleBreadthCutoff: Get(_command.MaxGenericCycleBreadth));
 
-            //
-            // TODO: To support our pre-compiled test tree, allow input files that aren't managed assemblies since
-            // some tests contain a mixture of both managed and native binaries.
-            //
-            // See: https://github.com/dotnet/corert/issues/2785
-            //
-            // When we undo this hack, replace the foreach with
-            //  typeSystemContext.InputFilePaths = _command.Result.GetValueForArgument(inputFilePaths);
-            //
-            Dictionary<string, string> inputFilePaths = new Dictionary<string, string>();
-            foreach (var inputFile in _command.Result.GetValue(_command.InputFilePaths))
-            {
-                try
-                {
-                    var module = typeSystemContext.GetModuleFromPath(inputFile.Value);
-                    inputFilePaths.Add(inputFile.Key, inputFile.Value);
-                }
-                catch (TypeSystemException.BadImageFormatException)
-                {
-                    // Keep calm and carry on.
-                }
-            }
-
-            typeSystemContext.InputFilePaths = inputFilePaths;
+            typeSystemContext.InputFilePaths = _command.Result.GetValue(_command.InputFilePaths);
             typeSystemContext.ReferenceFilePaths = Get(_command.ReferenceFiles);
             if (!typeSystemContext.InputFilePaths.ContainsKey(systemModuleName)
                 && !typeSystemContext.ReferenceFilePaths.ContainsKey(systemModuleName))
@@ -202,7 +179,7 @@ namespace ILCompiler
                 compilationRoots.Add(new SingleMethodRootProvider(singleMethod));
                 if (singleMethod.OwningType is MetadataType { Module.Assembly: EcmaAssembly assembly })
                 {
-                    typeMapManager = new UsageBasedTypeMapManager(TypeMapMetadata.CreateFromAssembly(assembly, typeSystemContext));
+                    typeMapManager = new UsageBasedTypeMapManager(TypeMapMetadata.CreateFromAssembly(assembly, typeSystemContext.GeneratedAssembly, TypeMapAssemblyTargetsMode.Traverse));
                 }
             }
             else
@@ -280,6 +257,8 @@ namespace ILCompiler
                     }
                 }
 
+                compilationRoots.Add(new ManagedDataDescriptorProvider());
+
                 string win32resourcesModule = Get(_command.Win32ResourceModuleName);
                 if (typeSystemContext.Target.IsWindows && !string.IsNullOrEmpty(win32resourcesModule))
                 {
@@ -319,12 +298,12 @@ namespace ILCompiler
                 if (typeMappingEntryAssembly is not null)
                 {
                     var typeMapEntryAssembly = (EcmaAssembly)typeSystemContext.ResolveAssembly(AssemblyNameInfo.Parse(typeMappingEntryAssembly), throwIfNotFound: true);
-                    typeMapManager = new UsageBasedTypeMapManager(TypeMapMetadata.CreateFromAssembly(typeMapEntryAssembly, typeSystemContext));
+                    typeMapManager = new UsageBasedTypeMapManager(TypeMapMetadata.CreateFromAssembly(typeMapEntryAssembly, typeSystemContext.GeneratedAssembly, TypeMapAssemblyTargetsMode.Traverse));
                 }
                 else if (entrypointModule is { Assembly: EcmaAssembly entryAssembly })
                 {
                     // Fall back to entryassembly if not specified
-                    typeMapManager = new UsageBasedTypeMapManager(TypeMapMetadata.CreateFromAssembly(entryAssembly, typeSystemContext));
+                    typeMapManager = new UsageBasedTypeMapManager(TypeMapMetadata.CreateFromAssembly(entryAssembly, typeSystemContext.GeneratedAssembly, TypeMapAssemblyTargetsMode.Traverse));
                 }
             }
 

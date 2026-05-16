@@ -2,6 +2,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include_directories("./jitstd")
 include_directories("../inc")
+include_directories("../jitshared")
 
 # gcc 10 and lower versions are too sensitive to bit fields width and warn from core compiler.
 # Since there is no better / specific suppression available for these core warnings, we disable
@@ -22,7 +23,7 @@ function(create_standalone_jit)
 
   if(TARGETDETAILS_OS STREQUAL "unix_osx" OR TARGETDETAILS_OS STREQUAL "unix_anyos")
     set(JIT_ARCH_LINK_LIBRARIES gcinfo_unix_${TARGETDETAILS_ARCH})
-  elseif(NOT ${TARGETDETAILS_ARCH} MATCHES "wasm")
+  else()
     set(JIT_ARCH_LINK_LIBRARIES gcinfo_${TARGETDETAILS_OS}_${TARGETDETAILS_ARCH})
   endif()
 
@@ -75,7 +76,7 @@ function(create_standalone_jit)
   endif ()
 endfunction()
 
-if (CLR_CMAKE_TARGET_ARCH_AMD64 OR CLR_CMAKE_TARGET_ARCH_ARM64 OR (CLR_CMAKE_TARGET_ARCH_I386 AND NOT CLR_CMAKE_HOST_UNIX))
+if (CLR_CMAKE_TARGET_ARCH_AMD64 OR CLR_CMAKE_TARGET_ARCH_ARM64 OR CLR_CMAKE_TARGET_ARCH_I386)
   add_compile_definitions($<$<NOT:$<BOOL:$<TARGET_PROPERTY:IGNORE_DEFAULT_TARGET_ARCH>>>:FEATURE_SIMD>)
   add_compile_definitions($<$<NOT:$<BOOL:$<TARGET_PROPERTY:IGNORE_DEFAULT_TARGET_ARCH>>>:FEATURE_HW_INTRINSICS>)
   add_compile_definitions($<$<NOT:$<BOOL:$<TARGET_PROPERTY:IGNORE_DEFAULT_TARGET_ARCH>>>:FEATURE_MASKED_HW_INTRINSICS>)
@@ -93,6 +94,7 @@ set( JIT_SOURCES
   alloc.cpp
   assertionprop.cpp
   async.cpp
+  asyncanalysis.cpp
   bitset.cpp
   block.cpp
   buildstring.cpp
@@ -118,6 +120,8 @@ set( JIT_SOURCES
   fgstmt.cpp
   flowgraph.cpp
   forwardsub.cpp
+  gcdecode.cpp
+  gcencode.cpp
   gcinfo.cpp
   gentree.cpp
   gschecks.cpp
@@ -184,8 +188,6 @@ set ( JIT_NATIVE_TARGET_SOURCES
   lsra.cpp
   lsrabuild.cpp
   regMaskTPOps.cpp
-  gcdecode.cpp
-  gcencode.cpp
   unwind.cpp
 )
 
@@ -402,10 +404,6 @@ set( JIT_HEADERS
   stacklevelsetter.h
   target.h
   targetcommon.h
-  targetx86.h
-  targetamd64.h
-  targetarm.h
-  targetarm64.h
   treelifeupdater.h
   typelist.h
   unwind.h
@@ -419,15 +417,24 @@ set( JIT_HEADERS
 )
 
 # Arch specific headers
+
 set( JIT_AMD64_HEADERS
   emitfmtsxarch.h
   emitxarch.h
   hwintrinsiclistxarch.h
-  hwintrinsic.h
   instrsxarch.h
+  registeramd64.h
+  targetamd64.h
 )
 
-set( JIT_I386_HEADERS ${JIT_AMD64_HEADERS} )
+set( JIT_I386_HEADERS
+  emitfmtsxarch.h
+  emitxarch.h
+  hwintrinsiclistxarch.h
+  instrsxarch.h
+  registerx86.h
+  targetx86.h
+)
 
 set( JIT_ARM64_HEADERS
     emitarm64.h
@@ -438,6 +445,7 @@ set( JIT_ARM64_HEADERS
     instrsarm64.h
     instrsarm64sve.h
     registerarm64.h
+    targetarm64.h
 )
 
 set( JIT_ARM_HEADERS
@@ -445,6 +453,7 @@ set( JIT_ARM_HEADERS
   emitfmtsarm.h
   instrsarm.h
   registerarm.h
+  targetarm.h
 )
 
 set ( JIT_ARMV6_HEADERS
@@ -484,9 +493,14 @@ set( JIT_WASM_HEADERS
     fgwasm.h
 )
 
+set ( JITSHARED_SOURCES
+    ../jitshared/histogram.cpp
+)
+
 convert_to_absolute_path(JIT_SOURCES ${JIT_SOURCES})
 convert_to_absolute_path(JIT_HEADERS ${JIT_HEADERS})
 convert_to_absolute_path(JIT_RESOURCES ${JIT_RESOURCES})
+convert_to_absolute_path(JITSHARED_SOURCES ${JITSHARED_SOURCES})
 
 # Also convert the per-architecture sources to absolute paths, if the subdirs want to use them.
 
@@ -616,6 +630,7 @@ function(add_jit jitName)
       add_library_clr(${jitName}
           SHARED
           ${JIT_SOURCES}
+          ${JITSHARED_SOURCES}
           ${JIT_ARCH_SOURCES}
           ${JIT_HEADERS}
           ${JIT_ARCH_HEADERS}
@@ -627,6 +642,7 @@ function(add_jit jitName)
       add_library_clr(${jitName}
           SHARED
           ${JIT_SOURCES}
+          ${JITSHARED_SOURCES}
           ${JIT_ARCH_SOURCES}
           ${JIT_RESOURCES}
           ${JIT_DEF_FILE}
@@ -702,6 +718,10 @@ if (CLR_CMAKE_TARGET_ARCH_ARM64 OR CLR_CMAKE_TARGET_ARCH_AMD64)
     create_standalone_jit(TARGET clrjit_unix_riscv64_${ARCH_HOST_NAME} OS unix ARCH riscv64)
   endif(CLR_CMAKE_BUILD_COMMUNITY_ALTJITS EQUAL 1)
 endif (CLR_CMAKE_TARGET_ARCH_ARM64 OR CLR_CMAKE_TARGET_ARCH_AMD64)
+
+if (CLR_CMAKE_TARGET_ARCH_WASM)
+  create_standalone_jit(TARGET clrjit_universal_wasm_${ARCH_HOST_NAME} OS universal ARCH wasm)
+endif (CLR_CMAKE_TARGET_ARCH_WASM)
 
 if (CLR_CMAKE_TARGET_ARCH_LOONGARCH64)
   create_standalone_jit(TARGET clrjit_unix_loongarch64_${ARCH_HOST_NAME} OS unix ARCH loongarch64)

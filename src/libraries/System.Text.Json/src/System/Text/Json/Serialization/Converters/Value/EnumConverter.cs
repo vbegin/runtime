@@ -233,7 +233,7 @@ namespace System.Text.Json.Serialization.Converters
             }
         }
 
-        private bool TryParseEnumFromString(ref Utf8JsonReader reader, out T result)
+        private unsafe bool TryParseEnumFromString(ref Utf8JsonReader reader, out T result)
         {
             Debug.Assert(reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName);
 
@@ -393,7 +393,7 @@ namespace System.Text.Json.Serialization.Converters
         /// <summary>
         /// Attempt to format the enum value as a comma-separated string of flag values, or returns false if not a valid flag combination.
         /// </summary>
-        private string FormatEnumAsString(ulong key, T value, JsonNamingPolicy? dictionaryKeyPolicy)
+        private unsafe string FormatEnumAsString(ulong key, T value, JsonNamingPolicy? dictionaryKeyPolicy)
         {
             Debug.Assert(IsDefinedValueOrCombinationOfValues(key), "must only be invoked against valid enum values.");
             Debug.Assert(
@@ -573,7 +573,7 @@ namespace System.Text.Json.Serialization.Converters
             }
 
             if (string.IsNullOrEmpty(name) || char.IsWhiteSpace(name[0]) || char.IsWhiteSpace(name[name.Length - 1]) ||
-                (s_isFlagsEnum && name.AsSpan().IndexOf(',') >= 0))
+                (s_isFlagsEnum && name.Contains(',')))
             {
                 // Reject null or empty strings or strings with leading or trailing whitespace.
                 // In the case of flags additionally reject strings containing commas.

@@ -218,6 +218,13 @@ CORINFO_METHOD_HANDLE MyICJI::getInstantiatedEntry(CORINFO_METHOD_HANDLE ftn, CO
     return result;
 }
 
+CORINFO_METHOD_HANDLE MyICJI::getAsyncOtherVariant(CORINFO_METHOD_HANDLE ftn, bool* variantIsThunk)
+{
+    jitInstance->mc->cr->AddCall("getAsyncOtherVariant");
+    CORINFO_METHOD_HANDLE result = jitInstance->mc->repGetAsyncOtherVariant(ftn, variantIsThunk);
+    return result;
+}
+
 // Given T, return the type of the default Comparer<T>.
 // Returns null if the type can't be determined exactly.
 CORINFO_CLASS_HANDLE MyICJI::getDefaultComparerClass(CORINFO_CLASS_HANDLE cls)
@@ -665,13 +672,12 @@ CORINFO_CLASS_HANDLE MyICJI::getObjectType(CORINFO_OBJECT_HANDLE objPtr)
 }
 
 bool MyICJI::getReadyToRunHelper(CORINFO_RESOLVED_TOKEN* pResolvedToken,
-                                 CORINFO_LOOKUP_KIND*    pGenericLookupKind,
                                  CorInfoHelpFunc         id,
                                  CORINFO_METHOD_HANDLE   callerHandle,
                                  CORINFO_CONST_LOOKUP*   pLookup)
 {
     jitInstance->mc->cr->AddCall("getReadyToRunHelper");
-    return jitInstance->mc->repGetReadyToRunHelper(pResolvedToken, pGenericLookupKind, id, callerHandle, pLookup);
+    return jitInstance->mc->repGetReadyToRunHelper(pResolvedToken, id, callerHandle, pLookup);
 }
 
 void MyICJI::getReadyToRunDelegateCtorHelper(CORINFO_RESOLVED_TOKEN* pTargetMethod,
@@ -1268,6 +1274,12 @@ void MyICJI::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRUC
     jitInstance->mc->repGetFpStructLowering(structHnd, pLowering);
 }
 
+CorInfoWasmType MyICJI::getWasmLowering(CORINFO_CLASS_HANDLE structHnd)
+{
+    jitInstance->mc->cr->AddCall("getWasmLowering");
+    return jitInstance->mc->repGetWasmLowering(structHnd);
+}
+
 // Stuff on ICorDynamicInfo
 uint32_t MyICJI::getThreadTLSIndex(void** ppIndirection)
 {
@@ -1594,8 +1606,8 @@ void MyICJI::allocMem(AllocMemArgs* pArgs)
         {
             hotCodeSize = chunk.size;
             unsigned codeAlignment = std::max((uint32_t)sizeof(void*), chunk.alignment);
-            size_t hotCodeSizeAligned = ALIGN_UP_SPMI(chunk.size, codeAlignment);
-            hotCodeBlock = (uint8_t*)jitInstance->mc->cr->allocateMemory(hotCodeSizeAligned);
+            size_t hotCodeSizePadded = chunk.size + codeAlignment - 1;
+            hotCodeBlock = (uint8_t*)jitInstance->mc->cr->allocateMemory(hotCodeSizePadded);
             hotCodeBlock = (uint8_t*)ALIGN_UP_SPMI(hotCodeBlock, codeAlignment);
             chunk.block = hotCodeBlock;
             chunk.blockRW = chunk.block;
@@ -1617,8 +1629,8 @@ void MyICJI::allocMem(AllocMemArgs* pArgs)
 
     if (roDataSize > 0)
     {
-        size_t roDataSizeAligned = ALIGN_UP_SPMI(roDataSize, roDataAlignment);
-        roDataBlock = (uint8_t*)jitInstance->mc->cr->allocateMemory(roDataSizeAligned);
+        size_t roDataSizePadded = roDataSize + roDataAlignment - 1;
+        roDataBlock = (uint8_t*)jitInstance->mc->cr->allocateMemory(roDataSizePadded);
         roDataBlock = (uint8_t*)ALIGN_UP_SPMI(roDataBlock, roDataAlignment);
         size_t offset = 0;
         // Zero the block to ensure all the padding we allocated is zeroed for the later comparisons
@@ -1815,6 +1827,12 @@ void MyICJI::recordCallSite(uint32_t              instrOffset, /* IN */
     jitInstance->mc->cr->repRecordCallSite(instrOffset, callSig, methodHandle);
 }
 
+void MyICJI::recordWasmManagedCallSig(CORINFO_SIG_INFO* callSig /* IN */)
+{
+    jitInstance->mc->cr->AddCall("recordWasmManagedCallSig");
+    // No-op for SuperPMI replay. Only meaningful for ReadyToRun Wasm compilation.
+}
+
 // A relocation is recorded if we are pre-jitting.
 // A jump thunk may be inserted if we are jitting
 void MyICJI::recordRelocation(void*        location,   /* IN  */
@@ -1844,6 +1862,13 @@ uint32_t MyICJI::getExpectedTargetArchitecture()
 {
     jitInstance->mc->cr->AddCall("getExpectedTargetArchitecture");
     DWORD result = jitInstance->mc->repGetExpectedTargetArchitecture();
+    return result;
+}
+
+CORINFO_WASM_TYPE_SYMBOL_HANDLE MyICJI::getWasmTypeSymbol(CorInfoWasmType* types, size_t typesSize)
+{
+    jitInstance->mc->cr->AddCall("getWasmTypeSymbol");
+    CORINFO_WASM_TYPE_SYMBOL_HANDLE result = jitInstance->mc->repGetWasmTypeSymbol(types, typesSize);
     return result;
 }
 

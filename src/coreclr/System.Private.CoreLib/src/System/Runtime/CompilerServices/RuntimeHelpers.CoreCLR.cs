@@ -386,6 +386,7 @@ namespace System.Runtime.CompilerServices
             throw new InvalidOperationException();
         }
 #endif
+
         [DebuggerHidden]
         [DebuggerStepThrough]
         internal static ref byte GetRawData(this object obj) =>
@@ -640,6 +641,38 @@ namespace System.Runtime.CompilerServices
                 throw new ArgumentException(SR.Arg_TypeNotSupported);
 
             return result;
+        }
+
+        [UnmanagedCallersOnly]
+        internal static unsafe void CallToString(object* pObj, string* pResult, Exception* pException)
+        {
+            try
+            {
+                *pResult = pObj->ToString();
+            }
+            catch (Exception ex)
+            {
+                *pException = ex;
+            }
+        }
+
+        // Dummy method providing a MethodDesc with the correct signature (IntPtr -> object)
+        // for newobj allocator JIT helpers on portable entry point platforms. The interpreter
+        // uses the MethodDesc to derive the call cookie; the method itself is never executed.
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        internal static extern object NewobjHelperDummy(IntPtr methodTable);
+
+        [UnmanagedCallersOnly]
+        internal static unsafe void CallDefaultConstructor(object* pObj, delegate*<object, void> pCtor, Exception* pException)
+        {
+            try
+            {
+                pCtor(*pObj);
+            }
+            catch (Exception ex)
+            {
+                *pException = ex;
+            }
         }
     }
     // Helper class to assist with unsafe pinning of arbitrary objects.
@@ -1077,6 +1110,7 @@ namespace System.Runtime.CompilerServices
     internal unsafe struct MethodTableAuxiliaryData
     {
         private uint Flags;
+        private int CachedVersionResilientHashCode;
         private void* LoaderModule;
         private nint ExposedClassObjectRaw;
 

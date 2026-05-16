@@ -5,6 +5,12 @@
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- DumpTests is a separate test project with its own csproj -->
+    <Compile Remove="DumpTests\**" />
+    <!-- StressTests is a separate test project with its own csproj -->
+    <Compile Remove="StressTests\**" />
+  </ItemGroup>
 
   <Import Project="..\..\subproject.props" />
 
@@ -13,6 +19,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Moq" Version="$(MoqVersion)" />
+    <PackageReference Include="Microsoft.DotNet.XUnitExtensions" Version="$(MicrosoftDotNetXUnitExtensionsVersion)" />
   </ItemGroup>
 
 </Project>
